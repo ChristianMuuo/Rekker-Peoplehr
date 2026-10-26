@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Rekker PeopleOS"
+description = "A secure, phased HR operations platform for Rekker, supporting employee records, organizational structure, approvals, and workforce intelligence for a Kenyan manufacturing and distribution business."
+version = "1.0.0"
+id = "artifacts/peopleos"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21831
+
+[services.development]
+run = "pnpm --filter @workspace/peopleos run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/peopleos", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/peopleos/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21831"
+BASE_PATH = "/"

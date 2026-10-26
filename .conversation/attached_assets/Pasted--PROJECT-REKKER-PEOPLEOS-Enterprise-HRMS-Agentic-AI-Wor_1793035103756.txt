@@ -1,0 +1,571 @@
+# PROJECT: REKKER PEOPLEOS
+## Enterprise HRMS + Agentic AI Workforce Intelligence Platform
+
+Act as a principal product designer, senior full-stack engineer, enterprise HRIS architect, AI agent engineer, cybersecurity specialist, and QA lead.
+
+Build **Rekker PeopleOS**, a world-class Human Resource Management System for Rekker, the Kenyan manufacturing and distribution company represented by https://rekker.co.ke/.
+
+This must be a secure, responsive, enterprise-grade HR platform that helps HR teams, department managers, employees, payroll personnel, and executives manage the full employee lifecycle. Incorporate genuinely useful AI agents, workflow automation, predictive analytics, and decision-support capabilities.
+
+Do not build a generic HR dashboard template. Create a cohesive, premium product that feels purpose-built for a real manufacturing and distribution business operating in Kenya.
+
+## 1. BRAND IDENTITY AND EXISTING WEBSITE
+
+First inspect https://rekker.co.ke/ and its existing contact page.
+
+- Extract the actual primary, secondary, accent, background, and neutral colors from the website.
+- Reuse the real Rekker logo, typography, brand assets, and visual language where available.
+- Match the existing website's professional tone and identity.
+- Do not invent a new corporate identity or introduce an unrelated color palette.
+- Do not modify, overwrite, or break the existing public website.
+- Build the HRMS as a separate, secure application that can be linked from the existing site.
+- Create a reusable design-token system based on the discovered brand colors.
+- If the site's assets cannot be accessed, use temporary design tokens and clearly mark them for replacement after verification.
+
+Design direction: sophisticated enterprise SaaS, restrained visual effects, excellent typography, high-quality spacing, elegant charts, subtle motion, consistent iconography, and a polished executive dashboard.
+
+Avoid excessive gradients, oversized decorative cards, random colors, clutter, and fake data presented as real company information.
+
+## 2. CORE PRODUCT REQUIREMENTS
+
+Build a complete, navigation-driven application with the following modules:
+
+### A. Executive command center
+
+Create an executive dashboard containing:
+- Total headcount and active workforce.
+- New hires, departures, and employee turnover trends.
+- Workforce distribution by department, location, employment type, and manager.
+- Upcoming contract expirations and probation milestones.
+- Pending approvals and overdue HR actions.
+- Attendance trends and staffing exceptions.
+- Recruitment pipeline and time-to-hire.
+- Leave utilization and staffing coverage.
+- Payroll cost summaries, only for authorized roles.
+- Training completion and performance review progress.
+- AI-generated workforce insights with transparent supporting data.
+- A priority inbox showing recommended next actions.
+
+Include configurable date ranges, filters, drill-down charts, export controls, and a clear distinction between actual figures, estimates, and forecasts.
+
+### B. Employee information system
+
+Create a comprehensive employee directory with search, filtering, sorting, pagination, and secure profile pages.
+
+Each employee profile should support:
+- Employee ID and profile photograph.
+- Legal name and preferred name.
+- Work email and phone number.
+- Emergency contact information with restricted access.
+- Department, job title, manager, reporting line, and work location.
+- Employment type, start date, probation dates, and contract dates.
+- Salary and benefits fields restricted to authorized users.
+- Qualifications, skills, training, and professional certifications.
+- Employment history, promotions, transfers, and salary changes.
+- Leave balances and attendance summaries.
+- Performance objectives and review history.
+- Employee documents, with controlled visibility.
+- Asset assignments and acknowledgements.
+- Onboarding and offboarding checklists.
+- Change history and an audit timeline.
+
+Support active, probationary, on-leave, suspended where authorized, and former employee statuses. Make all statuses configurable and governed by authorized workflows.
+
+### C. Organization and workforce planning
+
+Implement:
+- Interactive organizational chart.
+- Departments, teams, branches, locations, and reporting structures.
+- Position and job-grade management.
+- Approved establishment and vacant-position tracking.
+- Manager assignment and succession planning.
+- Workforce capacity and skills-gap analysis.
+- Department-level headcount budgets.
+- Optional shift and site-based workforce structures suitable for distribution and operational teams.
+
+Allow HR administrators to configure the company's actual organizational structure instead of assuming it.
+
+### D. Recruitment and applicant tracking system
+
+Build an end-to-end recruitment workflow:
+
+1. Create a job requisition.
+2. Route the requisition for approval.
+3. Publish an internal or external vacancy.
+4. Collect applications through a recruitment portal.
+5. Parse CVs and extract structured candidate information.
+6. Detect potential duplicate applications.
+7. Match candidate skills to job requirements.
+8. Organize candidates into configurable recruitment stages.
+9. Schedule interviews and record structured feedback.
+10. Generate interview packs and role-specific questions.
+11. Prepare offer letters from approved templates.
+12. Track offer acceptance and onboarding readiness.
+13. Produce recruitment funnel analytics.
+
+Include candidate consent, retention rules, access restrictions, and a mechanism for applicants to request access to or deletion of their information where applicable.
+
+AI may assist with CV summarization and job-relevant skills matching. It must not automatically reject candidates, infer sensitive personal traits, or make final hiring decisions. Show evidence supporting any suggested match and require a human decision.
+
+### E. Onboarding and employee lifecycle automation
+
+Create configurable onboarding journeys triggered by approved hiring events.
+
+Support:
+- Offer acceptance.
+- Employee profile creation.
+- Document collection.
+- Contract preparation from approved templates.
+- Equipment and asset allocation.
+- IT account request workflows.
+- Department-specific onboarding tasks.
+- Orientation and policy acknowledgement.
+- Probation check-ins.
+- 30-, 60-, and 90-day review reminders.
+- New employee feedback surveys.
+
+Also support employee transfers, promotions, contract renewals, changes in reporting lines, and offboarding.
+
+Automations must create traceable tasks, respect permissions, and notify the responsible person.
+
+### F. Attendance, shifts, and leave management
+
+Build:
+- Daily attendance records.
+- Clock-in and clock-out events.
+- Configurable work schedules and shift rosters.
+- Overtime and exception requests.
+- Late-arrival and missed-punch handling.
+- Leave types, policies, accruals, balances, and approval chains.
+- Annual, sick, maternity, paternity, and other configurable leave categories.
+- Public holiday and working-day configuration.
+- Team calendars and staffing coverage views.
+- Manager approval and escalation workflows.
+- Attendance exports and monthly summaries.
+
+Do not pretend biometric, GPS, or physical-device integrations exist unless configured. Provide integration interfaces and clearly identified simulation modes where appropriate.
+
+AI may identify unusual attendance patterns and forecast staffing shortages. It must not automatically discipline employees or treat an anomaly as proof of misconduct.
+
+### G. Payroll preparation and compliance workflows
+
+Build a secure payroll management module with:
+- Salary structures and pay components.
+- Allowances, deductions, overtime, and adjustments.
+- Approved employee compensation records.
+- Monthly payroll preparation and review.
+- Draft, validation, approval, and finalized payroll states.
+- Payroll variance analysis.
+- Payslip generation and secure employee access.
+- Payroll audit history.
+- Reconciliation and exception reports.
+- Final settlement preparation.
+- Payroll export interfaces for finance and payment providers.
+
+Support configurable Kenyan payroll rules, including PAYE, NSSF, SHIF, Affordable Housing Levy, and other applicable obligations.
+
+Use a versioned rules engine with effective dates and documented calculations. Verify applicable rules against authoritative sources before activating them. Never hard-code unverified rates or promise legal compliance without validation.
+
+Do not initiate real salary payments, submit tax returns, or send confidential payslips through external services until the relevant integrations, permissions, security controls, and production credentials have been explicitly configured.
+
+Payroll totals and salary information must never be accessible to ordinary employees or unauthorized managers.
+
+### H. Leave approvals and configurable workflow engine
+
+Build a reusable workflow engine supporting:
+- Configurable approval steps.
+- Department-specific approval policies.
+- Delegation during absence.
+- Due dates and service-level reminders.
+- Escalation to authorized supervisors.
+- Rejection reasons and resubmission.
+- Approval history.
+- Notifications and task ownership.
+- Separation of requester, approver, and administrator responsibilities.
+
+Support approval workflows for leave, recruitment requisitions, employee changes, salary changes, overtime, expenses if enabled, and payroll finalization.
+
+Never allow a user to approve their own restricted transaction unless an explicitly configured policy permits it.
+
+### I. Performance, goals, and learning
+
+Include:
+- OKRs, KPIs, and role-specific objectives.
+- Continuous feedback.
+- Manager and employee self-assessments.
+- Configurable review cycles.
+- Competency frameworks.
+- Structured 360-degree feedback where enabled.
+- Development plans and training assignments.
+- Review completion tracking.
+- Calibration workflows with restricted access.
+- Training attendance and certification expiry reminders.
+- Skills inventory and development recommendations.
+
+AI can help draft goals, summarize documented feedback, and suggest development resources. Do not use opaque AI scores to automatically determine promotions, disciplinary action, compensation, or termination.
+
+### J. Employee self-service portal
+
+Create a mobile-first portal where employees can:
+- View their own permitted profile information.
+- Request leave and track its status.
+- View attendance and submit corrections.
+- Access their own payslips and approved documents.
+- Update permitted contact details.
+- View onboarding tasks and policy documents.
+- Submit HR queries.
+- Review personal goals and training tasks.
+- Receive notifications and reminders.
+- Access an HR assistant for policy questions.
+
+Provide a clear employee experience on small Android screens and low-bandwidth connections.
+
+### K. Documents and policy management
+
+Support:
+- Secure document uploads and downloads.
+- Contracts, certificates, policies, and employee documents.
+- Versioned templates.
+- Expiration and renewal reminders.
+- Access controls by role and document classification.
+- Policy acknowledgement tracking.
+- Searchable document metadata.
+- Controlled document retention and deletion.
+- Audit logs for sensitive document access.
+
+Use private storage, signed short-lived download URLs where supported, file validation, and size limits. Do not expose confidential documents through public URLs.
+
+## 3. AGENTIC AI WORKFORCE INTELLIGENCE
+
+Create an AI Agent Hub that provides a unified interface for approved, auditable HR assistance.
+
+Build the following specialized agents as independent services or modular tools with defined permissions.
+
+### Agent 1: HR Copilot
+
+Accept natural-language questions such as:
+- "Which employment contracts expire within 30 days?"
+- "Show leave requests awaiting my approval."
+- "Summarize this month's recruitment pipeline."
+- "Which departments have incomplete performance reviews?"
+- "Prepare a draft onboarding checklist for this new employee."
+
+The agent must retrieve only data the signed-in user is authorized to access. Cite the relevant records, show the date and filters used, and distinguish retrieved facts from recommendations.
+
+### Agent 2: Recruitment Intelligence Agent
+
+Capabilities:
+- Parse CVs into structured fields.
+- Summarize job-relevant experience.
+- Compare candidate skills against published role requirements.
+- Identify missing application information.
+- Draft interview questions and scorecard templates.
+- Summarize interviewer feedback.
+- Prepare candidate communications for human review.
+
+Never auto-reject candidates or make final hiring decisions.
+
+### Agent 3: Onboarding Orchestrator
+
+When a hire is approved:
+- Create the onboarding checklist.
+- Assign tasks to the appropriate owners.
+- Prepare document requests.
+- Schedule reminders and probation check-ins.
+- Identify overdue tasks.
+- Produce a readiness summary for the responsible HR officer.
+
+The agent must not send offers, create external accounts, or change employment status without the required authorization.
+
+### Agent 4: Workforce Planning Agent
+
+Capabilities:
+- Summarize headcount trends.
+- Compare staffing plans with approved establishment.
+- Identify documented skills gaps.
+- Forecast potential staffing requirements using explainable assumptions.
+- Highlight possible shift coverage shortages.
+- Present scenarios rather than unqualified predictions.
+
+Show data sources, forecast period, confidence limitations, and assumptions. Do not invent employee information or future business results.
+
+### Agent 5: Attendance and Scheduling Agent
+
+Capabilities:
+- Detect missing attendance records.
+- Identify possible schedule conflicts.
+- Suggest shift coverage adjustments.
+- Draft exception summaries.
+- Alert authorized managers to unresolved attendance issues.
+
+Do not automatically classify an employee as absent, dishonest, or in violation of policy based only on an anomaly.
+
+### Agent 6: Payroll Validation Agent
+
+Capabilities:
+- Validate required payroll fields.
+- Flag unusual month-to-month changes.
+- Identify missing approvals and inconsistent totals.
+- Explain configured statutory calculations.
+- Generate a pre-payroll exception report.
+- Prepare a draft reconciliation report.
+
+It must never finalize payroll, change bank details, or execute payments autonomously.
+
+### Agent 7: Policy and Compliance Assistant
+
+Capabilities:
+- Answer questions using approved company policies and verified reference material.
+- Retrieve the exact policy section supporting an answer.
+- Identify upcoming configured compliance deadlines.
+- Flag expiring contracts or missing acknowledgements.
+- Draft reminders and action checklists.
+
+If evidence is missing or contradictory, say so. Do not invent policy clauses or provide definitive legal conclusions.
+
+### Agent 8: Employee Support Triage Agent
+
+Capabilities:
+- Classify HR queries into configurable categories.
+- Search approved internal knowledge.
+- Suggest relevant policy information.
+- Create a support ticket.
+- Assign a proposed priority.
+- Route sensitive or complex matters to authorized HR staff.
+
+Do not expose one employee's case to another employee. Restrict sensitive grievances, medical information, and disciplinary records.
+
+### Agent 9: People Analytics Agent
+
+Capabilities:
+- Generate evidence-based workforce summaries.
+- Explain changes in headcount and recruitment metrics.
+- Surface missing data and reporting anomalies.
+- Produce configurable management reports.
+- Answer natural-language questions about permitted metrics.
+
+Use aggregated reporting and minimum cohort thresholds where appropriate to reduce employee re-identification.
+
+### Agentic execution architecture
+
+Every agent must have:
+- A narrowly defined purpose.
+- Explicit tool permissions.
+- Role-aware authorization checks on the server.
+- Input validation and structured outputs.
+- Execution logs and trace IDs.
+- Human approval gates for consequential actions.
+- Rate limits and configurable usage budgets.
+- Timeouts, retries, and safe failure behavior.
+- Prompt-injection defenses for uploaded CVs and documents.
+- A clear record of what data was accessed and what action was proposed.
+
+Use a plan, validate, propose, approve, execute, and verify workflow.
+
+Read-only queries may execute automatically within the user's permissions. Sending communications, changing records, publishing jobs, or modifying workflows must require the appropriate approval. High-impact employment decisions and payroll finalization must remain under authorized human control.
+
+Never expose API keys or privileged credentials in frontend code.
+
+## 4. ADVANCED AI FEATURES
+
+Add:
+- Natural-language search across authorized HR records.
+- Retrieval-augmented generation using approved company policies.
+- Document extraction and structured field validation.
+- AI-generated report drafts.
+- Configurable notification summaries.
+- An AI action queue with approve, edit, reject, and inspect options.
+- Explainable recommendations with source records.
+- Agent run history and error reporting.
+- A human-feedback mechanism for improving responses.
+- Configurable model provider and model selection.
+- Usage monitoring and cost controls.
+- Graceful fallback when an AI provider is unavailable.
+
+Do not claim to train a predictive model on company employee data without an adequate dataset, lawful basis, validation plan, and explicit approval. Start with transparent rules and descriptive analytics; introduce predictive models only when there is sufficient validated data.
+
+## 5. SECURITY, PRIVACY, AND GOVERNANCE
+
+Implement security from the beginning.
+
+Roles:
+- System Administrator.
+- HR Administrator.
+- HR Manager.
+- Recruiter.
+- Payroll Officer.
+- Department Manager.
+- Employee.
+- Read-only Executive.
+- Auditor, with explicitly limited access.
+
+Use granular permissions rather than role names alone.
+
+Requirements:
+- Secure authentication and session handling.
+- Multi-factor authentication where supported.
+- Server-side authorization for every sensitive operation.
+- Row-level security for employee-owned and department-restricted records.
+- Separation of HR, recruitment, payroll, and sensitive case data.
+- Audit trails for viewing and changing sensitive records.
+- Strong input validation and safe error messages.
+- Rate limiting and protection against common web attacks.
+- Secure file handling.
+- Secret management and environment variables.
+- Backup and recovery procedures.
+- Data export controls.
+- Configurable retention and deletion policies.
+- Privacy notices, consent where appropriate, and data-subject request workflows.
+- A documented incident response process.
+
+Design for the Kenyan Data Protection Act and applicable employment and payroll obligations, with legal and compliance validation before production use.
+
+Do not store passwords, AI keys, or payroll secrets in frontend source code. Do not use real employee data in seed files or public demos.
+
+## 6. DATABASE AND BACKEND DESIGN
+
+Use the existing project stack if one is already established. If starting from scratch, use:
+- React + TypeScript.
+- Tailwind CSS and a consistent accessible component system.
+- Supabase Auth and PostgreSQL.
+- Supabase Row Level Security.
+- Private object storage for documents.
+- Server-side Edge Functions or equivalent trusted backend endpoints.
+- A server-side AI provider integration.
+- Background jobs for reminders, recurring tasks, and reports.
+
+Create a normalized, relational schema covering at least:
+
+organizations, locations, departments, positions, employees, employment_contracts, employee_documents, employee_contacts, user_accounts, roles, permissions, role_assignments, reporting_lines, job_requisitions, job_posts, candidates, applications, interviews, interview_feedback, offers, onboarding_workflows, onboarding_tasks, attendance_events, work_schedules, shifts, leave_types, leave_balances, leave_requests, approval_workflows, approval_steps, approval_events, salary_structures, payroll_periods, payroll_runs, payroll_items, payslips, performance_cycles, goals, reviews, feedback, training_courses, employee_training, assets, policy_documents, policy_acknowledgements, notifications, support_tickets, ai_agent_runs, ai_action_proposals, audit_logs, and organization_settings.
+
+Adapt the schema as needed, but preserve referential integrity, tenant isolation, proper indexing, and restricted access to sensitive tables.
+
+Every record must belong to the appropriate organization. Build with future multi-branch or multi-entity support in mind.
+
+Do not place privileged service-role keys in the browser. Use server-side access for sensitive actions and validate the user's authorization on every request.
+
+Create database migrations, realistic relationships, and a secure seed-data mechanism.
+
+## 7. USER INTERFACE AND NAVIGATION
+
+Use a premium application shell with:
+- Collapsible left navigation.
+- Global search.
+- Breadcrumbs.
+- Notifications.
+- User profile and role indicator.
+- Contextual action menus.
+- Responsive tables and filters.
+- Detail drawers or pages for record inspection.
+- Accessible forms and validation.
+- Empty states, loading states, error states, and confirmation dialogs.
+
+Primary navigation:
+1. Overview
+2. People
+3. Organization
+4. Recruitment
+5. Onboarding
+6. Attendance
+7. Leave
+8. Payroll
+9. Performance
+10. Learning
+11. Documents
+12. AI Agent Hub
+13. Reports & Analytics
+14. Tasks & Approvals
+15. Settings & Audit
+
+Hide or disable inaccessible sections according to permissions. Do not rely on hiding navigation alone for security.
+
+Create polished, consistent screens for every module. All buttons must have working actions or clearly identified not-yet-configured integration states.
+
+## 8. ANALYTICS AND EXECUTIVE REPORTING
+
+Provide:
+- Headcount trends.
+- Hiring funnel conversion.
+- Time-to-hire.
+- Offer acceptance.
+- Turnover and retention.
+- Leave utilization.
+- Attendance exceptions.
+- Training completion.
+- Performance-review completion.
+- Payroll cost summaries.
+- Department staffing levels.
+- Contract expiry reports.
+- Workforce planning scenarios.
+
+Include filters, CSV exports, date ranges, drill-downs, and data-quality indicators. Restrict salary reports and sensitive employee-level analytics to authorized roles.
+
+Clearly label all sample data as demonstration data.
+
+## 9. NOTIFICATIONS AND INTEGRATIONS
+
+Build a notification center with:
+- In-app notifications.
+- Email notification adapters.
+- Configurable reminders.
+- Approval notifications.
+- Contract and certification expiry alerts.
+- Onboarding reminders.
+- Payroll workflow alerts.
+- Performance review reminders.
+
+Use adapters for email, SMS, WhatsApp, calendar, accounting, payroll export, and attendance integrations. Do not imply that an integration is live before credentials, provider setup, and end-to-end testing are complete.
+
+## 10. TESTING AND ACCEPTANCE CRITERIA
+
+Build and verify the product in stages.
+
+Phase 1:
+- Brand-aligned UI shell.
+- Authentication and role permissions.
+- Employee directory and employee profiles.
+- Organization structure.
+- Leave requests and approval workflow.
+- Audit logging.
+- Responsive layouts.
+
+Phase 2:
+- Recruitment and onboarding.
+- Attendance and shift workflows.
+- Documents and policy management.
+- Reports and notifications.
+
+Phase 3:
+- Payroll preparation and validation.
+- Performance and learning.
+- AI Agent Hub and controlled actions.
+- Advanced workforce analytics.
+- Integration adapters.
+
+Write automated tests for authentication, authorization, tenant isolation, leave balances, approval transitions, payroll calculations, and AI action permissions.
+
+Acceptance requirements:
+- No sensitive employee data is exposed to unauthorized users.
+- Employee self-service shows only the employee's permitted data.
+- Managers see only the teams and records they are authorized to manage.
+- Payroll permissions are enforced server-side.
+- Approval actions update the correct records and create audit events.
+- AI agents cannot bypass authorization checks.
+- AI actions remain auditable and require approval when necessary.
+- Forms validate inputs and display meaningful errors.
+- No dead buttons, broken navigation, or fabricated live integrations.
+- The application is usable on desktop, tablet, and mobile.
+- Seed data is clearly labeled and replaceable.
+- Setup and deployment instructions are documented.
+
+## 11. FINAL IMPLEMENTATION INSTRUCTIONS
+
+Do not stop after producing a landing page, static dashboard, or clickable prototype.
+
+First inspect the available project, identify the existing stack and assets, and create an implementation plan. Then implement the application in coherent modules, connect the database and authentication, establish permissions and policies, and test real workflows.
+
+If credentials or third-party integrations are unavailable, implement a secure adapter or clearly labeled setup state rather than fabricating success.
+
+Prioritize correctness, privacy, usability, maintainability, and genuinely working features over visual effects.
+
+The final result should be a premium, branded, AI-augmented HR operating system that Rekker could evaluate for real internal use, with a clear path from demo to secure production deployment.
