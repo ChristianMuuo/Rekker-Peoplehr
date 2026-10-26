@@ -3,13 +3,27 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API contract for Rekker PeopleOS
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: peopleos
+    description: Workforce overview and module readiness
+  - name: auth
+    description: Signed-in user's organization role and capabilities
+  - name: employees
+    description: Employee directory and profiles
+  - name: organization
+    description: Departments and reporting structure
+  - name: leave
+    description: Leave requests and approvals
+  - name: audit
+    description: Auditable HR activity
+  - name: agents
+    description: AI agent provider readiness
 paths:
   /healthz:
     get:
@@ -24,6 +38,246 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /peopleos/overview:
+    get:
+      operationId: getPeopleOsOverview
+      tags: [peopleos]
+      summary: Get the workforce overview
+      responses:
+        "200":
+          description: Workforce overview, with demo data explicitly identified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PeopleOsOverview"
+  /auth/context:
+    get:
+      operationId: getAuthContext
+      tags: [auth]
+      summary: Get the signed-in user's role and application permissions
+      responses:
+        "200":
+          description: Role and capabilities enforced by the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthContext"
+        "401":
+          description: Sign-in required
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      summary: Search and filter the employee directory
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: departmentId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/EmployeeStatus" }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: Paginated employee records permitted to the signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeePage"
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      summary: Create an employee record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInput"
+      responses:
+        "201":
+          description: Employee created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "401":
+          description: Sign-in required
+        "403":
+          description: Insufficient permission
+  /employees/{employeeId}:
+    parameters:
+      - name: employeeId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getEmployee
+      tags: [employees]
+      summary: Get an employee profile
+      responses:
+        "200":
+          description: Employee profile, excluding restricted compensation and emergency-contact data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "404":
+          description: Employee not found or not accessible
+    patch:
+      operationId: updateEmployee
+      tags: [employees]
+      summary: Update an employee profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeUpdate"
+      responses:
+        "200":
+          description: Employee updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "403":
+          description: Insufficient permission
+  /departments:
+    get:
+      operationId: listDepartments
+      tags: [organization]
+      summary: Get departments and current headcount
+      responses:
+        "200":
+          description: Organization departments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Department"
+  /leave-requests:
+    get:
+      operationId: listLeaveRequests
+      tags: [leave]
+      summary: List leave requests permitted to the signed-in user
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/LeaveRequestStatus" }
+        - name: employeeId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Leave requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveRequest"
+    post:
+      operationId: createLeaveRequest
+      tags: [leave]
+      summary: Submit a leave request for the signed-in employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveRequestInput"
+      responses:
+        "201":
+          description: Leave request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+        "400":
+          description: Invalid dates or request
+        "401":
+          description: Sign-in required
+  /leave-requests/{requestId}/decision:
+    post:
+      operationId: decideLeaveRequest
+      tags: [leave]
+      summary: Approve or reject a leave request
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveDecisionInput"
+      responses:
+        "200":
+          description: Decision recorded with an audit event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+        "403":
+          description: User cannot approve this request
+        "409":
+          description: Request has already been decided
+  /approvals:
+    get:
+      operationId: listApprovals
+      tags: [leave]
+      summary: List approval tasks assigned to the signed-in user
+      responses:
+        "200":
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovalItem"
+  /audit-events:
+    get:
+      operationId: listAuditEvents
+      tags: [audit]
+      summary: List auditable HR activity
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+      responses:
+        "200":
+          description: Audit events visible to the signed-in user's role
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEvent"
+  /agents/status:
+    get:
+      operationId: getAgentProviderStatus
+      tags: [agents]
+      summary: Check whether an AI provider is configured
+      responses:
+        "200":
+          description: Provider readiness without exposing credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProviderStatus"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +287,208 @@ components:
           type: string
       required:
         - status
+    EmployeeStatus:
+      type: string
+      enum: [active, probation, on_leave, suspended, former]
+    OrganizationRole:
+      type: string
+      enum: [employee, department_manager, hr_admin, hr_manager, recruiter, payroll_officer, system_admin, read_only_executive, auditor]
+    AuthContext:
+      type: object
+      required: [role, displayName, organizationName, canManagePeople, canApproveLeave, canViewAudit, canViewPayroll, canManageSettings, isDemo]
+      properties:
+        role: { $ref: "#/components/schemas/OrganizationRole" }
+        displayName: { type: string }
+        organizationName: { type: string }
+        canManagePeople: { type: boolean }
+        canApproveLeave: { type: boolean }
+        canViewAudit: { type: boolean }
+        canViewPayroll: { type: boolean }
+        canManageSettings: { type: boolean }
+        isDemo: { type: boolean }
+    LeaveRequestStatus:
+      type: string
+      enum: [pending, approved, rejected, cancelled]
+    PeopleOsOverview:
+      type: object
+      required: [dataMode, stats, departments, monthlyHeadcount, priorities]
+      properties:
+        dataMode: { type: string, enum: [DEMO, LIVE] }
+        stats:
+          type: object
+          required: [totalEmployees, activeEmployees, onLeave, pendingApprovals, upcomingMilestones]
+          properties:
+            totalEmployees: { type: integer }
+            activeEmployees: { type: integer }
+            onLeave: { type: integer }
+            pendingApprovals: { type: integer }
+            upcomingMilestones: { type: integer }
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Department"
+        monthlyHeadcount:
+          type: array
+          items:
+            type: object
+            required: [month, headcount]
+            properties:
+              month: { type: string }
+              headcount: { type: integer }
+        priorities:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkforcePriority"
+    WorkforcePriority:
+      type: object
+      required: [id, title, description, category, source, href]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        category: { type: string, enum: [approval, milestone, staffing, data_quality] }
+        source: { type: string }
+        href: { type: string }
+    Employee:
+      type: object
+      required: [id, employeeNumber, firstName, lastName, workEmail, jobTitle, departmentId, departmentName, location, employmentType, status, startDate, isDemo]
+      properties:
+        id: { type: string }
+        employeeNumber: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        preferredName: { type: ["string", "null"] }
+        workEmail: { type: string, format: email }
+        phone: { type: ["string", "null"] }
+        jobTitle: { type: string }
+        departmentId: { type: string }
+        departmentName: { type: string }
+        managerId: { type: ["string", "null"] }
+        managerName: { type: ["string", "null"] }
+        location: { type: string }
+        employmentType: { type: string, enum: [permanent, fixed_term, casual, intern] }
+        status: { $ref: "#/components/schemas/EmployeeStatus" }
+        startDate: { type: string, format: date }
+        probationEndDate: { type: ["string", "null"], format: date }
+        contractEndDate: { type: ["string", "null"], format: date }
+        isDemo: { type: boolean }
+    EmployeePage:
+      type: object
+      required: [items, page, pageSize, total, dataMode]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Employee"
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        dataMode: { type: string, enum: [DEMO, LIVE] }
+    EmployeeInput:
+      type: object
+      required: [employeeNumber, firstName, lastName, workEmail, jobTitle, departmentId, location, employmentType, startDate]
+      properties:
+        employeeNumber: { type: string, minLength: 1, maxLength: 30 }
+        firstName: { type: string, minLength: 1, maxLength: 80 }
+        lastName: { type: string, minLength: 1, maxLength: 80 }
+        preferredName: { type: ["string", "null"], maxLength: 80 }
+        workEmail: { type: string, format: email, maxLength: 254 }
+        phone: { type: ["string", "null"], maxLength: 40 }
+        jobTitle: { type: string, minLength: 1, maxLength: 120 }
+        departmentId: { type: string }
+        managerId: { type: ["string", "null"] }
+        location: { type: string, minLength: 1, maxLength: 120 }
+        employmentType: { type: string, enum: [permanent, fixed_term, casual, intern] }
+        status: { $ref: "#/components/schemas/EmployeeStatus" }
+        startDate: { type: string, format: date }
+        probationEndDate: { type: ["string", "null"], format: date }
+        contractEndDate: { type: ["string", "null"], format: date }
+    EmployeeUpdate:
+      type: object
+      properties:
+        preferredName: { type: ["string", "null"], maxLength: 80 }
+        phone: { type: ["string", "null"], maxLength: 40 }
+        jobTitle: { type: string, minLength: 1, maxLength: 120 }
+        departmentId: { type: string }
+        managerId: { type: ["string", "null"] }
+        location: { type: string, minLength: 1, maxLength: 120 }
+        status: { $ref: "#/components/schemas/EmployeeStatus" }
+        probationEndDate: { type: ["string", "null"], format: date }
+        contractEndDate: { type: ["string", "null"], format: date }
+    Department:
+      type: object
+      required: [id, name, code, location, headcount, budgetedPositions]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        code: { type: string }
+        managerEmployeeId: { type: ["string", "null"] }
+        managerName: { type: ["string", "null"] }
+        location: { type: string }
+        headcount: { type: integer }
+        budgetedPositions: { type: integer }
+        description: { type: string }
+    LeaveRequest:
+      type: object
+      required: [id, employeeId, employeeName, leaveType, startDate, endDate, days, reason, status, submittedAt, isDemo]
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        employeeName: { type: string }
+        leaveType: { type: string }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        days: { type: number }
+        reason: { type: string }
+        status: { $ref: "#/components/schemas/LeaveRequestStatus" }
+        approverId: { type: ["string", "null"] }
+        decisionComment: { type: ["string", "null"] }
+        submittedAt: { type: string, format: date-time }
+        decidedAt: { type: ["string", "null"], format: date-time }
+        isDemo: { type: boolean }
+    LeaveRequestInput:
+      type: object
+      required: [employeeId, leaveType, startDate, endDate, reason]
+      properties:
+        employeeId: { type: string }
+        leaveType: { type: string, enum: [annual, sick, parental, compassionate, unpaid, other] }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        reason: { type: string, minLength: 3, maxLength: 1000 }
+    LeaveDecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approve, reject] }
+        comment: { type: ["string", "null"], maxLength: 1000 }
+    ApprovalItem:
+      type: object
+      required: [id, type, title, requester, submittedAt, href]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [leave, recruitment, employee_change] }
+        title: { type: string }
+        requester: { type: string }
+        submittedAt: { type: string, format: date-time }
+        href: { type: string }
+    AuditEvent:
+      type: object
+      required: [id, occurredAt, actor, action, targetType, targetId, summary, isDemo]
+      properties:
+        id: { type: string }
+        occurredAt: { type: string, format: date-time }
+        actor: { type: string }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: string }
+        summary: { type: string }
+        isDemo: { type: boolean }
+    AgentProviderStatus:
+      type: object
+      required: [configured, provider, message]
+      properties:
+        configured: { type: boolean }
+        provider: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        message: { type: string }
 

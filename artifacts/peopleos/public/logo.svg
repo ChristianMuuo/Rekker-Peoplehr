@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Rekker">
+  <rect x="1" y="1" width="42" height="42" rx="9" fill="#C71D1D"/>
+  <path d="M12 30V13h9.3c5.3 0 8 2.2 8 6.5 0 3-1.5 5.1-4.4 6.1L31 30h-6.1l-5.2-6.7h-2.4V30H12Zm5.3-10.6h3.9c1.9 0 2.8-.7 2.8-2s-.9-2-2.8-2h-3.9v4Z" fill="#fff"/>
+  <path d="M53 30V14h16v4.2H58.2v2h9.4v3.8h-9.4v1.8h11V30H53Zm19.3 0V14h5.2v6.1L83 14h6.1l-6.3 6.8 6.6 9.2h-6.3l-3.9-5.8-1.7 1.8V30h-5.2Zm18.7 0V14h5.2v6.1L101.7 14h6.1l-6.3 6.8 6.6 9.2h-6.3l-3.9-5.8-1.7 1.8V30H91Zm19.1 0V14h16v4.2h-10.8v2h9.4v3.8h-9.4v1.8h11V30h-16.2Z" fill="#171615"/>
+</svg>
