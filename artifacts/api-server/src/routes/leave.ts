@@ -36,6 +36,11 @@ const adminRoles: readonly string[] = [
   PEOPLEOS_ROLES.hrManager,
   PEOPLEOS_ROLES.systemAdmin,
 ];
+const leaveAccessRoles: readonly string[] = [
+  ...adminRoles,
+  PEOPLEOS_ROLES.departmentManager,
+  PEOPLEOS_ROLES.employee,
+];
 
 function businessDaysBetween(start: string, end: string): number {
   const cursor = new Date(`${start}T00:00:00.000Z`);
@@ -123,12 +128,7 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
-  const leaveReadRoles = [
-    ...adminRoles,
-    PEOPLEOS_ROLES.departmentManager,
-    PEOPLEOS_ROLES.employee,
-  ];
-  if (!leaveReadRoles.includes(membership.role)) {
+  if (!leaveAccessRoles.includes(membership.role)) {
     res.status(403).json({ error: "You do not have permission to view leave requests." });
     return;
   }
@@ -187,6 +187,10 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  if (!leaveAccessRoles.includes(membership.role)) {
+    res.status(403).json({ error: "You do not have permission to submit leave requests." });
+    return;
+  }
   const organization = await getPeopleOsOrganization();
   if (!organization) {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
