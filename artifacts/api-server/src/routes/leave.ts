@@ -307,10 +307,11 @@ router.get("/approvals", async (req, res): Promise<void> => {
     eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
     eq(leaveRequestsTable.status, "pending"),
   ];
-  if (
-    membership.role === PEOPLEOS_ROLES.departmentManager &&
-    membership.employeeId
-  ) {
+  if (membership.role === PEOPLEOS_ROLES.departmentManager) {
+    if (!membership.employeeId) {
+      res.json(ListApprovalsResponse.parse([]));
+      return;
+    }
     const reports = await db
       .select({ id: employeesTable.id })
       .from(employeesTable)
