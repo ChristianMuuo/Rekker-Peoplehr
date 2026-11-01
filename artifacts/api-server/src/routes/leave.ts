@@ -123,6 +123,15 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  const leaveReadRoles = [
+    ...adminRoles,
+    PEOPLEOS_ROLES.departmentManager,
+    PEOPLEOS_ROLES.employee,
+  ];
+  if (!leaveReadRoles.includes(membership.role)) {
+    res.status(403).json({ error: "You do not have permission to view leave requests." });
+    return;
+  }
   const conditions = [
     eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
   ];
