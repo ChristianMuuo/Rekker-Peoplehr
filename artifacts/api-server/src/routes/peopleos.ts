@@ -187,6 +187,8 @@ router.get("/auth/context", async (req, res): Promise<void> => {
       PEOPLEOS_ROLES.executive,
       PEOPLEOS_ROLES.auditor,
       PEOPLEOS_ROLES.hrManager,
+      PEOPLEOS_ROLES.recruiter,
+      PEOPLEOS_ROLES.payrollOfficer,
     ],
   );
   if (!membership) return;
