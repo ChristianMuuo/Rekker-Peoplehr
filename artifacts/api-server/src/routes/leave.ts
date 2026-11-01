@@ -152,15 +152,14 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
           eq(employeesTable.managerId, membership.employeeId),
         ),
       );
-    if (!reports.length) {
-      res.json(ListLeaveRequestsResponse.parse([]));
-      return;
-    }
+    // Managers can review their own leave history as well as requests from
+    // direct reports. The membership employee ID is always included.
+    const visibleEmployeeIds = [
+      membership.employeeId,
+      ...reports.map((employee) => employee.id),
+    ];
     conditions.push(
-      inArray(
-        leaveRequestsTable.employeeId,
-        reports.map((employee) => employee.id),
-      ),
+      inArray(leaveRequestsTable.employeeId, [...new Set(visibleEmployeeIds)]),
     );
   }
   const requests = await db
