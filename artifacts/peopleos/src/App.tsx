@@ -210,12 +210,14 @@ function AppFrame() {
   const visibleWorkNav = workNav.filter(item => {
     if (auth.role === 'payroll_officer') return item.href === '/payroll';
     if (auth.role === 'recruiter') return item.href === '/recruitment';
+    if (auth.role === 'read_only_executive') return false;
     if (item.href === '/payroll') return auth.canViewPayroll;
     return !restrictedRole;
   });
   const visiblePrimaryNav = primaryNav.filter(item => {
     if (restrictedRole) return false;
     if (auth.role === 'employee' && item.href === '/overview') return false;
+    if (auth.role === 'read_only_executive' && ['/people', '/leave', '/approvals'].includes(item.href)) return false;
     if (item.href === '/approvals') return auth.canApproveLeave;
     return true;
   });
