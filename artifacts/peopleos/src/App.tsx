@@ -206,11 +206,19 @@ function AppFrame() {
   const { signOut } = useClerk();
   if (isLoading) return <LoadingScreen label="Loading your workspace" />;
   if (isError || !auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
-  const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const visiblePrimaryNav = primaryNav.filter(item =>
-    (item.href !== '/approvals' || auth.canApproveLeave) &&
-    (item.href !== '/overview' || !['employee', 'auditor', 'recruiter', 'payroll_officer'].includes(auth.role))
-  );
+  const restrictedRole = ['auditor', 'recruiter', 'payroll_officer'].includes(auth.role);
+  const visibleWorkNav = workNav.filter(item => {
+    if (auth.role === 'payroll_officer') return item.href === '/payroll';
+    if (auth.role === 'recruiter') return item.href === '/recruitment';
+    if (item.href === '/payroll') return auth.canViewPayroll;
+    return !restrictedRole;
+  });
+  const visiblePrimaryNav = primaryNav.filter(item => {
+    if (restrictedRole) return false;
+    if (auth.role === 'employee' && item.href === '/overview') return false;
+    if (item.href === '/approvals') return auth.canApproveLeave;
+    return true;
+  });
   const nav = [...visiblePrimaryNav, ...visibleWorkNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
   const renderNav = (items: NavItem[]) => items.map(item => {
     const Icon = item.icon;
