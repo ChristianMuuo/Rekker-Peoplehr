@@ -219,7 +219,8 @@ function AppFrame() {
     if (item.href === '/approvals') return auth.canApproveLeave;
     return true;
   });
-  const nav = [...visiblePrimaryNav, ...visibleWorkNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const canViewAgentHub = !['employee', 'auditor', 'recruiter', 'payroll_officer'].includes(auth.role);
+  const nav = [...visiblePrimaryNav, ...visibleWorkNav, ...(canViewAgentHub ? [{ label: 'Agent hub', href: '/agent-hub', icon: Sparkles }] : []), ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
   const renderNav = (items: NavItem[]) => items.map(item => {
     const Icon = item.icon;
     return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} data-testid={`link-nav-${item.href.slice(1)}`}
@@ -317,8 +318,19 @@ function StatusPill({ status }: { status: string }) {
 }
 
 function OverviewPage() {
-  const overview = useGetPeopleOsOverview();
   const auth = useGetAuthContext();
+  const canViewOverview = !!auth.data && !['employee', 'auditor', 'recruiter', 'payroll_officer'].includes(auth.data.role);
+  const overview = useGetPeopleOsOverview({ query: { enabled: canViewOverview } });
+  if (auth.isLoading) return <LoadingScreen label="Checking workforce overview access" />;
+  if (!canViewOverview) {
+    const landingByRole: Record<string, string> = {
+      employee: '/people',
+      auditor: '/audit',
+      recruiter: '/recruitment',
+      payroll_officer: '/payroll',
+    };
+    return <Redirect to={landingByRole[auth.data?.role ?? ''] ?? '/'} />;
+  }
   if (overview.isLoading) return <LoadingScreen label="Loading workforce overview" />;
   if (overview.isError || !overview.data) return <ErrorState title="Workforce overview could not load" onRetry={() => overview.refetch()} />;
   const data = overview.data;
@@ -599,7 +611,11 @@ function AuditPage() {
 }
 
 function AgentHubPage() {
-  const status = useGetAgentProviderStatus();
+  const auth = useGetAuthContext();
+  const canViewAgentHub = !!auth.data && !['employee', 'auditor', 'recruiter', 'payroll_officer'].includes(auth.data.role);
+  const status = useGetAgentProviderStatus({ query: { enabled: canViewAgentHub } });
+  if (auth.isLoading) return <LoadingScreen label="Checking agent hub access" />;
+  if (!canViewAgentHub) return <div><PageHeading eyebrow="PeopleOS intelligence" title="Agent hub" /><div className="surface"><EmptyState title="Agent hub access restricted" message="Workforce intelligence is available to authorized HR administrators and managers." /></div></div>;
   if (status.isLoading) return <LoadingScreen label="Checking provider readiness" />;
   if (status.isError || !status.data) return <ErrorState title="Provider readiness could not be checked" onRetry={() => status.refetch()} />;
   return <div><PageHeading eyebrow="PeopleOS intelligence" title="Agent hub" description="Provider readiness and explainable workforce signals. No AI provider calls are made from this interface." />
