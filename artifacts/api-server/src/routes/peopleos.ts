@@ -187,6 +187,8 @@ router.get("/auth/context", async (req, res): Promise<void> => {
       PEOPLEOS_ROLES.executive,
       PEOPLEOS_ROLES.auditor,
       PEOPLEOS_ROLES.hrManager,
+      PEOPLEOS_ROLES.recruiter,
+      PEOPLEOS_ROLES.payrollOfficer,
     ],
   );
   if (!membership) return;
@@ -499,7 +501,10 @@ router.get("/employees", async (req, res): Promise<void> => {
     ) {
       conditions.push(
         access.membership.employeeId
-          ? eq(employeesTable.managerId, access.membership.employeeId)
+          ? or(
+              eq(employeesTable.managerId, access.membership.employeeId),
+              eq(employeesTable.id, access.membership.employeeId),
+            )!
           : eq(employeesTable.id, "00000000-0000-4000-8000-000000000000"),
       );
     }
@@ -656,7 +661,11 @@ router.get("/employees/:employeeId", async (req, res): Promise<void> => {
       .from(employeesTable)
       .where(and(...conditions))
       .limit(1);
-    if (!target || target.managerId !== access.membership.employeeId) {
+    if (
+      !target ||
+      (params.data.employeeId !== access.membership.employeeId &&
+        target.managerId !== access.membership.employeeId)
+    ) {
       res.status(404).json({ error: "Employee not found." });
       return;
     }

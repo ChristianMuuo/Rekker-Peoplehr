@@ -181,7 +181,20 @@ const workNav: NavItem[] = [
   { label: 'Reports & Analytics', href: '/reports', icon: ArrowDownRight },
 ];
 
-function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
+function AppHomeRedirect() {
+  const { isSignedIn } = useUser();
+  const auth = useGetAuthContext({ query: { enabled: !!isSignedIn } });
+  if (!isSignedIn) return <Home />;
+  if (auth.isLoading) return <LoadingScreen label="Loading your workspace" />;
+  if (auth.isError || !auth.data) return <ErrorState title="Workspace access unavailable" onRetry={() => auth.refetch()} />;
+  const landingByRole: Record<string, string> = {
+    employee: '/people',
+    auditor: '/audit',
+    payroll_officer: '/payroll',
+    recruiter: '/recruitment',
+  };
+  return <Redirect to={landingByRole[auth.data.role] ?? '/overview'} />;
+}
 
 function ProtectedRouter() {
   return <><Show when="signed-in"><AppFrame /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>;
@@ -193,8 +206,23 @@ function AppFrame() {
   const { signOut } = useClerk();
   if (isLoading) return <LoadingScreen label="Loading your workspace" />;
   if (isError || !auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
-  const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const nav = [...primaryNav, ...visibleWorkNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const restrictedRole = ['auditor', 'recruiter', 'payroll_officer'].includes(auth.role);
+  const visibleWorkNav = workNav.filter(item => {
+    if (auth.role === 'payroll_officer') return item.href === '/payroll';
+    if (auth.role === 'recruiter') return item.href === '/recruitment';
+    if (auth.role === 'read_only_executive') return false;
+    if (item.href === '/payroll') return auth.canViewPayroll;
+    return !restrictedRole;
+  });
+  const visiblePrimaryNav = primaryNav.filter(item => {
+    if (restrictedRole) return false;
+    if (auth.role === 'employee' && item.href === '/overview') return false;
+    if (auth.role === 'read_only_executive' && ['/people', '/leave', '/approvals'].includes(item.href)) return false;
+    if (item.href === '/approvals') return auth.canApproveLeave;
+    return true;
+  });
+  const canViewAgentHub = !['employee', 'auditor', 'recruiter', 'payroll_officer'].includes(auth.role);
+  const nav = [...visiblePrimaryNav, ...visibleWorkNav, ...(canViewAgentHub ? [{ label: 'Agent hub', href: '/agent-hub', icon: Sparkles }] : []), ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
   const renderNav = (items: NavItem[]) => items.map(item => {
     const Icon = item.icon;
     return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} data-testid={`link-nav-${item.href.slice(1)}`}
@@ -215,11 +243,11 @@ function AppFrame() {
           <button className="btn btn-ghost min-h-8 px-2 md:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu" data-testid="button-close-menu"><X size={17} /></button>
         </div>
         <div className="px-3 pt-5">
-          <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workspace</div>{renderNav(primaryNav)}
+          <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workspace</div>{renderNav(visiblePrimaryNav)}
         </div>
         <div className="mt-6 flex-1 overflow-y-auto px-3">
           <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">People operations</div>{renderNav(visibleWorkNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length))}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(visiblePrimaryNav.length + visibleWorkNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
           <div className="mb-3 rounded-xl bg-[#f7f4f0] p-3">
@@ -255,7 +283,7 @@ function AppFrame() {
             <Route path="/recruitment" component={() => <PhasePage title="Recruitment" />} />
             <Route path="/onboarding" component={() => <PhasePage title="Onboarding" />} />
             <Route path="/attendance" component={() => <PhasePage title="Attendance" />} />
-            <Route path="/payroll" component={() => <PhasePage title="Payroll" />} />
+            <Route path="/payroll" component={PayrollPage} />
             <Route path="/performance" component={() => <PhasePage title="Performance" />} />
             <Route path="/learning" component={() => <PhasePage title="Learning" />} />
             <Route path="/documents" component={() => <PhasePage title="Documents" />} />
@@ -292,8 +320,19 @@ function StatusPill({ status }: { status: string }) {
 }
 
 function OverviewPage() {
-  const overview = useGetPeopleOsOverview();
   const auth = useGetAuthContext();
+  const canViewOverview = !!auth.data && !['employee', 'auditor', 'recruiter', 'payroll_officer'].includes(auth.data.role);
+  const overview = useGetPeopleOsOverview({ query: { enabled: canViewOverview } });
+  if (auth.isLoading) return <LoadingScreen label="Checking workforce overview access" />;
+  if (!canViewOverview) {
+    const landingByRole: Record<string, string> = {
+      employee: '/people',
+      auditor: '/audit',
+      recruiter: '/recruitment',
+      payroll_officer: '/payroll',
+    };
+    return <Redirect to={landingByRole[auth.data?.role ?? ''] ?? '/'} />;
+  }
   if (overview.isLoading) return <LoadingScreen label="Loading workforce overview" />;
   if (overview.isError || !overview.data) return <ErrorState title="Workforce overview could not load" onRetry={() => overview.refetch()} />;
   const data = overview.data;
@@ -529,14 +568,17 @@ function LeavePage() {
 }
 
 function ApprovalsPage() {
-  const approvals = useListApprovals();
-  const leaves = useListLeaveRequests({ status: 'pending' });
+  const auth = useGetAuthContext();
+  const canApprove = !!auth.data?.canApproveLeave;
+  const approvals = useListApprovals({ query: { enabled: canApprove } });
+  const leaves = useListLeaveRequests({ status: 'pending' }, { query: { enabled: canApprove } });
   const decide = useDecideLeaveRequest();
   const qc = useQueryClient();
-  const auth = useGetAuthContext();
   const refresh = () => { qc.invalidateQueries({ queryKey: getListApprovalsQueryKey() }); qc.invalidateQueries({ queryKey: getListLeaveRequestsQueryKey() }); qc.invalidateQueries({ queryKey: getGetPeopleOsOverviewQueryKey() }); };
-  if (approvals.isLoading) return <LoadingScreen label="Loading manager approvals" />;
-  if (approvals.isError) return <ErrorState title="Approvals could not load" onRetry={() => approvals.refetch()} />;
+  if (auth.isLoading) return <LoadingScreen label="Checking approval access" />;
+  if (!canApprove) return <div><PageHeading eyebrow="People operations / Decisions" title="Approvals" /><div className="surface"><EmptyState title="Approval access restricted" message="Your account does not have permission to review or decide leave requests." /></div></div>;
+  if (approvals.isLoading || leaves.isLoading) return <LoadingScreen label="Loading manager approvals" />;
+  if (approvals.isError || leaves.isError) return <ErrorState title="Approvals could not load" onRetry={() => { void approvals.refetch(); void leaves.refetch(); }} />;
   return <div><PageHeading eyebrow="People operations / Decisions" title="Approvals" description="Manager tasks routed for a decision. Each action updates the originating request." />
     {auth.data?.canApproveLeave && <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#e8d5b4] bg-[#fbf4e7] p-4" data-testid="notice-approval-permission"><ShieldCheck size={17} className="text-[#8b6417]" /><p className="text-xs leading-5 text-[#6b552b]">Approval actions are governed by your account permissions. The API remains the authority for each decision.</p></div>}
     {!approvals.data?.length ? <div className="surface"><EmptyState title="No decisions waiting" message="When an item needs your attention, it will appear here." /></div> : <div className="grid gap-3">{approvals.data.map(item => {
@@ -571,7 +613,11 @@ function AuditPage() {
 }
 
 function AgentHubPage() {
-  const status = useGetAgentProviderStatus();
+  const auth = useGetAuthContext();
+  const canViewAgentHub = !!auth.data && !['employee', 'auditor', 'recruiter', 'payroll_officer'].includes(auth.data.role);
+  const status = useGetAgentProviderStatus({ query: { enabled: canViewAgentHub } });
+  if (auth.isLoading) return <LoadingScreen label="Checking agent hub access" />;
+  if (!canViewAgentHub) return <div><PageHeading eyebrow="PeopleOS intelligence" title="Agent hub" /><div className="surface"><EmptyState title="Agent hub access restricted" message="Workforce intelligence is available to authorized HR administrators and managers." /></div></div>;
   if (status.isLoading) return <LoadingScreen label="Checking provider readiness" />;
   if (status.isError || !status.data) return <ErrorState title="Provider readiness could not be checked" onRetry={() => status.refetch()} />;
   return <div><PageHeading eyebrow="PeopleOS intelligence" title="Agent hub" description="Provider readiness and explainable workforce signals. No AI provider calls are made from this interface." />
@@ -626,6 +672,15 @@ function SettingsPage() {
       </section>
     </>}
   </div>;
+}
+
+function PayrollPage() {
+  const auth = useGetAuthContext();
+  if (auth.isLoading) return <LoadingScreen label="Checking payroll access" />;
+  if (!auth.data?.canViewPayroll) {
+    return <div><PageHeading eyebrow="People operations / Restricted" title="Payroll" /><div className="surface"><EmptyState title="Payroll access restricted" message="Only authorized payroll officers and system administrators can access payroll." /></div></div>;
+  }
+  return <PhasePage title="Payroll" />;
 }
 
 function PhasePage({ title }: { title: string }) {

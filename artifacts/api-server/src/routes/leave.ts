@@ -36,6 +36,11 @@ const adminRoles: readonly string[] = [
   PEOPLEOS_ROLES.hrManager,
   PEOPLEOS_ROLES.systemAdmin,
 ];
+const leaveAccessRoles: readonly string[] = [
+  ...adminRoles,
+  PEOPLEOS_ROLES.departmentManager,
+  PEOPLEOS_ROLES.employee,
+];
 
 function businessDaysBetween(start: string, end: string): number {
   const cursor = new Date(`${start}T00:00:00.000Z`);
@@ -123,6 +128,10 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  if (!leaveAccessRoles.includes(membership.role)) {
+    res.status(403).json({ error: "You do not have permission to view leave requests." });
+    return;
+  }
   const conditions = [
     eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
   ];
@@ -152,15 +161,14 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
           eq(employeesTable.managerId, membership.employeeId),
         ),
       );
-    if (!reports.length) {
-      res.json(ListLeaveRequestsResponse.parse([]));
-      return;
-    }
+    // Managers can review their own leave history as well as requests from
+    // direct reports. The membership employee ID is always included.
+    const visibleEmployeeIds = [
+      membership.employeeId,
+      ...reports.map((employee) => employee.id),
+    ];
     conditions.push(
-      inArray(
-        leaveRequestsTable.employeeId,
-        reports.map((employee) => employee.id),
-      ),
+      inArray(leaveRequestsTable.employeeId, [...new Set(visibleEmployeeIds)]),
     );
   }
   const requests = await db
@@ -179,6 +187,10 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  if (!leaveAccessRoles.includes(membership.role)) {
+    res.status(403).json({ error: "You do not have permission to submit leave requests." });
+    return;
+  }
   const organization = await getPeopleOsOrganization();
   if (!organization) {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
@@ -295,10 +307,11 @@ router.get("/approvals", async (req, res): Promise<void> => {
     eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
     eq(leaveRequestsTable.status, "pending"),
   ];
-  if (
-    membership.role === PEOPLEOS_ROLES.departmentManager &&
-    membership.employeeId
-  ) {
+  if (membership.role === PEOPLEOS_ROLES.departmentManager) {
+    if (!membership.employeeId) {
+      res.json(ListApprovalsResponse.parse([]));
+      return;
+    }
     const reports = await db
       .select({ id: employeesTable.id })
       .from(employeesTable)
