@@ -1,18 +1,14 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
+// Vercel may provide PORT at runtime; use a conventional fallback when it does not.
+const rawPort = process.env.PORT?.trim() || "3000";
 const port = Number(rawPort);
 
 if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-  throw new Error(`Invalid PORT value: "${rawPort}". Expected an integer between 1 and 65535.`);
+  throw new Error(
+    `Invalid PORT value: "${rawPort}". Expected an integer between 1 and 65535.`,
+  );
 }
 
 const server = app.listen(port);
