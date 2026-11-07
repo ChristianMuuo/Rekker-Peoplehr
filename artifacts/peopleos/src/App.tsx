@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ClerkProvider, Show, SignIn, SignUp, useClerk, useUser } from '@clerk/react';
+import { UnifiedAuthProvider, Show, SignIn, SignUp, useClerk, useUser, hasValidClerkKey } from './auth';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
@@ -23,11 +23,20 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import { RecruitmentPage } from '@/pages/RecruitmentPage';
+import { OnboardingPage } from '@/pages/OnboardingPage';
+import { AttendancePage } from '@/pages/AttendancePage';
+import { PayrollPage } from '@/pages/PayrollPage';
+import { PerformancePage } from '@/pages/PerformancePage';
+import { LearningPage } from '@/pages/LearningPage';
+import { DocumentsPage } from '@/pages/DocumentsPage';
+import { ReportsPage } from '@/pages/ReportsPage';
+import { AgentHubPage } from '@/pages/AgentHubPage';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'https://cdn.jsdelivr.net' : undefined);
 
 function stripBase(path: string) {
   return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
@@ -252,14 +261,14 @@ function AppFrame() {
             <Route path="/audit" component={AuditPage} />
             <Route path="/agent-hub" component={AgentHubPage} />
             <Route path="/settings" component={SettingsPage} />
-            <Route path="/recruitment" component={() => <PhasePage title="Recruitment" />} />
-            <Route path="/onboarding" component={() => <PhasePage title="Onboarding" />} />
-            <Route path="/attendance" component={() => <PhasePage title="Attendance" />} />
-            <Route path="/payroll" component={() => <PhasePage title="Payroll" />} />
-            <Route path="/performance" component={() => <PhasePage title="Performance" />} />
-            <Route path="/learning" component={() => <PhasePage title="Learning" />} />
-            <Route path="/documents" component={() => <PhasePage title="Documents" />} />
-            <Route path="/reports" component={() => <PhasePage title="Reports & Analytics" />} />
+            <Route path="/recruitment" component={RecruitmentPage} />
+            <Route path="/onboarding" component={OnboardingPage} />
+            <Route path="/attendance" component={AttendancePage} />
+            <Route path="/payroll" component={PayrollPage} />
+            <Route path="/performance" component={PerformancePage} />
+            <Route path="/learning" component={LearningPage} />
+            <Route path="/documents" component={DocumentsPage} />
+            <Route path="/reports" component={ReportsPage} />
             <Route component={NotFound} />
           </Switch>
         </main>
@@ -570,35 +579,7 @@ function AuditPage() {
   </div>;
 }
 
-function AgentHubPage() {
-  const status = useGetAgentProviderStatus();
-  if (status.isLoading) return <LoadingScreen label="Checking provider readiness" />;
-  if (status.isError || !status.data) return <ErrorState title="Provider readiness could not be checked" onRetry={() => status.refetch()} />;
-  return <div><PageHeading eyebrow="PeopleOS intelligence" title="Agent hub" description="Provider readiness and explainable workforce signals. No AI provider calls are made from this interface." />
-    <section className={`surface overflow-hidden ${status.data.configured ? '' : 'border-[#ead4b1]'}`} data-testid="card-agent-provider-status">
-      <div className={`flex items-start gap-4 p-5 md:p-7 ${status.data.configured ? 'bg-[#eef5ef]' : 'bg-[#fbf3e4]'}`}>
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${status.data.configured ? 'bg-[#dcebdd] text-[#32724a]' : 'bg-[#f4e4c4] text-[#84601d]'}`}><Sparkles size={19} /></div>
-        <div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-display text-lg font-semibold text-stone-900">AI provider {status.data.configured ? 'configured' : 'setup required'}</h2><span className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase tracking-wider ${status.data.configured ? 'bg-[#dcebdd] text-[#32724a]' : 'bg-[#f4e4c4] text-[#84601d]'}`} data-testid="status-agent-provider">{status.data.configured ? 'Ready' : 'Not configured'}</span></div>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">{status.data.message}</p>
-          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-stone-500"><span>Provider: <b className="font-semibold text-stone-700">{status.data.provider || 'Not set'}</b></span><span>Model: <b className="font-semibold text-stone-700">{status.data.model || 'Not set'}</b></span></div>
-        </div>
-      </div>
-      {!status.data.configured && <div className="border-t border-[#ead4b1] px-5 py-4 text-xs leading-5 text-[#6f5a30] md:px-7" data-testid="text-agent-setup-guidance">Workforce AI insights are unavailable until an administrator configures an approved provider. No provider key has been supplied. This screen does not invoke or simulate a language model.</div>}
-    </section>
-    <section className="surface mt-4 p-5 md:p-7" data-testid="section-rule-insights">
-      <div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#e8f2eb] text-[#34734d]"><Activity size={16} /></div><div><h2 className="font-display text-base font-semibold text-stone-900">Rule-based workforce signals</h2><p className="text-xs text-stone-500">Deterministic summaries from the overview response</p></div></div>
-      <p className="mt-4 rounded-lg bg-[#f6f7f3] p-3 text-xs leading-5 text-stone-600">These are rule-based, not AI-generated. Each signal is sourced directly from the current PeopleOS overview priorities.</p>
-      <RuleSignals />
-    </section>
-  </div>;
-}
-function RuleSignals() {
-  const overview = useGetPeopleOsOverview();
-  if (overview.isLoading) return <div className="mt-4 space-y-3">{[1,2].map(v => <div key={v} className="skeleton h-14" />)}</div>;
-  if (overview.isError || !overview.data) return <div className="mt-4"><ErrorState title="Rule signals unavailable" onRetry={() => overview.refetch()} /></div>;
-  if (!overview.data.priorities.length) return <div className="mt-4"><EmptyState title="No rules triggered" message="No current priority records were returned by the overview." /></div>;
-  return <div className="mt-3 divide-y divide-stone-100">{overview.data.priorities.map(p => <div className="flex flex-col gap-2 py-4 sm:flex-row sm:items-start" key={p.id} data-testid={`card-rule-insight-${p.id}`}><span className="rounded-md bg-stone-100 px-2 py-1 text-[9px] font-bold uppercase text-stone-500 sm:w-24">{p.category.replaceAll('_',' ')}</span><div className="flex-1"><p className="text-sm font-bold text-stone-800">{p.title}</p><p className="mt-1 text-xs leading-5 text-stone-500">{p.description}</p></div><span className="text-[10px] text-stone-400">Source: {p.source}</span></div>)}</div>;
-}
+
 
 function SettingsPage() {
   const auth = useGetAuthContext();
@@ -651,11 +632,19 @@ function RouterContents() {
 }
 function ClerkRoutes() {
   const [, setLocation] = useLocation();
-  return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={appearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`}
-    localization={{ signIn: { start: { title: 'Welcome back', subtitle: 'Sign in to your Rekker PeopleOS workspace' } }, signUp: { start: { title: 'Request PeopleOS access', subtitle: 'Create your secure account' } } }}
-    routerPush={to => setLocation(stripBase(to))} routerReplace={to => setLocation(stripBase(to), { replace: true })}>
-    <QueryClientProvider client={queryClient}><ClerkCacheSync /><RouterContents /><Toaster /></QueryClientProvider>
-  </ClerkProvider>;
+  return <UnifiedAuthProvider
+    clerkPubKey={hasValidClerkKey ? clerkPubKey : undefined}
+    appearance={appearance}
+    basePath={basePath}
+    routerPush={to => setLocation(stripBase(to))}
+    routerReplace={to => setLocation(stripBase(to), { replace: true })}
+  >
+    <QueryClientProvider client={queryClient}>
+      <ClerkCacheSync />
+      <RouterContents />
+      <Toaster />
+    </QueryClientProvider>
+  </UnifiedAuthProvider>;
 }
 function App() {
   return <TooltipProvider><WouterRouter base={basePath}><ClerkRoutes /></WouterRouter></TooltipProvider>;

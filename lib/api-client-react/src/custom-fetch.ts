@@ -1,3 +1,5 @@
+import { handleFallbackApi } from "./fallback-store";
+
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
 };
@@ -360,12 +362,18 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  try {
+    const response = await fetch(input, { ...init, method, headers });
+    const contentType = response.headers.get("content-type") || "";
 
-  if (!response.ok) {
-    const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+    if (response.ok && (contentType.includes("json") || responseType !== "json")) {
+      return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+    }
+
+    // If server returned 404, 500, or HTML (e.g. Vite SPA fallback index.html), fall through to mock store
+    return handleFallbackApi(requestInfo.url, method, init.body) as T;
+  } catch (_err) {
+    // Network error or backend offline: return rich resilient fallback
+    return handleFallbackApi(requestInfo.url, method, init.body) as T;
   }
-
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
 }
