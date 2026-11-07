@@ -4,13 +4,27 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
+export const pool = process.env.DATABASE_URL
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : (new Proxy({} as pg.Pool, {
+      get(_target, prop) {
+        if (!process.env.DATABASE_URL) {
+          throw new Error("DATABASE_URL must be set to execute database operations.");
+        }
+        return (new Pool({ connectionString: process.env.DATABASE_URL }) as any)[prop];
+      },
+    }));
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle(pool, { schema });
+export const db = process.env.DATABASE_URL
+  ? drizzle(pool, { schema })
+  : (new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
+      get(_target, prop) {
+        if (!process.env.DATABASE_URL) {
+          throw new Error("DATABASE_URL must be set to query the database.");
+        }
+        const activePool = new Pool({ connectionString: process.env.DATABASE_URL });
+        return (drizzle(activePool, { schema }) as any)[prop];
+      },
+    }));
 
 export * from "./schema";

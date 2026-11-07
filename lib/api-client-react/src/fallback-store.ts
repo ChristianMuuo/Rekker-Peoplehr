@@ -282,3 +282,4 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
 
   return { ok: true };
 }
+
