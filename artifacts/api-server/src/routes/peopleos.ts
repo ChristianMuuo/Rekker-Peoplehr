@@ -56,6 +56,27 @@ const directoryRoles: readonly string[] = [
 ];
 const dayMs = 24 * 60 * 60 * 1000;
 
+export const DEMO_DEPARTMENTS_LIST = [
+  { id: '20000000-0000-4000-8000-000000000001', code: 'MFG', name: 'Manufacturing & Brewing', description: 'Brewery production lines, quality inspection, fermentation operations.', location: 'Nairobi Industrial Area Plant', managerEmployeeId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', headcount: 3, budgetedPositions: 15 },
+  { id: '20000000-0000-4000-8000-000000000002', code: 'DIST', name: 'Logistics & Distribution', description: 'Fleet transport, distribution hub management, route dispatching.', location: 'Nairobi Central Logistics Hub', managerEmployeeId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', headcount: 2, budgetedPositions: 12 },
+  { id: '20000000-0000-4000-8000-000000000003', code: 'BRAND', name: 'Brand & Commercial Marketing', description: 'Brand activation, trade marketing, distributor relations.', location: 'Westlands Commercial Office', managerEmployeeId: '10000000-0000-4000-8000-000000000005', managerName: 'Brenda Mutheu', headcount: 2, budgetedPositions: 8 },
+  { id: '20000000-0000-4000-8000-000000000004', code: 'PEOPLE', name: 'People Operations & Culture', description: 'Workforce intelligence, statutory compliance, talent acquisition.', location: 'Westlands Commercial Office', managerEmployeeId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', headcount: 2, budgetedPositions: 6 },
+  { id: '20000000-0000-4000-8000-000000000005', code: 'FIN', name: 'Finance & Supply Chain', description: 'Financial accounting, KRA reporting, payroll governance.', location: 'Westlands Commercial Office', managerEmployeeId: null, managerName: null, headcount: 1, budgetedPositions: 5 },
+];
+
+export const DEMO_EMPLOYEES_LIST = [
+  { id: '10000000-0000-4000-8000-000000000001', employeeNumber: 'REK-0101', firstName: 'Achieng', lastName: 'Odhiambo', preferredName: 'Achieng', workEmail: 'achieng.odhiambo@rekker.co.ke', phone: '+254 722 100 201', jobTitle: 'Plant Operations Director', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Manufacturing & Brewing', managerId: null, managerName: null, location: 'Nairobi Industrial Area Plant', employmentType: 'permanent' as const, status: 'active' as const, startDate: '2021-03-15', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000002', employeeNumber: 'REK-0102', firstName: 'Mwangi', lastName: 'Kariuki', preferredName: 'Mwangi', workEmail: 'mwangi.kariuki@rekker.co.ke', phone: '+254 733 410 882', jobTitle: 'Senior Brewmaster & Quality Lead', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Manufacturing & Brewing', managerId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', location: 'Nairobi Industrial Area Plant', employmentType: 'permanent' as const, status: 'active' as const, startDate: '2022-06-01', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000003', employeeNumber: 'REK-0103', firstName: 'Juma', lastName: 'Omondi', preferredName: null, workEmail: 'juma.omondi@rekker.co.ke', phone: '+254 711 502 918', jobTitle: 'Logistics Fleet Manager', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: null, managerName: null, location: 'Nairobi Central Logistics Hub', employmentType: 'permanent' as const, status: 'active' as const, startDate: '2022-09-10', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000004', employeeNumber: 'REK-0104', firstName: 'Wanjiku', lastName: 'Kimani', preferredName: 'Wawa', workEmail: 'wanjiku.kimani@rekker.co.ke', phone: '+254 700 819 223', jobTitle: 'Distribution Dispatch Specialist', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', location: 'Nairobi Central Logistics Hub', employmentType: 'permanent' as const, status: 'on_leave' as const, startDate: '2023-04-12', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000005', employeeNumber: 'REK-0105', firstName: 'Brenda', lastName: 'Mutheu', preferredName: 'Brenda', workEmail: 'brenda.mutheu@rekker.co.ke', phone: '+254 721 349 018', jobTitle: 'Brand Strategy & Trade Lead', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent' as const, status: 'active' as const, startDate: '2022-01-10', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000006', employeeNumber: 'REK-0106', firstName: 'Brian', lastName: 'Kiprotich', preferredName: 'Brian', workEmail: 'brian.kiprotich@rekker.co.ke', phone: '+254 725 619 827', jobTitle: 'Digital Growth & Social Media Specialist', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: '10000000-0000-4000-8000-000000000005', managerName: 'Brenda Mutheu', location: 'Westlands Commercial Office', employmentType: 'fixed_term' as const, status: 'active' as const, startDate: '2024-02-01', probationEndDate: null, contractEndDate: '2026-04-30', isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000007', employeeNumber: 'REK-0107', firstName: 'David', lastName: 'Kibet', preferredName: 'David', workEmail: 'david.kibet@rekker.co.ke', phone: '+254 720 182 930', jobTitle: 'Head of People & Organization Culture', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent' as const, status: 'active' as const, startDate: '2021-08-01', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000008', employeeNumber: 'REK-0108', firstName: 'Faith', lastName: 'Chebet', preferredName: 'Faith', workEmail: 'faith.chebet@rekker.co.ke', phone: '+254 724 991 823', jobTitle: 'Talent Acquisition & Employee Experience Officer', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', location: 'Westlands Commercial Office', employmentType: 'permanent' as const, status: 'probation' as const, startDate: '2026-01-15', probationEndDate: '2026-04-15', contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000009', employeeNumber: 'REK-0109', firstName: 'Dennis', lastName: 'Otieno', preferredName: 'Denno', workEmail: 'dennis.otieno@rekker.co.ke', phone: '+254 731 442 819', jobTitle: 'Financial Accountant & Payroll Controller', departmentId: '20000000-0000-4000-8000-000000000005', departmentName: 'Finance & Supply Chain', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent' as const, status: 'active' as const, startDate: '2023-01-09', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000010', employeeNumber: 'REK-0110', firstName: 'Sarah', lastName: 'Njeri', preferredName: 'Sarah', workEmail: 'sarah.njeri@rekker.co.ke', phone: '+254 718 293 847', jobTitle: 'Junior Quality Assurance Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Manufacturing & Brewing', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Mwangi Kariuki', location: 'Nairobi Industrial Area Plant', employmentType: 'permanent' as const, status: 'active' as const, startDate: '2024-05-02', probationEndDate: null, contractEndDate: null, isDemo: true },
+];
+
 function dateAfter(days: number): string {
   return new Date(Date.now() + days * dayMs).toISOString().slice(0, 10);
 }
@@ -221,6 +242,63 @@ router.get("/peopleos/overview", async (req, res): Promise<void> => {
     !overviewRoles.includes(access.membership.role)
   ) {
     res.status(403).json({ error: "You do not have permission to view workforce metrics." });
+    return;
+  }
+  if (!process.env.DATABASE_URL) {
+    const activeEmps = DEMO_EMPLOYEES_LIST.filter((e) => e.status === "active").length;
+    const onLeave = DEMO_EMPLOYEES_LIST.filter((e) => e.status === "on_leave").length;
+    const demoOverview = {
+      dataMode: "DEMO" as const,
+      stats: {
+        totalEmployees: DEMO_EMPLOYEES_LIST.length,
+        activeEmployees: activeEmps,
+        onLeave: onLeave,
+        pendingApprovals: 2,
+        upcomingMilestones: 2,
+      },
+      departments: DEMO_DEPARTMENTS_LIST,
+      monthlyHeadcount: [
+        { month: "Apr", headcount: 6 },
+        { month: "May", headcount: 7 },
+        { month: "Jun", headcount: 7 },
+        { month: "Jul", headcount: 8 },
+        { month: "Aug", headcount: 8 },
+        { month: "Sep", headcount: 8 },
+        { month: "Oct", headcount: 9 },
+        { month: "Nov", headcount: 9 },
+        { month: "Dec", headcount: 9 },
+        { month: "Jan", headcount: 10 },
+        { month: "Feb", headcount: 10 },
+        { month: "Mar", headcount: 10 },
+      ],
+      priorities: [
+        {
+          id: "pending-leave",
+          title: "Leave requests are waiting",
+          description: "2 requests need a decision.",
+          category: "approval" as const,
+          source: "2 pending leave requests",
+          href: "/approvals",
+        },
+        {
+          id: "contract-expiry",
+          title: "Contract milestones are approaching",
+          description: "1 contract ends within 60 days.",
+          category: "milestone" as const,
+          source: "Employee contract records ending within 60 days",
+          href: "/people",
+        },
+        {
+          id: "probation-milestone",
+          title: "Probation check-ins are due soon",
+          description: "1 probation milestone falls within 30 days.",
+          category: "milestone" as const,
+          source: "Employee probation dates within 30 days",
+          href: "/people",
+        },
+      ],
+    };
+    res.json(GetPeopleOsOverviewResponse.parse(demoOverview));
     return;
   }
   const organizationId = access.organization.id;
@@ -396,6 +474,10 @@ router.get("/departments", async (req, res): Promise<void> => {
     res.status(403).json({ error: "You do not have permission to view departments." });
     return;
   }
+  if (!process.env.DATABASE_URL) {
+    res.json(ListDepartmentsResponse.parse(DEMO_DEPARTMENTS_LIST));
+    return;
+  }
   const [departments, employees] = await Promise.all([
     db
       .select()
@@ -464,6 +546,37 @@ router.get("/employees", async (req, res): Promise<void> => {
     !directoryRoles.includes(access.membership.role)
   ) {
     res.status(403).json({ error: "You do not have permission to view the employee directory." });
+    return;
+  }
+  if (!process.env.DATABASE_URL) {
+    let items = [...DEMO_EMPLOYEES_LIST];
+    const q = parsedQuery.data;
+    if (q.departmentId) {
+      items = items.filter((e) => e.departmentId === q.departmentId);
+    }
+    if (q.status) {
+      items = items.filter((e) => e.status === q.status);
+    }
+    if (q.search?.trim()) {
+      const term = q.search.trim().toLowerCase();
+      items = items.filter(
+        (e) =>
+          e.firstName.toLowerCase().includes(term) ||
+          e.lastName.toLowerCase().includes(term) ||
+          e.workEmail.toLowerCase().includes(term) ||
+          e.employeeNumber.toLowerCase().includes(term) ||
+          e.jobTitle.toLowerCase().includes(term),
+      );
+    }
+    res.json(
+      ListEmployeesResponse.parse({
+        items,
+        page: q.page,
+        pageSize: q.pageSize,
+        total: items.length,
+        dataMode: "DEMO",
+      }),
+    );
     return;
   }
   const query = parsedQuery.data;
@@ -628,6 +741,15 @@ router.get("/employees/:employeeId", async (req, res): Promise<void> => {
     !directoryRoles.includes(access.membership.role)
   ) {
     res.status(403).json({ error: "You do not have permission to view employee profiles." });
+    return;
+  }
+  if (!process.env.DATABASE_URL) {
+    const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === params.data.employeeId);
+    if (!emp) {
+      res.status(404).json({ error: "Employee not found." });
+      return;
+    }
+    res.json(GetEmployeeResponse.parse(emp));
     return;
   }
   const conditions = [
