@@ -252,6 +252,7 @@ function AppFrame() {
         {auth.isDemo && <div className="border-b border-[#e9d2aa] bg-[#fbf1dc] px-4 py-2 text-center text-[11px] font-semibold text-[#76551d] md:text-left md:px-8" data-testid="banner-demo-mode">Demo data · Synthetic workforce records are shown. Decisions are not applied to real employee records.</div>}
         <main className="mx-auto max-w-[1480px] px-4 py-6 md:px-8 md:py-8 enter">
           <Switch>
+            <Route path="/dashboard"><Redirect to="/overview" /></Route>
             <Route path="/overview" component={OverviewPage} />
             <Route path="/people" component={PeoplePage} />
             <Route path="/people/:employeeId" component={EmployeePage} />
@@ -259,6 +260,7 @@ function AppFrame() {
             <Route path="/leave" component={LeavePage} />
             <Route path="/approvals" component={ApprovalsPage} />
             <Route path="/audit" component={AuditPage} />
+            <Route path="/ai" component={AgentHubPage} />
             <Route path="/agent-hub" component={AgentHubPage} />
             <Route path="/settings" component={SettingsPage} />
             <Route path="/recruitment" component={RecruitmentPage} />

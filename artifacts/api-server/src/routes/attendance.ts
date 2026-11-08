@@ -61,8 +61,8 @@ let ATTENDANCE_RECORDS: AttendanceItem[] = [
   },
 ];
 
-// GET /api/attendance
-router.get("/attendance", async (req: Request, res: Response) => {
+// GET /api/attendance & /api/attendance/records
+router.get(["/attendance", "/attendance/records"], async (req: Request, res: Response) => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
 

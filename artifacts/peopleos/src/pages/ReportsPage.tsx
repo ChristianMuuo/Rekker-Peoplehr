@@ -90,7 +90,7 @@ export function ReportsPage() {
         <div className="mt-6 space-y-4">
           {depts.map((d) => {
             const count = employees.filter(e => e.departmentId === d.id).length;
-            const pct = Math.round((count / d.budgetedPositions) * 100);
+            const pct = d.budgetedPositions ? Math.round((count / d.budgetedPositions) * 100) : 0;
             return (
               <div key={d.id} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-semibold">

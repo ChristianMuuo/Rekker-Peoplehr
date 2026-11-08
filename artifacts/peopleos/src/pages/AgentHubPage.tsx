@@ -47,12 +47,30 @@ export function AgentHubPage() {
     setInputQuery('');
     setIsTyping(true);
 
-    // Simulate intelligent multi-agent processing
-    setTimeout(() => {
-      const response = processAgentQuery(q, activeRole);
-      setMessages((prev) => [...prev, response]);
-      setIsTyping(false);
-    }, 600);
+    fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q, agentRole: activeRole }),
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        const agentMsg: ChatMessage = {
+          id: data.id || `msg_${Date.now()}`,
+          sender: 'agent',
+          agentRole: data.agentRole || activeRole,
+          text: data.response,
+          structuredCard: data.structuredCard,
+          citations: data.citations?.map((c: any) => c.source || c.title),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, agentMsg]);
+        setIsTyping(false);
+      })
+      .catch(() => {
+        const response = processAgentQuery(q, activeRole);
+        setMessages((prev) => [...prev, response]);
+        setIsTyping(false);
+      });
   };
 
   const activeAgent = AGENT_REGISTRY[activeRole];

@@ -70,7 +70,7 @@ export function PayrollPage() {
           <p className="mt-2 font-display text-2xl font-bold text-emerald-800">
             KES {totalNet.toLocaleString()}
           </p>
-          <p className="mt-1 text-[11px] text-stone-500">{(totalNet / totalGross * 100).toFixed(1)}% of total payroll</p>
+          <p className="mt-1 text-[11px] text-stone-500">{totalGross ? (totalNet / totalGross * 100).toFixed(1) : '0.0'}% of total payroll</p>
         </div>
 
         <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-xs">

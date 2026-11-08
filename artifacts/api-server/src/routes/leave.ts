@@ -37,6 +37,74 @@ const adminRoles: readonly string[] = [
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
+export interface DemoLeaveItem {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  leaveType: string;
+  startDate: Date;
+  endDate: Date;
+  days: number;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  approverId: string | null;
+  decisionComment: string | null;
+  submittedAt: Date;
+  decidedAt: Date | null;
+  isDemo: boolean;
+}
+
+export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
+  {
+    id: "leave-001",
+    employeeId: "10000000-0000-4000-8000-000000000004",
+    employeeName: "Wanjiku Kimani",
+    leaveType: "annual",
+    startDate: new Date("2026-03-02"),
+    endDate: new Date("2026-03-13"),
+    days: 10,
+    reason: "Annual rest and family leave",
+    status: "approved",
+    approverId: "10000000-0000-4000-8000-000000000007",
+    decisionComment: "Approved. Fleet coverage confirmed.",
+    submittedAt: new Date("2026-02-15T08:30:00Z"),
+    decidedAt: new Date("2026-02-16T10:00:00Z"),
+    isDemo: true,
+  },
+  {
+    id: "leave-002",
+    employeeId: "10000000-0000-4000-8000-000000000006",
+    employeeName: "Brian Kiprotich",
+    leaveType: "annual",
+    startDate: new Date("2026-03-20"),
+    endDate: new Date("2026-03-27"),
+    days: 6,
+    reason: "Professional certification exam study period",
+    status: "pending",
+    approverId: null,
+    decisionComment: null,
+    submittedAt: new Date("2026-03-01T11:45:00Z"),
+    decidedAt: null,
+    isDemo: true,
+  },
+  {
+    id: "leave-003",
+    employeeId: "10000000-0000-4000-8000-000000000002",
+    employeeName: "Mwangi Kariuki",
+    leaveType: "parental",
+    startDate: new Date("2026-04-06"),
+    endDate: new Date("2026-04-17"),
+    days: 10,
+    reason: "Paternity leave under Employment Act 2007",
+    status: "pending",
+    approverId: null,
+    decisionComment: null,
+    submittedAt: new Date("2026-03-04T09:15:00Z"),
+    decidedAt: null,
+    isDemo: true,
+  },
+];
+
 function businessDaysBetween(start: string, end: string): number {
   const cursor = new Date(`${start}T00:00:00.000Z`);
   const final = new Date(`${end}T00:00:00.000Z`);
@@ -123,6 +191,17 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  if (!process.env.DATABASE_URL) {
+    let items = [...DEMO_LEAVE_STORE];
+    if (query.data.status) {
+      items = items.filter((r) => r.status === query.data.status);
+    }
+    if (query.data.employeeId) {
+      items = items.filter((r) => r.employeeId === query.data.employeeId);
+    }
+    res.json(ListLeaveRequestsResponse.parse(items));
+    return;
+  }
   const conditions = [
     eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
   ];
@@ -194,6 +273,27 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
   const days = businessDaysBetween(startDate, endDate);
   if (days < 1) {
     res.status(400).json({ error: "Choose at least one weekday for the request." });
+    return;
+  }
+  if (!process.env.DATABASE_URL) {
+    const newReq = {
+      id: `leave-${Date.now()}`,
+      employeeId: input.employeeId,
+      employeeName: "Employee Request",
+      leaveType: input.leaveType,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      days,
+      reason: input.reason,
+      status: "pending" as const,
+      approverId: null,
+      decisionComment: null,
+      submittedAt: new Date(),
+      decidedAt: null,
+      isDemo: true,
+    };
+    DEMO_LEAVE_STORE.unshift(newReq);
+    res.status(201).json(CreateLeaveRequestResponse.parse(newReq));
     return;
   }
 
@@ -291,6 +391,19 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
 router.get("/approvals", async (req, res): Promise<void> => {
   const membership = await requireRoles(req, res, approverRoles);
   if (!membership) return;
+  if (!process.env.DATABASE_URL) {
+    const pending = DEMO_LEAVE_STORE.filter((r) => r.status === "pending");
+    const approvals = pending.map((r) => ({
+      id: r.id,
+      type: "leave" as const,
+      title: `${r.leaveType} leave · ${r.days} day${r.days === 1 ? "" : "s"}`,
+      requester: r.employeeName,
+      submittedAt: r.submittedAt,
+      href: "/leave",
+    }));
+    res.json(ListApprovalsResponse.parse(approvals));
+    return;
+  }
   const conditions = [
     eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
     eq(leaveRequestsTable.status, "pending"),
@@ -351,6 +464,19 @@ router.post(
     }
     const membership = await requireRoles(req, res, approverRoles);
     if (!membership) return;
+    if (!process.env.DATABASE_URL) {
+      const target = DEMO_LEAVE_STORE.find((r) => r.id === params.data.requestId);
+      if (!target) {
+        res.status(404).json({ error: "Leave request not found." });
+        return;
+      }
+      target.status = body.data.decision === "approve" ? "approved" : "rejected";
+      target.decisionComment = body.data.comment ?? null;
+      target.decidedAt = new Date();
+      target.approverId = membership.userId;
+      res.json(DecideLeaveRequestResponse.parse(target));
+      return;
+    }
     const [request] = await db
       .select()
       .from(leaveRequestsTable)

@@ -109,8 +109,9 @@ export interface ChatMessage {
   agentRole: AgentRole;
   text: string;
   timestamp: string;
+  citations?: string[];
   structuredCard?: {
-    type: 'kpis' | 'table' | 'payroll_breakdown' | 'job_description' | 'checklist';
+    type: string;
     title: string;
     data: any;
   };
