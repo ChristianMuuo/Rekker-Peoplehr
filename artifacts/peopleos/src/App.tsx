@@ -308,12 +308,55 @@ function OverviewPage() {
   if (overview.isLoading) return <LoadingScreen label="Loading workforce overview" />;
   if (overview.isError || !overview.data) return <ErrorState title="Workforce overview could not load" onRetry={() => overview.refetch()} />;
   const data = overview.data;
-  const max = Math.max(...data.monthlyHeadcount.map(v => v.headcount), 1);
+  const rawMonthly = Array.isArray(data?.monthlyHeadcount) ? data.monthlyHeadcount : [];
+  const monthlyHeadcount = rawMonthly.map(item => ({
+    month: item?.month ?? '',
+    headcount: typeof item?.headcount === 'number' ? item.headcount : (typeof (item as any)?.count === 'number' ? (item as any).count : 0),
+  }));
+  const max = Math.max(...monthlyHeadcount.map(v => v.headcount), 1);
+  const rawPriorities = Array.isArray(data?.priorities) ? data.priorities : [];
+  const priorities = rawPriorities.map(p => ({
+    id: p?.id ?? String(Math.random()),
+    title: p?.title ?? '',
+    description: p?.description ?? '',
+    category: (p?.category === 'approval' || p?.category === 'milestone' || p?.category === 'staffing') ? p.category : 'milestone',
+    source: p?.source ?? 'People Operations',
+    href: p?.href ?? '/people',
+  }));
+  interface OverviewDept {
+    id: string;
+    name: string;
+    code: string;
+    location: string;
+    headcount: number;
+    budgetedPositions: number;
+    description?: string;
+  }
+  const rawDepartments: OverviewDept[] = Array.isArray(data?.departments)
+    ? data.departments
+    : Array.isArray((data as any)?.departmentHeadcount)
+      ? (data as any).departmentHeadcount.map((d: any) => ({
+          id: d?.departmentId ?? d?.id ?? String(Math.random()),
+          name: d?.departmentName ?? d?.name ?? 'Department',
+          code: d?.departmentCode ?? d?.code ?? 'DEPT',
+          headcount: d?.count ?? d?.headcount ?? 0,
+          budgetedPositions: d?.budgeted ?? d?.budgetedPositions ?? 0,
+          location: d?.location ?? 'Nairobi, Kenya',
+          description: d?.description,
+        }))
+      : [];
+  const departments = rawDepartments;
+  const statsData = data?.stats;
+  const totalEmployees = statsData?.totalEmployees ?? (statsData as any)?.totalHeadcount ?? 0;
+  const activeEmployees = statsData?.activeEmployees ?? (statsData as any)?.activeHeadcount ?? 0;
+  const onLeave = statsData?.onLeave ?? (statsData as any)?.onLeaveHeadcount ?? 0;
+  const pendingApprovals = statsData?.pendingApprovals ?? (statsData as any)?.pendingApprovalsCount ?? 0;
+
   const stats: { name: string; value: number; note: string; icon: typeof Users; color: string }[] = [
-    { name: 'Workforce', value: data.stats.totalEmployees, note: 'people records', icon: Users, color: 'stone' },
-    { name: 'Active today', value: data.stats.activeEmployees, note: 'active employees', icon: Activity, color: 'green' },
-    { name: 'On leave', value: data.stats.onLeave, note: 'away from work', icon: CalendarDays, color: 'blue' },
-    { name: 'Approvals waiting', value: data.stats.pendingApprovals, note: 'need a decision', icon: Clock3, color: 'red' },
+    { name: 'Workforce', value: totalEmployees, note: 'people records', icon: Users, color: 'stone' },
+    { name: 'Active today', value: activeEmployees, note: 'active employees', icon: Activity, color: 'green' },
+    { name: 'On leave', value: onLeave, note: 'away from work', icon: CalendarDays, color: 'blue' },
+    { name: 'Approvals waiting', value: pendingApprovals, note: 'need a decision', icon: Clock3, color: 'red' },
   ];
   return <div>
     <PageHeading eyebrow="People operations / Overview" title="Workforce overview" description={`A practical read of today's people operations at ${auth.data?.organizationName ?? 'Rekker'}.`} action={<Link href="/people" className="btn btn-primary" data-testid="button-overview-directory">Open directory <ArrowRight size={15} /></Link>} />
@@ -329,8 +372,8 @@ function OverviewPage() {
       <section className="surface p-5 md:p-6">
         <div className="flex items-start justify-between"><div><h2 className="font-display text-lg font-semibold text-stone-900">Headcount movement</h2><p className="mt-1 text-xs text-stone-500">Monthly workforce records</p></div><span className="rounded-md bg-[#f6f1eb] px-2 py-1 text-[10px] font-bold text-stone-500">12 MONTHS</span></div>
         <div className="mt-7 flex h-[190px] items-end gap-2 border-b border-stone-200 pb-1 sm:gap-4" data-testid="chart-monthly-headcount">
-          {data.monthlyHeadcount.map((item, i) => <div key={`${item.month}-${i}`} className="flex h-full flex-1 flex-col items-center justify-end gap-2" data-testid={`bar-headcount-${i}`}>
-            <span className="text-[9px] font-semibold text-stone-500">{item.headcount}</span><div className={`w-full max-w-9 rounded-t-[4px] ${i === data.monthlyHeadcount.length - 1 ? 'bg-[#C71D1D]' : 'bg-[#e7c8c0]'}`} style={{ height: `${Math.max(10, item.headcount / max * 125)}px` }} />
+          {monthlyHeadcount.map((item, i) => <div key={`${item.month}-${i}`} className="flex h-full flex-1 flex-col items-center justify-end gap-2" data-testid={`bar-headcount-${i}`}>
+            <span className="text-[9px] font-semibold text-stone-500">{item.headcount}</span><div className={`w-full max-w-9 rounded-t-[4px] ${i === monthlyHeadcount.length - 1 ? 'bg-[#C71D1D]' : 'bg-[#e7c8c0]'}`} style={{ height: `${Math.max(10, item.headcount / max * 125)}px` }} />
             <span className="text-[9px] text-stone-400">{item.month.slice(0, 3)}</span>
           </div>)}
         </div>
@@ -339,7 +382,7 @@ function OverviewPage() {
       <section className="surface p-5 md:p-6">
         <div className="flex items-start justify-between"><div><h2 className="font-display text-lg font-semibold text-stone-900">Operational priorities</h2><p className="mt-1 text-xs text-stone-500">Items raised from current PeopleOS data</p></div><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#fae9e7] text-[#bd2725]"><Activity size={16} /></span></div>
         <div className="mt-4 divide-y divide-stone-100">
-          {data.priorities.length ? data.priorities.slice(0, 4).map(item => <Link key={item.id} href={item.href} className="flex gap-3 py-4" data-testid={`link-priority-${item.id}`}>
+          {priorities.length ? priorities.slice(0, 4).map(item => <Link key={item.id} href={item.href} className="flex gap-3 py-4" data-testid={`link-priority-${item.id}`}>
             <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${item.category === 'approval' ? 'bg-[#C71D1D]' : item.category === 'staffing' ? 'bg-[#338956]' : 'bg-[#c3923e]'}`} />
             <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-stone-800">{item.title}</span><span className="mt-1 block text-xs leading-5 text-stone-500">{item.description}</span><span className="mt-1 block text-[10px] font-semibold text-stone-400">Source: {item.source}</span></span><ArrowRight size={14} className="mt-1 shrink-0 text-stone-400" />
           </Link>) : <EmptyState title="No priorities to surface" message="There are no workforce items to action from the current records." />}
@@ -348,7 +391,7 @@ function OverviewPage() {
     </div>
     <section className="surface mt-4 p-5 md:p-6">
       <div className="mb-5 flex items-center justify-between"><div><h2 className="font-display text-lg font-semibold text-stone-900">Teams across the operation</h2><p className="mt-1 text-xs text-stone-500">Current headcount against budgeted positions</p></div><Link href="/organization" className="text-xs font-bold text-[#a91919]" data-testid="link-overview-organization">View organization</Link></div>
-      {data.departments.length ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{data.departments.slice(0, 6).map(dept => <div key={dept.id} className="rounded-xl border border-stone-200 p-4" data-testid={`card-overview-department-${dept.id}`}>
+      {departments.length ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{departments.slice(0, 6).map((dept: OverviewDept) => <div key={dept.id} className="rounded-xl border border-stone-200 p-4" data-testid={`card-overview-department-${dept.id}`}>
         <div className="flex justify-between gap-3"><div><p className="text-sm font-bold text-stone-800">{dept.name}</p><p className="mt-1 text-xs text-stone-500">{dept.location}</p></div><span className="font-mono text-[10px] text-stone-400">{dept.code}</span></div>
         <div className="mt-4 flex items-end justify-between"><span className="font-display text-2xl font-semibold text-stone-900">{dept.headcount}<small className="ml-1 text-xs font-medium text-stone-400">people</small></span><span className="text-[11px] text-stone-500">{dept.budgetedPositions} budgeted</span></div>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-[#338956]" style={{ width: `${Math.min(100, dept.budgetedPositions ? dept.headcount / dept.budgetedPositions * 100 : 0)}%` }} /></div>
@@ -555,8 +598,8 @@ function ApprovalsPage() {
       return <article className="surface flex flex-col gap-4 p-5 md:flex-row md:items-center" key={item.id} data-testid={`card-approval-${item.id}`}>
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#fae9e7] text-[#b22020]"><BadgeCheck size={18} /></div>
         <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-bold text-stone-800">{item.title}</h2><span className="rounded-full bg-stone-100 px-2 py-1 text-[9px] font-bold uppercase text-stone-500">{item.type.replaceAll('_',' ')}</span></div><p className="mt-1 text-xs text-stone-500">Requested by {item.requester} · {formatDate(item.submittedAt)}</p>{req && <p className="mt-2 text-xs text-stone-600">{req.days} days · {formatDate(req.startDate)} to {formatDate(req.endDate)} · {req.reason}</p>}</div>
-        {item.type === 'leave' && auth.data?.canApproveLeave && req && <div className="flex gap-2"><button className="btn btn-primary min-h-9 px-3" disabled={decide.isPending} onClick={() => decide.mutate({ requestId: req.id, data: { decision:'approve' } }, { onSuccess: refresh })} data-testid={`button-approval-approve-${item.id}`}><Check size={14} /> Approve</button><button className="btn btn-secondary min-h-9 px-3" disabled={decide.isPending} onClick={() => { const comment = window.prompt('Optional reason for declining this request') ?? ''; decide.mutate({ requestId: req.id, data: { decision:'reject', comment: comment || null } }, { onSuccess: refresh }); }} data-testid={`button-approval-reject-${item.id}`}>Decline</button></div>}
-        {(!req || item.type !== 'leave') && <Link href={item.href} className="btn btn-secondary min-h-9" data-testid={`link-approval-open-${item.id}`}>Open item <ArrowRight size={14} /></Link>}
+        {((item.type as any) === 'leave' || (item.type as any) === 'leave_request') && auth.data?.canApproveLeave && req && <div className="flex gap-2"><button className="btn btn-primary min-h-9 px-3" disabled={decide.isPending} onClick={() => decide.mutate({ requestId: req.id, data: { decision:'approve' } }, { onSuccess: refresh })} data-testid={`button-approval-approve-${item.id}`}><Check size={14} /> Approve</button><button className="btn btn-secondary min-h-9 px-3" disabled={decide.isPending} onClick={() => { const comment = window.prompt('Optional reason for declining this request') ?? ''; decide.mutate({ requestId: req.id, data: { decision:'reject', comment: comment || null } }, { onSuccess: refresh }); }} data-testid={`button-approval-reject-${item.id}`}>Decline</button></div>}
+        {(!req || ((item.type as any) !== 'leave' && (item.type as any) !== 'leave_request')) && <Link href={item.href} className="btn btn-secondary min-h-9" data-testid={`link-approval-open-${item.id}`}>Open item <ArrowRight size={14} /></Link>}
       </article>;
     })}</div>}
     {decide.isError && <div className="mt-4"><ErrorState title="Decision could not be saved" onRetry={refresh} /></div>}
@@ -575,7 +618,7 @@ function AuditPage() {
     {!audit.data?.length ? <div className="surface"><EmptyState title="No audit events" message="No events were returned for this timeline." /></div> :
     <div className="surface divide-y divide-stone-100">{audit.data.map((event,i) => <div className="flex gap-4 p-4 md:p-5" key={event.id} data-testid={`row-audit-event-${event.id}`}>
       <div className="flex w-20 shrink-0 flex-col items-end pt-1 text-right"><span className="text-[10px] font-bold text-stone-700">{formatDate(event.occurredAt)}</span><span className="mt-1 text-[10px] text-stone-400">{new Date(event.occurredAt).toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'})}</span></div>
-      <div className="relative flex w-5 shrink-0 justify-center"><span className={`mt-1 h-2.5 w-2.5 rounded-full ${i === 0 ? 'bg-[#C71D1D]' : 'bg-stone-300'}`} />{i !== audit.data!.length-1 && <span className="absolute top-4 h-full w-px bg-stone-200" />}</div>
+      <div className="relative flex w-5 shrink-0 justify-center"><span className={`mt-1 h-2.5 w-2.5 rounded-full ${i === 0 ? 'bg-[#C71D1D]' : 'bg-stone-300'}`} />{i !== (audit.data?.length ?? 0) - 1 && <span className="absolute top-4 h-full w-px bg-stone-200" />}</div>
       <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold text-stone-800">{event.action}</span><ModeBadge demo={event.isDemo} /></div><p className="mt-1 text-xs leading-5 text-stone-600">{event.summary}</p><p className="mt-2 text-[10px] text-stone-400">By {event.actor} · {event.targetType} · Ref {event.targetId}</p></div>
     </div>)}</div>}
   </div>;

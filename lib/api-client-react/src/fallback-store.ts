@@ -115,63 +115,68 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
     const totalHeadcount = DEFAULT_EMPS.length;
     const activeHeadcount = DEFAULT_EMPS.filter(e => e.status === 'active').length;
     const onLeaveHeadcount = DEFAULT_EMPS.filter(e => e.status === 'on_leave').length;
-    const probationHeadcount = DEFAULT_EMPS.filter(e => e.status === 'probation').length;
     const pendingLeaves = DEFAULT_LEAVES.filter(l => l.status === 'pending').length;
 
     return {
-      organizationName: 'Rekker Breweries Kenya Ltd',
-      dataMode: 'live',
+      dataMode: 'LIVE' as const,
       stats: {
-        totalHeadcount,
-        activeHeadcount,
-        onLeaveHeadcount,
-        probationHeadcount,
-        pendingApprovalsCount: pendingLeaves + 1,
-        expiringContractsCount: 1,
+        totalEmployees: totalHeadcount,
+        activeEmployees: activeHeadcount,
+        onLeave: onLeaveHeadcount,
+        pendingApprovals: pendingLeaves,
+        upcomingMilestones: 2,
       },
-      departmentHeadcount: DEFAULT_DEPTS.map(d => ({
-        departmentId: d.id,
-        departmentCode: d.code,
-        departmentName: d.name,
-        count: DEFAULT_EMPS.filter(e => e.departmentId === d.id).length,
-        budgeted: d.budgetedPositions,
+      departments: DEFAULT_DEPTS.map(d => ({
+        id: d.id,
+        name: d.name,
+        code: d.code,
+        managerEmployeeId: d.managerEmployeeId ?? null,
+        managerName: d.managerName ?? null,
+        location: d.location,
+        headcount: DEFAULT_EMPS.filter(e => e.departmentId === d.id).length,
+        budgetedPositions: d.budgetedPositions,
+        description: d.description,
       })),
       monthlyHeadcount: [
-        { month: 'Oct 2025', count: 8 },
-        { month: 'Nov 2025', count: 8 },
-        { month: 'Dec 2025', count: 9 },
-        { month: 'Jan 2026', count: 9 },
-        { month: 'Feb 2026', count: 10 },
-        { month: 'Mar 2026', count: totalHeadcount },
+        { month: 'Oct', headcount: 8 },
+        { month: 'Nov', headcount: 8 },
+        { month: 'Dec', headcount: 9 },
+        { month: 'Jan', headcount: 9 },
+        { month: 'Feb', headcount: 10 },
+        { month: 'Mar', headcount: totalHeadcount },
       ],
       priorities: [
         {
           id: 'prio-01',
-          category: 'STATUTORY_COMPLIANCE',
+          category: 'approval' as const,
           title: 'KRA Monthly PAYE & Housing Levy Filing Due',
           description: 'Statutory returns for March 2026 must be validated and filed before the 9th on KRA iTax portal.',
           source: 'Payroll Engine',
+          href: '/payroll',
         },
         {
           id: 'prio-02',
-          category: 'CONTRACT_EXPIRY',
+          category: 'milestone' as const,
           title: '1 Fixed-term Contract Approaching Expiry',
           description: 'Brian Kiprotich (Digital Specialist) contract ends on 2026-04-30. Review renewal decision.',
           source: 'Workforce Records',
+          href: '/people',
         },
         {
           id: 'prio-03',
-          category: 'PROBATION_REVIEW',
+          category: 'milestone' as const,
           title: '1 Employee Ready for 90-Day Probation Assessment',
           description: 'Faith Chebet completes 90-day probation on 2026-04-15. Schedule manager performance signoff.',
           source: 'People Operations',
+          href: '/people',
         },
         {
           id: 'prio-04',
-          category: 'LEAVE_COVERAGE',
+          category: 'approval' as const,
           title: `${pendingLeaves} Pending Leave Applications Awaiting Authorization`,
-          description: 'Mwangi Kariuki and Brian Kiprotich submitted leave requests requiring supervisor review.',
+          description: 'Colleagues submitted leave requests requiring supervisor review.',
           source: 'Time Away Hub',
+          href: '/approvals',
         },
       ],
     };
@@ -268,7 +273,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   if (path === '/api/approvals') {
     return DEFAULT_LEAVES.filter(l => l.status === 'pending').map(l => ({
       id: l.id,
-      type: 'leave_request',
+      type: 'leave' as const,
       title: `${l.leaveType.toUpperCase()} Leave (${l.days} days)`,
       requester: l.employeeName,
       submittedAt: l.submittedAt,
