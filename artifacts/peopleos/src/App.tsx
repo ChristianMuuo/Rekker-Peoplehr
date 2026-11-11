@@ -18,7 +18,7 @@ import type { Employee, EmployeeInput, EmployeeUpdate, LeavePolicy, LeaveRequest
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, Bell, BrainCircuit, BriefcaseBusiness,
   CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, FileText,
-  Filter, GitBranch, Globe, Handshake, Laptop, LayoutDashboard, LogOut, Menu, Moon, Package, Plus, Receipt, Search, Settings2, ShieldCheck, Sparkles,
+  Filter, GitBranch, Handshake, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, Search, Settings2, ShieldCheck, Sparkles,
   Sun, Target, UserCheck, Users, X,
 } from 'lucide-react';
 import { Link, Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
@@ -39,12 +39,9 @@ import { SelfServicePage } from '@/pages/SelfServicePage';
 import { ExpensesPage } from '@/pages/ExpensesPage';
 import { AssetsPage } from '@/pages/AssetsPage';
 import { PredictiveMlPage } from '@/pages/PredictiveMlPage';
-import {
-  AboutPage, BrandsCatalogPage, CareersPage, ContactPage, DistributionPage, LegalPage,
-  ManufacturingPage, PartnershipsPage, PublicHomePage,
-} from '@/pages/public/CorporatePages';
+import { CareersPage, LegalPage } from '@/pages/CareersPage';
 import { CustomerPortalPage, DistributorPortalPage } from '@/pages/portals/PortalsPage';
-import { CatalogueAdminPage, CrmPipelinePage, PartnerApprovalsPage } from '@/pages/erp/EcosystemErpPages';
+import { CrmPipelinePage, PartnerApprovalsPage } from '@/pages/erp/EcosystemErpPages';
 import { apiGet } from '@/lib/api';
 
 const queryClient = new QueryClient();
@@ -149,7 +146,9 @@ function Home() {
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
               <Link href="/sign-in" className="btn btn-primary min-h-12 px-5" data-testid="link-home-enter">Open PeopleOS <ArrowRight size={16} /></Link>
-              <a href="https://rekker.co.ke/" target="_blank" rel="noreferrer" className="btn min-h-12 border border-white/20 px-5 text-white hover:bg-white/10" data-testid="link-official-site">About Rekker</a>
+              <a href="https://rekker.co.ke/" target="_blank" rel="noreferrer" className="btn min-h-12 border border-white/20 px-5 text-white hover:bg-white/10" data-testid="link-official-site">rekker.co.ke ↗</a>
+              <a href="https://shop.rekker.co.ke/" target="_blank" rel="noreferrer" className="btn min-h-12 border border-white/20 px-5 text-white hover:bg-white/10" data-testid="link-official-shop">shop.rekker.co.ke ↗</a>
+              <Link href="/careers" className="btn min-h-12 border border-white/20 px-5 text-white hover:bg-white/10" data-testid="link-home-careers">Careers</Link>
             </div>
           </div>
           <div className="relative mt-14 grid max-w-[800px] grid-cols-1 gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10 sm:grid-cols-3">
@@ -209,11 +208,10 @@ const workNav: NavItem[] = [
 ];
 const commercialNav: NavItem[] = [
   { label: 'CRM & Quotes', href: '/crm', icon: Target },
-  { label: 'Catalogue CMS', href: '/catalogue-admin', icon: Package },
   { label: 'Partner approvals', href: '/partner-approvals', icon: Handshake },
 ];
 
-function AppHomeRedirect() { return <PublicHomePage />; }
+function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
 
 function ProtectedRouter() {
   return <><Show when="signed-in"><AppFrame /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>;
@@ -299,7 +297,14 @@ function AppFrame() {
           <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + commercialNav.length + visibleWorkNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
-          <Link href="/" className="mb-2 flex w-full items-center gap-2.5 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-back-public-site"><Globe size={15} className="text-[#C71D1D]" /> Corporate Website</Link>
+          <div className="mb-2 grid grid-cols-2 gap-1.5">
+            <a href="https://rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-rekker">rekker.co.ke ↗</a>
+            <a href="https://shop.rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-shop">shop.rekker ↗</a>
+          </div>
+          <div className="mb-2 grid grid-cols-2 gap-1.5">
+            <Link href="/portal" className="flex items-center justify-center rounded-lg bg-stone-100 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-200">Buyer Portal</Link>
+            <Link href="/distributor" className="flex items-center justify-center rounded-lg bg-stone-100 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-200">Partner Portal</Link>
+          </div>
           <div className="mb-3 rounded-xl bg-[#f7f4f0] p-3">
             <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#338956]" /><span className="text-xs font-bold text-stone-800">{auth.isDemo ? 'Demo workspace' : 'Live workspace'}</span></div>
             <p className="mt-1 text-[11px] leading-4 text-stone-500">{auth.organizationName} · {auth.role.replaceAll('_', ' ')}</p>
@@ -366,7 +371,6 @@ function AppFrame() {
             <Route path="/ml" component={PredictiveMlPage} />
             <Route path="/reports" component={ReportsPage} />
             <Route path="/crm" component={CrmPipelinePage} />
-            <Route path="/catalogue-admin" component={CatalogueAdminPage} />
             <Route path="/partner-approvals" component={PartnerApprovalsPage} />
             <Route component={NotFound} />
           </Switch>
@@ -935,16 +939,8 @@ function RoutedBoundary({ children }: { children: ReactNode }) {
 }
 function RouterContents() {
   return <RoutedBoundary><Switch>
-    <Route path="/" component={PublicHomePage} />
-    <Route path="/about" component={AboutPage} />
-    <Route path="/brands" component={BrandsCatalogPage} />
-    <Route path="/brands/:slug" component={BrandsCatalogPage} />
-    <Route path="/products" component={BrandsCatalogPage} />
-    <Route path="/manufacturing" component={ManufacturingPage} />
-    <Route path="/distribution" component={DistributionPage} />
-    <Route path="/partnerships" component={PartnershipsPage} />
+    <Route path="/" component={AppHomeRedirect} />
     <Route path="/careers" component={CareersPage} />
-    <Route path="/contact" component={ContactPage} />
     <Route path="/privacy">{() => <LegalPage mode="privacy" />}</Route>
     <Route path="/terms">{() => <LegalPage mode="terms" />}</Route>
     <Route path="/portal">{() => <><Show when="signed-in"><CustomerPortalPage /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>}</Route>

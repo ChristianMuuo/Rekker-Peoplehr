@@ -15,17 +15,9 @@ async function withServer(fn: (baseUrl: string) => Promise<void>): Promise<void>
   }
 }
 
-describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", () => {
-  test("Public endpoints strip internal trade prices, salaries & reject customer/distributor access to CRM", async () => {
+describe("Rekker Digital Ecosystem (De-Duplicated Architecture): Portals, Firewall, MOQ & CRM", () => {
+  test("Public careers hides salaries & candidates, and customer/distributor/employee roles are denied CRM access", async () => {
     await withServer(async (baseUrl) => {
-      const catRes = await fetch(`${baseUrl}/api/public/catalog`);
-      assert.strictEqual(catRes.status, 200);
-      const cat = (await catRes.json()) as any;
-      assert.ok(Array.isArray(cat.items) && cat.items.length >= 4);
-      for (const item of cat.items) {
-        assert.strictEqual(item.tradePriceKes, undefined, "Public catalog must never expose internal trade pricing");
-      }
-
       const careersRes = await fetch(`${baseUrl}/api/public/careers`);
       assert.strictEqual(careersRes.status, 200);
       const careers = (await careersRes.json()) as any;
@@ -44,20 +36,20 @@ describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", (
     });
   });
 
-  test("Public quotation request routes into CRM pipeline and isolates customer accounts strictly", async () => {
+  test("B2B quotation request routes into CRM pipeline and isolates customer accounts strictly", async () => {
     await withServer(async (baseUrl) => {
-      // Alice submits public quote while authenticated with her buyer ID
-      const quoteRes = await fetch(`${baseUrl}/api/public/quotes`, {
+      const quoteRes = await fetch(`${baseUrl}/api/portal/customer/quotes`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
+          "x-peopleos-role": "customer",
           "x-peopleos-user-id": "cust_alice_isolated",
         },
         body: JSON.stringify({
           customerName: "Alice Wanjiru",
           companyName: "Alice Mart",
           email: "alice@mart.co.ke",
-          productName: "Saffron Milan Hard-Water Laundry Detergent Line",
+          productName: "Saffron Milan Hard-Water Laundry Carton",
           requestedQuantity: 36,
           deliveryLocation: "Nakuru",
         }),
@@ -66,7 +58,6 @@ describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", (
       const quoteConfirm = (await quoteRes.json()) as any;
       assert.ok(quoteConfirm.referenceCode.startsWith("QT-"));
 
-      // Alice sees her quote in Customer Portal
       const alicePortal = await fetch(`${baseUrl}/api/portal/customer/summary`, {
         headers: {
           "x-peopleos-role": "customer",
@@ -77,7 +68,6 @@ describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", (
       const aliceData = (await alicePortal.json()) as any;
       assert.ok(aliceData.quotations.some((q: any) => q.referenceCode === quoteConfirm.referenceCode));
 
-      // Bob cannot see Alice's quotation in Customer Portal
       const bobPortal = await fetch(`${baseUrl}/api/portal/customer/summary`, {
         headers: {
           "x-peopleos-role": "customer",
@@ -92,7 +82,6 @@ describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", (
         "Customer Bob must never view Customer Alice's quotations",
       );
 
-      // Sales Manager inspects CRM pipeline, moves lead to won, and checks derived analytics
       const leadsRes = await fetch(`${baseUrl}/api/erp/crm/leads`, {
         headers: { "x-peopleos-role": "sales_manager" },
       });
@@ -123,7 +112,6 @@ describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", (
 
   test("Distributor wholesale ordering enforces server-side MOQ, calculates totals securely, and isolates competing distributors", async () => {
     await withServer(async (baseUrl) => {
-      // Below MOQ (qty 2 < 12) must fail
       const belowMoqRes = await fetch(`${baseUrl}/api/portal/distributor/orders`, {
         method: "POST",
         headers: {
@@ -134,12 +122,11 @@ describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", (
         body: JSON.stringify({
           deliveryCounty: "Kiambu",
           submitNow: true,
-          items: [{ productId: "prod-saffron-laundry", quantity: 2 }],
+          items: [{ sku: "SM-HC-101", quantity: 2 }],
         }),
       });
       assert.strictEqual(belowMoqRes.status, 400);
 
-      // Valid order succeeds & ignores any client-tampered totals
       const validRes = await fetch(`${baseUrl}/api/portal/distributor/orders`, {
         method: "POST",
         headers: {
@@ -150,16 +137,15 @@ describe("Rekker Digital Ecosystem: Firewall, Portals, MOQ & CRM Integration", (
         body: JSON.stringify({
           deliveryCounty: "Kiambu",
           submitNow: true,
-          totalAmountKes: 1, // spoofed low total should be ignored
-          items: [{ productId: "prod-saffron-laundry", quantity: 12 }],
+          totalAmountKes: 1,
+          items: [{ sku: "SM-HC-101", quantity: 12 }],
         }),
       });
       assert.strictEqual(validRes.status, 201);
       const created = (await validRes.json()) as any;
       assert.strictEqual(created.totalUnits, 12);
-      assert.strictEqual(created.totalAmountKes, 12 * 380, "Server must compute trade total, never trust client totals");
+      assert.strictEqual(created.totalAmountKes, 12 * 380);
 
-      // Competing distributor Beta sees zero of Alpha's wholesale orders
       const betaDashRes = await fetch(`${baseUrl}/api/portal/distributor/dashboard`, {
         headers: {
           "x-peopleos-role": "distributor",

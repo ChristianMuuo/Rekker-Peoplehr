@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import {
-  boolean,
   index,
   integer,
   pgTable,
@@ -9,76 +8,6 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { organizationsTable } from "./peopleos";
-
-export const productCategoriesTable = pgTable(
-  "product_categories",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organizationsTable.id, { onDelete: "cascade" }),
-    slug: text("slug").notNull(),
-    name: text("name").notNull(),
-    brandKey: text("brand_key").notNull(),
-    description: text("description").notNull().default(""),
-    imageUrl: text("image_url"),
-    sortOrder: integer("sort_order").notNull().default(0),
-    isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("product_categories_org_idx").on(table.organizationId, table.slug),
-  ],
-);
-
-export const productsTable = pgTable(
-  "products",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organizationsTable.id, { onDelete: "cascade" }),
-    categoryId: uuid("category_id").references(() => productCategoriesTable.id, {
-      onDelete: "set null",
-    }),
-    sku: text("sku").notNull(),
-    slug: text("slug").notNull(),
-    name: text("name").notNull(),
-    brandSlug: text("brand_slug").notNull(),
-    brandName: text("brand_name").notNull(),
-    shortDescription: text("short_description").notNull(),
-    description: text("description").notNull(),
-    specificationsJson: text("specifications_json").notNull().default("[]"),
-    packagingInfo: text("packaging_info").notNull().default(""),
-    variantsJson: text("variants_json").notNull().default("[]"),
-    imageUrlsJson: text("image_urls_json").notNull().default("[]"),
-    documentUrlsJson: text("document_urls_json").notNull().default("[]"),
-    moqUnits: integer("moq_units").notNull().default(12),
-    tradePriceKes: integer("trade_price_kes"),
-    seoTitle: text("seo_title"),
-    seoDescription: text("seo_description"),
-    isFeatured: boolean("is_featured").notNull().default(false),
-    status: text("status").notNull().default("published"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    index("products_org_status_idx").on(
-      table.organizationId,
-      table.status,
-      table.brandSlug,
-    ),
-  ],
-);
 
 export const crmLeadsTable = pgTable(
   "crm_leads",
@@ -129,7 +58,7 @@ export const quotationsTable = pgTable(
     companyName: text("company_name"),
     email: text("email").notNull(),
     phone: text("phone"),
-    productId: text("product_id"),
+    productSku: text("product_sku"),
     productName: text("product_name").notNull(),
     requestedQuantity: integer("requested_quantity").notNull(),
     packagingPreference: text("packaging_preference"),
@@ -256,4 +185,4 @@ export const customerTicketsTable = pgTable(
   ],
 );
 
-export const ecosystemTableCountSql = sql`7`;
+export const ecosystemTableCountSql = sql`5`;

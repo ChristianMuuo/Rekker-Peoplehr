@@ -1,47 +1,5 @@
--- Additive Enterprise Digital Ecosystem Migration (Phases 3, 4, 5, 6)
--- Zero breaking modifications to existing PeopleOS HRMS tables.
-
-CREATE TABLE IF NOT EXISTS "product_categories" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" text NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
-  "slug" text NOT NULL,
-  "name" text NOT NULL,
-  "brand_key" text NOT NULL,
-  "description" text NOT NULL DEFAULT '',
-  "image_url" text,
-  "sort_order" integer NOT NULL DEFAULT 0,
-  "is_active" boolean NOT NULL DEFAULT true,
-  "created_at" timestamptz NOT NULL DEFAULT now(),
-  "updated_at" timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS "product_categories_org_idx" ON "product_categories" ("organization_id", "slug");
-
-CREATE TABLE IF NOT EXISTS "products" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" text NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
-  "category_id" uuid REFERENCES "product_categories"("id") ON DELETE SET NULL,
-  "sku" text NOT NULL,
-  "slug" text NOT NULL,
-  "name" text NOT NULL,
-  "brand_slug" text NOT NULL,
-  "brand_name" text NOT NULL,
-  "short_description" text NOT NULL,
-  "description" text NOT NULL,
-  "specifications_json" text NOT NULL DEFAULT '[]',
-  "packaging_info" text NOT NULL DEFAULT '',
-  "variants_json" text NOT NULL DEFAULT '[]',
-  "image_urls_json" text NOT NULL DEFAULT '[]',
-  "document_urls_json" text NOT NULL DEFAULT '[]',
-  "moq_units" integer NOT NULL DEFAULT 12,
-  "trade_price_kes" integer,
-  "seo_title" text,
-  "seo_description" text,
-  "is_featured" boolean NOT NULL DEFAULT false,
-  "status" text NOT NULL DEFAULT 'published',
-  "created_at" timestamptz NOT NULL DEFAULT now(),
-  "updated_at" timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS "products_org_status_idx" ON "products" ("organization_id", "status", "brand_slug");
+-- Additive Enterprise CRM, B2B Portals & Operations Migration
+-- Public catalog & corporate marketing pages remain hosted separately on rekker.co.ke and shop.rekker.co.ke.
 
 CREATE TABLE IF NOT EXISTS "crm_leads" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -75,7 +33,7 @@ CREATE TABLE IF NOT EXISTS "quotations" (
   "company_name" text,
   "email" text NOT NULL,
   "phone" text,
-  "product_id" text,
+  "product_sku" text,
   "product_name" text NOT NULL,
   "requested_quantity" integer NOT NULL,
   "packaging_preference" text,
@@ -127,7 +85,7 @@ CREATE TABLE IF NOT EXISTS "wholesale_orders" (
   "items_json" text NOT NULL DEFAULT '[]',
   "total_units" integer NOT NULL DEFAULT 0,
   "total_amount_kes" integer NOT NULL DEFAULT 0,
-  "payment_method" text NOT NULL DEFAULT 'mpesa_b2c',
+  "payment_method" text NOT NULL DEFAULT 'mpesa_b2b',
   "delivery_county" text NOT NULL,
   "delivery_notes" text,
   "status" text NOT NULL DEFAULT 'draft',

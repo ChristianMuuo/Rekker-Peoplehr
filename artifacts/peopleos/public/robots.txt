@@ -1,21 +1,8 @@
 User-agent: *
-Disallow: /admin/
-Disallow: /api/erp/
-Disallow: /api/portal/
+Disallow: /api/
 Disallow: /overview
 Disallow: /crm
-Disallow: /catalogue-admin
 Disallow: /partner-approvals
-Allow: /
-Allow: /about
-Allow: /brands
-Allow: /products
-Allow: /manufacturing
-Allow: /distribution
-Allow: /partnerships
+Disallow: /portal
+Disallow: /distributor
 Allow: /careers
-Allow: /contact
-Allow: /privacy
-Allow: /terms
-
-Sitemap: https://rekker.co.ke/sitemap.xml
