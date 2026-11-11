@@ -77,8 +77,8 @@ interface DemoSalaryProfile {
 }
 
 const DEMO_COMPENSATION_BY_EMP: Record<string, DemoSalaryProfile> = {
-  "10000000-0000-4000-8000-000000000001": { employeeId: "10000000-0000-4000-8000-000000000001", baseSalary: 320000, allowances: 40000, kraPin: "A001928374K", departmentName: "Manufacturing & Brewing" },
-  "10000000-0000-4000-8000-000000000002": { employeeId: "10000000-0000-4000-8000-000000000002", baseSalary: 195000, allowances: 15000, kraPin: "A004591823M", departmentName: "Manufacturing & Brewing" },
+  "10000000-0000-4000-8000-000000000001": { employeeId: "10000000-0000-4000-8000-000000000001", baseSalary: 320000, allowances: 40000, kraPin: "A001928374K", departmentName: "Formulation & Filling" },
+  "10000000-0000-4000-8000-000000000002": { employeeId: "10000000-0000-4000-8000-000000000002", baseSalary: 195000, allowances: 15000, kraPin: "A004591823M", departmentName: "Formulation & Filling" },
   "10000000-0000-4000-8000-000000000003": { employeeId: "10000000-0000-4000-8000-000000000003", baseSalary: 245000, allowances: 30000, kraPin: "A009182734L", departmentName: "Logistics & Distribution" },
   "10000000-0000-4000-8000-000000000004": { employeeId: "10000000-0000-4000-8000-000000000004", baseSalary: 135000, allowances: 10000, kraPin: "A007162534W", departmentName: "Logistics & Distribution" },
   "10000000-0000-4000-8000-000000000005": { employeeId: "10000000-0000-4000-8000-000000000005", baseSalary: 265000, allowances: 25000, kraPin: "A006253418B", departmentName: "Brand & Commercial Marketing" },
@@ -86,7 +86,7 @@ const DEMO_COMPENSATION_BY_EMP: Record<string, DemoSalaryProfile> = {
   "10000000-0000-4000-8000-000000000007": { employeeId: "10000000-0000-4000-8000-000000000007", baseSalary: 310000, allowances: 35000, kraPin: "A003491827D", departmentName: "People Operations & Culture" },
   "10000000-0000-4000-8000-000000000008": { employeeId: "10000000-0000-4000-8000-000000000008", baseSalary: 105000, allowances: 8000, kraPin: "A005283941F", departmentName: "People Operations & Culture" },
   "10000000-0000-4000-8000-000000000009": { employeeId: "10000000-0000-4000-8000-000000000009", baseSalary: 225000, allowances: 20000, kraPin: "A002837465E", departmentName: "Finance & Supply Chain" },
-  "10000000-0000-4000-8000-000000000010": { employeeId: "10000000-0000-4000-8000-000000000010", baseSalary: 88000, allowances: 7000, kraPin: "A009485712S", departmentName: "Manufacturing & Brewing" },
+  "10000000-0000-4000-8000-000000000010": { employeeId: "10000000-0000-4000-8000-000000000010", baseSalary: 88000, allowances: 7000, kraPin: "A009485712S", departmentName: "Formulation & Filling" },
 };
 
 interface DemoPayrollRun {

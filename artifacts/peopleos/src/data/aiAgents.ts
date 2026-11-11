@@ -57,8 +57,8 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
     description:
       'Ranks applicants strictly by job criteria using TF-IDF (protected traits excluded, never auto-rejects) and drafts JDs.',
     sampleQueries: [
-      'Rank and compare candidates for Senior Industrial Brewing Engineer',
-      'Draft behavioral interview questions for plant engineers',
+      'Rank and compare candidates for Lead Formulation & Filling Line Engineer',
+      'Draft behavioral interview questions for plant process engineers',
     ],
   },
   onboarding: {
@@ -91,7 +91,7 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
     description: 'Detects duplicate clock punches, late arrival clusters, and shift staffing balance.',
     sampleQueries: [
       'Check attendance anomalies across manufacturing and logistics shifts',
-      'Review overtime patterns on the morning brewing shift',
+      'Review overtime patterns on the morning formulation & filling shift',
     ],
   },
   performance: {

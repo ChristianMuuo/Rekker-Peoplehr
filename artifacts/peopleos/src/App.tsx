@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { UnifiedAuthProvider, Show, SignIn, SignUp, useClerk, useUser, hasValidClerkKey } from './auth';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
@@ -26,21 +26,21 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
-import { RecruitmentPage } from '@/pages/RecruitmentPage';
-import { OnboardingPage } from '@/pages/OnboardingPage';
-import { AttendancePage } from '@/pages/AttendancePage';
-import { PayrollPage } from '@/pages/PayrollPage';
-import { PerformancePage } from '@/pages/PerformancePage';
-import { LearningPage } from '@/pages/LearningPage';
-import { DocumentsPage } from '@/pages/DocumentsPage';
-import { ReportsPage } from '@/pages/ReportsPage';
-import { AgentHubPage } from '@/pages/AgentHubPage';
-import { SelfServicePage } from '@/pages/SelfServicePage';
-import { ExpensesPage } from '@/pages/ExpensesPage';
-import { AssetsPage } from '@/pages/AssetsPage';
-import { PredictiveMlPage } from '@/pages/PredictiveMlPage';
-import { WorkforceErpPage } from '@/pages/WorkforceErpPage';
-import { HrCasesPage } from '@/pages/HrCasesPage';
+const RecruitmentPage = lazy(() => import('@/pages/RecruitmentPage').then(m => ({ default: m.RecruitmentPage })));
+const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
+const AttendancePage = lazy(() => import('@/pages/AttendancePage').then(m => ({ default: m.AttendancePage })));
+const PayrollPage = lazy(() => import('@/pages/PayrollPage').then(m => ({ default: m.PayrollPage })));
+const PerformancePage = lazy(() => import('@/pages/PerformancePage').then(m => ({ default: m.PerformancePage })));
+const LearningPage = lazy(() => import('@/pages/LearningPage').then(m => ({ default: m.LearningPage })));
+const DocumentsPage = lazy(() => import('@/pages/DocumentsPage').then(m => ({ default: m.DocumentsPage })));
+const ReportsPage = lazy(() => import('@/pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const AgentHubPage = lazy(() => import('@/pages/AgentHubPage').then(m => ({ default: m.AgentHubPage })));
+const SelfServicePage = lazy(() => import('@/pages/SelfServicePage').then(m => ({ default: m.SelfServicePage })));
+const ExpensesPage = lazy(() => import('@/pages/ExpensesPage').then(m => ({ default: m.ExpensesPage })));
+const AssetsPage = lazy(() => import('@/pages/AssetsPage').then(m => ({ default: m.AssetsPage })));
+const PredictiveMlPage = lazy(() => import('@/pages/PredictiveMlPage').then(m => ({ default: m.PredictiveMlPage })));
+const WorkforceErpPage = lazy(() => import('@/pages/WorkforceErpPage').then(m => ({ default: m.WorkforceErpPage })));
+const HrCasesPage = lazy(() => import('@/pages/HrCasesPage').then(m => ({ default: m.HrCasesPage })));
 import { apiGet, apiPost } from '@/lib/api';
 
 const queryClient = new QueryClient();
@@ -340,6 +340,7 @@ function AppFrame() {
         </header>
         {auth.isDemo && <div className="border-b border-[#e9d2aa] bg-[#fbf1dc] px-4 py-2 text-center text-[11px] font-semibold text-[#76551d] md:text-left md:px-8" data-testid="banner-demo-mode">Demo data · Synthetic workforce records are shown. Decisions are not applied to real employee records.</div>}
         <main className="mx-auto max-w-[1480px] px-4 py-6 md:px-8 md:py-8 enter">
+          <Suspense fallback={<LoadingScreen label="Loading PeopleOS module" />}>
           <Switch>
             <Route path="/dashboard"><Redirect to="/overview" /></Route>
             <Route path="/overview" component={OverviewPage} />
@@ -368,6 +369,7 @@ function AppFrame() {
             <Route path="/hr-cases" component={HrCasesPage} />
             <Route component={NotFound} />
           </Switch>
+          </Suspense>
         </main>
       </div>
     </div>
@@ -414,6 +416,17 @@ function StatusPill({ status }: { status: string }) {
 function OverviewPage() {
   const overview = useGetPeopleOsOverview();
   const auth = useGetAuthContext();
+  const canViewOps = Boolean(auth.data?.canManagePeople || auth.data?.canApproveLeave);
+  const wfOpsQuery = useQuery({
+    queryKey: ['overview-wf-erp'],
+    queryFn: () => apiGet<any>('/api/workforce-erp/overview'),
+    enabled: canViewOps,
+  });
+  const driversQuery = useQuery({
+    queryKey: ['overview-drivers'],
+    queryFn: () => apiGet<any>('/api/workforce-erp/drivers'),
+    enabled: canViewOps,
+  });
   if (overview.isLoading) return <LoadingScreen label="Loading workforce overview" />;
   if (overview.isError || !overview.data) return <ErrorState title="Workforce overview could not load" onRetry={() => overview.refetch()} />;
   const data = overview.data;
@@ -505,6 +518,39 @@ function OverviewPage() {
         <div className="mt-4 flex items-end justify-between"><span className="font-display text-2xl font-semibold text-stone-900">{dept.headcount}<small className="ml-1 text-xs font-medium text-stone-400">people</small></span><span className="text-[11px] text-stone-500">{dept.budgetedPositions} budgeted</span></div>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-[#338956]" style={{ width: `${Math.min(100, dept.budgetedPositions ? dept.headcount / dept.budgetedPositions * 100 : 0)}%` }} /></div>
       </div>)}</div> : <EmptyState title="No department data" message="Department information will appear when available to your role." />}
+    </section>
+    <section className="surface mt-4 p-5 md:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-stone-900">Operational readiness &amp; quick controls</h2>
+          <p className="mt-1 text-xs text-stone-500">Live plant shift coverage, fleet NTSA compliance, and intelligent modules</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/workforce-erp" className="btn btn-secondary min-h-8 px-3 text-xs">Workforce ERP <ArrowRight size={13} /></Link>
+          {auth.data?.canViewPayroll && <Link href="/payroll" className="btn btn-secondary min-h-8 px-3 text-xs">Payroll &amp; GL <ArrowRight size={13} /></Link>}
+          <Link href="/agent-hub" className="btn btn-secondary min-h-8 px-3 text-xs">Rekker AI Hub <Sparkles size={13} /></Link>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {(wfOpsQuery.data?.heatmap ?? []).slice(0, 3).map((h: any) => (
+          <Link key={h.unitType} href="/workforce-erp" className="rounded-xl border border-stone-200 p-3.5 text-xs transition-colors hover:bg-stone-50">
+            <div className="flex items-center justify-between font-bold uppercase text-stone-500">
+              <span>{h.unitType} shift</span>
+              <span className={h.coveragePct < 100 ? 'text-amber-700' : 'text-emerald-700'}>{h.coveragePct}%</span>
+            </div>
+            <p className="mt-1.5 font-display text-lg font-semibold text-stone-900">{h.present} / {h.scheduled} active</p>
+          </Link>
+        ))}
+        <Link href="/hr-cases" className="rounded-xl border border-stone-200 p-3.5 text-xs transition-colors hover:bg-stone-50">
+          <div className="flex items-center justify-between font-bold uppercase text-stone-500">
+            <span>Compliance &amp; Fleet</span>
+            <ShieldAlert size={14} className="text-[#C71D1D]" />
+          </div>
+          <p className="mt-1.5 font-display text-lg font-semibold text-stone-900">
+            {driversQuery.data?.alertsCount ? `${driversQuery.data.alertsCount} licence alert(s)` : 'HR Cases Sealed'}
+          </p>
+        </Link>
+      </div>
     </section>
     <p className="mt-4 text-[10px] text-stone-400" data-testid="text-overview-mode">Data mode: {data.dataMode}</p>
   </div>;

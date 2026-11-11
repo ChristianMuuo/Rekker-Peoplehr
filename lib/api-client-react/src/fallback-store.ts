@@ -61,8 +61,8 @@ const DEFAULT_DEPTS: MockDepartment[] = [
 ];
 
 const DEFAULT_EMPS: MockEmployee[] = [
-  { id: '10000000-0000-4000-8000-000000000001', employeeNumber: 'REK-0101', firstName: 'Achieng', lastName: 'Odhiambo', preferredName: 'Achieng', workEmail: 'achieng.odhiambo@rekker.co.ke', phone: '+254 722 100 201', jobTitle: 'Plant Operations Director', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Manufacturing & Brewing', managerId: null, managerName: null, location: 'Nairobi Industrial Area Plant', employmentType: 'permanent', status: 'active', startDate: '2021-03-15', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000002', employeeNumber: 'REK-0102', firstName: 'Mwangi', lastName: 'Kariuki', preferredName: 'Mwangi', workEmail: 'mwangi.kariuki@rekker.co.ke', phone: '+254 733 410 882', jobTitle: 'Senior Brewmaster & Quality Lead', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Manufacturing & Brewing', managerId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', location: 'Nairobi Industrial Area Plant', employmentType: 'permanent', status: 'active', startDate: '2022-06-01', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000001', employeeNumber: 'REK-0101', firstName: 'Achieng', lastName: 'Odhiambo', preferredName: 'Achieng', workEmail: 'achieng.odhiambo@rekker.co.ke', phone: '+254 722 100 201', jobTitle: 'Plant Operations Director', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: null, managerName: null, location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2021-03-15', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000002', employeeNumber: 'REK-0102', firstName: 'Mwangi', lastName: 'Kariuki', preferredName: 'Mwangi', workEmail: 'mwangi.kariuki@rekker.co.ke', phone: '+254 733 410 882', jobTitle: 'Lead Formulation & Quality Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2022-06-01', probationEndDate: null, contractEndDate: null, isDemo: true },
   { id: '10000000-0000-4000-8000-000000000003', employeeNumber: 'REK-0103', firstName: 'Juma', lastName: 'Omondi', preferredName: null, workEmail: 'juma.omondi@rekker.co.ke', phone: '+254 711 502 918', jobTitle: 'Logistics Fleet Manager', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: null, managerName: null, location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'active', startDate: '2022-09-10', probationEndDate: null, contractEndDate: null, isDemo: true },
   { id: '10000000-0000-4000-8000-000000000004', employeeNumber: 'REK-0104', firstName: 'Wanjiku', lastName: 'Kimani', preferredName: 'Wawa', workEmail: 'wanjiku.kimani@rekker.co.ke', phone: '+254 700 819 223', jobTitle: 'Distribution Dispatch Specialist', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'on_leave', startDate: '2023-04-12', probationEndDate: null, contractEndDate: null, isDemo: true },
   { id: '10000000-0000-4000-8000-000000000005', employeeNumber: 'REK-0105', firstName: 'Brenda', lastName: 'Mutheu', preferredName: 'Brenda', workEmail: 'brenda.mutheu@rekker.co.ke', phone: '+254 721 349 018', jobTitle: 'Brand Strategy & Trade Lead', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2022-01-10', probationEndDate: null, contractEndDate: null, isDemo: true },
@@ -70,7 +70,7 @@ const DEFAULT_EMPS: MockEmployee[] = [
   { id: '10000000-0000-4000-8000-000000000007', employeeNumber: 'REK-0107', firstName: 'David', lastName: 'Kibet', preferredName: 'David', workEmail: 'david.kibet@rekker.co.ke', phone: '+254 720 182 930', jobTitle: 'Head of People & Organization Culture', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2021-08-01', probationEndDate: null, contractEndDate: null, isDemo: true },
   { id: '10000000-0000-4000-8000-000000000008', employeeNumber: 'REK-0108', firstName: 'Faith', lastName: 'Chebet', preferredName: 'Faith', workEmail: 'faith.chebet@rekker.co.ke', phone: '+254 724 991 823', jobTitle: 'Talent Acquisition & Employee Experience Officer', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', location: 'Westlands Commercial Office', employmentType: 'probation', status: 'probation', startDate: '2026-01-15', probationEndDate: '2026-04-15', contractEndDate: null, isDemo: true },
   { id: '10000000-0000-4000-8000-000000000009', employeeNumber: 'REK-0109', firstName: 'Dennis', lastName: 'Otieno', preferredName: 'Denno', workEmail: 'dennis.otieno@rekker.co.ke', phone: '+254 731 442 819', jobTitle: 'Financial Accountant & Payroll Controller', departmentId: '20000000-0000-4000-8000-000000000005', departmentName: 'Finance & Supply Chain', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2023-01-09', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000010', employeeNumber: 'REK-0110', firstName: 'Sarah', lastName: 'Njeri', preferredName: 'Sarah', workEmail: 'sarah.njeri@rekker.co.ke', phone: '+254 718 293 847', jobTitle: 'Junior Quality Assurance Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Manufacturing & Brewing', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Mwangi Kariuki', location: 'Nairobi Industrial Area Plant', employmentType: 'permanent', status: 'active', startDate: '2024-05-02', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000010', employeeNumber: 'REK-0110', firstName: 'Sarah', lastName: 'Njeri', preferredName: 'Sarah', workEmail: 'sarah.njeri@rekker.co.ke', phone: '+254 718 293 847', jobTitle: 'Junior Quality Assurance Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Mwangi Kariuki', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2024-05-02', probationEndDate: null, contractEndDate: null, isDemo: true },
 ];
 
 const DEFAULT_LEAVES: MockLeaveRequest[] = [
@@ -82,7 +82,7 @@ const DEFAULT_LEAVES: MockLeaveRequest[] = [
 const DEFAULT_AUDITS = [
   { id: 'audit-001', occurredAt: '2026-03-05T14:20:00Z', actor: 'David Kibet (HR Admin)', action: 'LEAVE_APPROVE', targetType: 'leave_request', targetId: 'leave-001', summary: 'Approved annual leave for Wanjiku Kimani', isDemo: true },
   { id: 'audit-002', occurredAt: '2026-03-01T09:00:00Z', actor: 'Dennis Otieno (Finance)', action: 'PAYROLL_GENERATION', targetType: 'payroll_period', targetId: 'period-2026-02', summary: 'Finalized statutory KRA & NSSF payroll report for February 2026', isDemo: true },
-  { id: 'audit-003', occurredAt: '2026-02-28T16:45:00Z', actor: 'Faith Chebet (Recruiter)', action: 'CANDIDATE_SCREEN', targetType: 'candidate', targetId: 'cand-001', summary: 'Completed phone interview scorecard for Brewing Engineer candidate', isDemo: true },
+  { id: 'audit-003', occurredAt: '2026-02-28T16:45:00Z', actor: 'Faith Chebet (Recruiter)', action: 'CANDIDATE_SCREEN', targetType: 'candidate', targetId: 'cand-001', summary: 'Completed phone interview scorecard for Formulation & Filling Engineer candidate', isDemo: true },
 ];
 
 // Leave policies start empty by default (organization HR configures entitlements; never prefill statutory amounts).
@@ -182,6 +182,13 @@ const FALLBACK_WF_RULES: Array<any> = [
   { id: 'wf-leave-01', domain: 'leave', name: 'Department Manager + HR Signoff', approvalLevels: 2, slaHours: 24, requiredApproverRoles: ['department_manager', 'hr_manager'], isActive: true },
   { id: 'wf-payroll-01', domain: 'payroll', name: 'Dual Maker-Checker Statutory Disbursement', approvalLevels: 2, slaHours: 48, requiredApproverRoles: ['payroll_officer', 'finance_manager'], isActive: true },
 ];
+const FALLBACK_SHIFT_ROSTER: Array<any> = [
+  { employeeId: '10000000-0000-4000-8000-000000000001', employeeName: 'Achieng Odhiambo', unitType: 'production', workZone: 'Formulation Line A', shiftName: 'Morning (06:00-14:00)', roleSkill: 'Lead Formulation Chemist', certificationValidUntil: '2027-01-15', costCentreCode: 'CC-MFG-01', availableToday: true },
+  { employeeId: '10000000-0000-4000-8000-000000000002', employeeName: 'Mwangi Kariuki', unitType: 'production', workZone: 'Automated Filling Line B', shiftName: 'Morning (06:00-14:00)', roleSkill: 'High-Speed Filler Operator', certificationValidUntil: '2026-08-20', costCentreCode: 'CC-MFG-01', availableToday: true },
+  { employeeId: '10000000-0000-4000-8000-000000000004', employeeName: 'Wanjiku Kimani', unitType: 'warehouse', workZone: 'Nairobi Dispatch Warehouse', shiftName: 'Day (08:00-17:00)', roleSkill: 'Forklift Operator', certificationValidUntil: '2026-04-05', costCentreCode: 'CC-WHS-01', availableToday: false },
+  { employeeId: '10000000-0000-4000-8000-000000000003', employeeName: 'Juma Omondi', unitType: 'distribution', workZone: 'Nairobi - Rift Corridor', shiftName: 'Route Dispatch (06:30-16:30)', roleSkill: 'Fleet Logistics Supervisor', certificationValidUntil: '2026-11-30', costCentreCode: 'CC-LOG-01', availableToday: true },
+  { employeeId: '10000000-0000-4000-8000-000000000005', employeeName: 'Brenda Mutheu', unitType: 'sales', workZone: 'Nairobi & Mt. Kenya Trade', shiftName: 'Field Commercial', roleSkill: 'Key Trade Account Manager', certificationValidUntil: '2027-03-01', costCentreCode: 'CC-SLS-01', availableToday: true },
+];
 
 export function handleFallbackApi(url: string, method: string = 'GET', body?: any): any {
   const path = url.split('?')[0];
@@ -195,39 +202,153 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
     }
     return { items: FALLBACK_HR_CASES, total: FALLBACK_HR_CASES.length, accessScope: 'HR_CASE_OFFICER_FULL' };
   }
+  if (path.startsWith('/api/hr-cases/') && method === 'PATCH') {
+    const caseId = path.replace('/api/hr-cases/', '');
+    const target = FALLBACK_HR_CASES.find(c => c.id === caseId);
+    if (target) {
+      if (parsedBody.status) target.status = parsedBody.status;
+      if (parsedBody.confidentialNotes !== undefined) target.confidentialNotes = parsedBody.confidentialNotes;
+      return target;
+    }
+  }
+  if (path === '/api/workforce-erp/shifts' && method === 'POST') {
+    const emp = DEFAULT_EMPS.find(e => e.id === parsedBody.employeeId);
+    const entry = {
+      employeeId: parsedBody.employeeId || 'custom-emp',
+      employeeName: emp ? `${emp.firstName} ${emp.lastName}` : (parsedBody.employeeName || 'Rekker Specialist'),
+      unitType: parsedBody.unitType || 'production',
+      workZone: parsedBody.workZone || 'Formulation Line A',
+      shiftName: parsedBody.shiftName || 'Morning (06:00-14:00)',
+      roleSkill: parsedBody.roleSkill || 'Line Operator',
+      certificationValidUntil: parsedBody.certificationValidUntil || '2027-06-30',
+      costCentreCode: parsedBody.costCentreCode || 'CC-MFG-01',
+      availableToday: true,
+    };
+    FALLBACK_SHIFT_ROSTER.unshift(entry);
+    return entry;
+  }
+  if (path === '/api/workforce-erp/production/assign-relief' && method === 'POST') {
+    const emp = DEFAULT_EMPS.find(e => e.id === parsedBody.replacementEmployeeId);
+    const empName = emp ? `${emp.firstName} ${emp.lastName}` : 'Relief Specialist';
+    const entry = {
+      employeeId: parsedBody.replacementEmployeeId || 'relief-emp',
+      employeeName: empName,
+      unitType: parsedBody.targetUnitType || 'warehouse',
+      workZone: `${parsedBody.targetZone || 'Nairobi Dispatch Warehouse'} (Relief)`,
+      shiftName: parsedBody.shiftName || 'Day (08:00-17:00)',
+      roleSkill: emp?.jobTitle || 'Certified Relief Operator',
+      certificationValidUntil: '2027-06-30',
+      costCentreCode: 'CC-WHS-01',
+      availableToday: true,
+    };
+    FALLBACK_SHIFT_ROSTER.unshift(entry);
+    return { assigned: true, employeeName: empName, targetZone: entry.workZone };
+  }
   if (path === '/api/workforce-erp/overview') {
+    const units = Array.from(new Set(FALLBACK_SHIFT_ROSTER.map(r => r.unitType)));
+    const heatmap = units.map(unitType => {
+      const unitRows = FALLBACK_SHIFT_ROSTER.filter(r => r.unitType === unitType);
+      const present = unitRows.filter(r => r.availableToday).length;
+      return { unitType, scheduled: unitRows.length, present, awayOrPendingLeave: unitRows.length - present, coveragePct: unitRows.length ? Math.round((present / unitRows.length) * 100) : 100 };
+    });
     return {
       dataScope: 'ERP_WORKFORCE_AVAILABILITY',
-      roster: [
-        { employeeId: '10000000-0000-4000-8000-000000000001', employeeName: 'Achieng Odhiambo', unitType: 'production', workZone: 'Formulation Line A', shiftName: 'Morning (06:00-14:00)', roleSkill: 'Lead Formulation Chemist', certificationValidUntil: '2027-01-15', costCentreCode: 'CC-MFG-01', availableToday: true },
-        { employeeId: '10000000-0000-4000-8000-000000000004', employeeName: 'Wanjiku Kimani', unitType: 'warehouse', workZone: 'Nairobi Dispatch Warehouse', shiftName: 'Day (08:00-17:00)', roleSkill: 'Forklift Operator', certificationValidUntil: '2026-04-05', costCentreCode: 'CC-WHS-01', availableToday: false },
-      ],
-      heatmap: [
-        { unitType: 'production', scheduled: 2, present: 2, awayOrPendingLeave: 0, coveragePct: 100 },
-        { unitType: 'warehouse', scheduled: 1, present: 0, awayOrPendingLeave: 1, coveragePct: 0 },
-        { unitType: 'distribution', scheduled: 1, present: 1, awayOrPendingLeave: 0, coveragePct: 100 },
-        { unitType: 'sales', scheduled: 2, present: 1, awayOrPendingLeave: 1, coveragePct: 50 },
-      ],
-      understaffedUnits: [{ unitType: 'warehouse', coveragePct: 0 }],
+      roster: FALLBACK_SHIFT_ROSTER,
+      heatmap,
+      understaffedUnits: heatmap.filter(h => h.coveragePct < 100),
     };
   }
   if (path === '/api/workforce-erp/drivers') {
     return { items: [{ employeeId: '10000000-0000-4000-8000-000000000003', driverName: 'Juma Omondi', licenseNumber: 'DL-KE-881204', licenseClass: 'BCE Commercial Heavy', licenseExpiry: '2026-03-29', psvOrSafetyCertExpiry: '2026-04-12', assignedVehicle: 'KDM 482L · Box Truck', routeCorridor: 'Nairobi -> Nakuru', daysRemaining: 23, alertLevel: 'expiring_soon' }], alertsCount: 1 };
   }
   if (path === '/api/workforce-erp/production/replacements') {
-    return { missingCoverageEmployees: [{ employeeId: '10000000-0000-4000-8000-000000000004', name: 'Wanjiku Kimani', departmentName: 'Logistics & Distribution' }], qualifiedReplacements: [{ employeeId: '10000000-0000-4000-8000-000000000002', name: 'Mwangi Kariuki', departmentName: 'Formulation & Filling', jobTitle: 'Senior Production Operator', safetyCleared: true, readinessNote: 'Direct Production Line Certified' }] };
+    return { missingCoverageEmployees: [{ employeeId: '10000000-0000-4000-8000-000000000004', name: 'Wanjiku Kimani', departmentName: 'Logistics & Distribution' }], qualifiedReplacements: [{ employeeId: '10000000-0000-4000-8000-000000000002', name: 'Mwangi Kariuki', departmentName: 'Formulation & Filling', jobTitle: 'Lead Formulation & Quality Chemist', safetyCleared: true, readinessNote: 'Direct Production Line Certified' }] };
   }
   if (path === '/api/workforce-erp/sales-force') {
     return { items: [{ employeeId: '10000000-0000-4000-8000-000000000005', repName: 'Brenda Mutheu', territory: 'Nairobi Metro & Modern Trade', costCentreCode: 'CC-SLS-01', monthlyTargetKes: 2500000, actualAttributedKes: 2310000, commissionRatePct: 2.5, attainmentPct: 92.4, estimatedCommissionKes: 57750 }], totalAttributedKes: 2310000 };
   }
   if (path === '/api/workflow-rules') {
+    if (method === 'POST') {
+      const rule = { id: `wf-${Date.now()}`, domain: parsedBody.domain || 'leave', name: parsedBody.name || 'Custom Rule', approvalLevels: Number(parsedBody.approvalLevels || 2), slaHours: Number(parsedBody.slaHours || 24), requiredApproverRoles: parsedBody.requiredApproverRoles || ['hr_manager'], isActive: true };
+      FALLBACK_WF_RULES.unshift(rule);
+      return rule;
+    }
     return { items: FALLBACK_WF_RULES };
+  }
+  if (path === '/api/peopleos/employees/import-preview' && method === 'POST') {
+    const lines = String(parsedBody.csvText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const bodyLines = lines.length > 1 ? lines.slice(1) : lines;
+    const rows = bodyLines.map((line, i) => {
+      const cols = line.split(',').map(c => c.trim());
+      return {
+        rowNumber: i + 1,
+        employeeNumber: (cols[0] || '').toUpperCase(),
+        firstName: cols[1] || '',
+        lastName: cols[2] || '',
+        workEmail: (cols[3] || '').toLowerCase(),
+        departmentName: 'Formulation & Filling',
+        status: !cols[0] || !cols[3]?.includes('@') ? 'error' : DEFAULT_EMPS.some(e => e.employeeNumber === cols[0]?.toUpperCase()) ? 'duplicate' : 'valid',
+        errors: !cols[3]?.includes('@') ? ['Invalid workEmail'] : [],
+      };
+    });
+    return { totalRows: rows.length, validCount: rows.filter(r => r.status === 'valid').length, duplicateCount: rows.filter(r => r.status === 'duplicate').length, errorCount: rows.filter(r => r.status === 'error').length, rows };
+  }
+  if (path === '/api/peopleos/employees/import' && method === 'POST') {
+    const lines = String(parsedBody.csvText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const bodyLines = lines.length > 1 ? lines.slice(1) : lines;
+    let importedCount = 0;
+    let skippedDuplicatesCount = 0;
+    for (const line of bodyLines) {
+      const cols = line.split(',').map(c => c.trim());
+      const empNo = (cols[0] || '').toUpperCase();
+      if (!empNo || !cols[1] || !cols[3]?.includes('@')) continue;
+      if (DEFAULT_EMPS.some(e => e.employeeNumber === empNo || e.workEmail === cols[3]?.toLowerCase())) {
+        skippedDuplicatesCount++;
+        continue;
+      }
+      DEFAULT_EMPS.push({
+        id: `emp-csv-${Date.now()}-${importedCount}`,
+        employeeNumber: empNo,
+        firstName: cols[1],
+        lastName: cols[2] || 'Staff',
+        preferredName: cols[1],
+        workEmail: cols[3].toLowerCase(),
+        phone: null,
+        jobTitle: cols[4] || 'Operations Specialist',
+        departmentId: '20000000-0000-4000-8000-000000000001',
+        departmentName: 'Formulation & Filling',
+        managerId: '10000000-0000-4000-8000-000000000001',
+        managerName: 'Achieng Odhiambo',
+        location: cols[6] || 'Nairobi Production Facility',
+        employmentType: 'permanent',
+        status: 'active',
+        startDate: cols[8] || new Date().toISOString().slice(0, 10),
+        probationEndDate: null,
+        contractEndDate: null,
+        isDemo: true,
+      });
+      importedCount++;
+    }
+    return { importedCount, skippedDuplicatesCount };
   }
   if (path === '/api/integrations/status') {
     return { adapters: [{ key: 'mpesa_daraja', name: 'Safaricom M-Pesa Daraja B2C', category: 'Kenyan Payroll', configured: false, status: 'AWAITING_CREDENTIALS', detail: 'Static browser preview mode.' }] };
   }
   if (path === '/api/peopleos/org-chart') {
-    return { totalNodes: DEFAULT_EMPS.length, nodes: DEFAULT_EMPS.map(e => ({ id: e.id, employeeNumber: e.employeeNumber, fullName: `${e.firstName} ${e.lastName}`, jobTitle: e.jobTitle, departmentName: e.departmentName, managerId: e.managerId ?? null, managerName: e.managerName ?? null, status: e.status, directReportsCount: 0 })) };
+    return {
+      totalNodes: DEFAULT_EMPS.length,
+      nodes: DEFAULT_EMPS.map(e => ({
+        id: e.id,
+        employeeNumber: e.employeeNumber,
+        fullName: `${e.firstName} ${e.lastName}`,
+        jobTitle: e.jobTitle,
+        departmentName: e.departmentName,
+        managerId: e.managerId ?? null,
+        managerName: e.managerName ?? null,
+        status: e.status,
+        directReportsCount: DEFAULT_EMPS.filter(c => c.managerId === e.id).length,
+      })),
+    };
   }
   if (path.endsWith('/journal')) {
     return { runId: 'run_2026_03', balanced: true, totalDebitsKes: 1200000, totalCreditsKes: 1200000, lines: [{ accountCode: '6100', accountName: 'Salaries & Wages Expense', costCentre: 'CC-MFG-01', debitKes: 1200000, creditKes: 0 }, { accountCode: '2100', accountName: 'Net Salaries Payable', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: 1200000 }] };
@@ -707,22 +828,44 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
     };
   };
 
+const FALLBACK_PAYROLL_RUNS: Array<any> = [
+  { id: 'run_2026_03', period: 'March 2026', totalGross: 2158000, totalNet: 1545200, totalPaye: 412450, totalNssf: 43200, totalSha: 59345, totalHousingLevy: 32370, status: 'reviewed', approvedBy: null, approvedAt: null },
+  { id: 'run_2026_02', period: 'February 2026', totalGross: 2113000, totalNet: 1514200, totalPaye: 401450, totalNssf: 43200, totalSha: 58107, totalHousingLevy: 31695, status: 'disbursed', approvedBy: 'Dennis Otieno', approvedAt: '2026-02-25T14:00:00Z' },
+];
+
   if (path === '/api/payroll/runs') {
+    if (method === 'POST') {
+      const period = String(parsedBody.period || 'April 2026').trim();
+      const newRun = {
+        id: `run_${Date.now()}`,
+        period,
+        totalGross: 2158000,
+        totalNet: 1545200,
+        totalPaye: 412450,
+        totalNssf: 43200,
+        totalSha: 59345,
+        totalHousingLevy: 32370,
+        status: 'reviewed',
+        approvedBy: null,
+        approvedAt: null,
+      };
+      FALLBACK_PAYROLL_RUNS.unshift(newRun);
+      return { run: newRun, items: [] };
+    }
     return {
-      runs: [
-        { id: 'run_2026_03', period: 'March 2026', totalGross: 2158000, totalNet: 1545200, totalPaye: 412450, totalNssf: 43200, totalSha: 59345, totalHousingLevy: 32370, status: 'reviewed', approvedBy: null, approvedAt: null },
-        { id: 'run_2026_02', period: 'February 2026', totalGross: 2113000, totalNet: 1514200, totalPaye: 401450, totalNssf: 43200, totalSha: 58107, totalHousingLevy: 31695, status: 'disbursed', approvedBy: 'Dennis Otieno', approvedAt: '2026-02-25T14:00:00Z' },
-      ],
+      runs: FALLBACK_PAYROLL_RUNS,
       mpesaLiveConfigured: false,
     };
   }
 
   if (path.startsWith('/api/payroll/runs/') && path.endsWith('/items')) {
+    const runId = path.split('/')[4];
+    const active = FALLBACK_PAYROLL_RUNS.find(r => r.id === runId) ?? FALLBACK_PAYROLL_RUNS[0]!;
     const items = DEFAULT_EMPS.map((emp, idx) => {
       const gross = [360000, 210000, 275000, 145000, 290000, 125000, 345000, 113000, 245000, 95000][idx] ?? 150000;
       return {
         id: `item-${emp.employeeNumber}`,
-        period: 'March 2026',
+        period: active.period,
         employeeId: emp.id,
         employeeName: `${emp.firstName} ${emp.lastName}`,
         departmentName: emp.departmentName,
@@ -730,7 +873,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
         ...calcKenyaFallback(gross),
       };
     });
-    return { run: { id: 'run_2026_03', period: 'March 2026', status: 'reviewed' }, items };
+    return { run: active, items };
   }
 
   if (path === '/api/payroll/calculate') {
@@ -795,16 +938,16 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
 
   if (path === '/api/recruitment/requisitions') {
     const items = [
-      { id: 'req_01', title: 'Senior Industrial Brewing Engineer', location: 'Nairobi Industrial Area Plant', status: 'published', minSalary: 180000, maxSalary: 240000, applicantsCount: 14, description: 'Lead automated fermentation, HACCP, and ISO 22000 quality audits.' },
-      { id: 'req_02', title: 'Regional Supply Chain Dispatch Coordinator', location: 'Nairobi Central Hub', status: 'published', minSalary: 130000, maxSalary: 170000, applicantsCount: 22, description: 'Coordinate cold chain logistics and distributor telemetry.' },
+      { id: 'req_01', title: 'Senior Formulation & Production Chemist', location: 'Nairobi Production Facility', status: 'published', minSalary: 180000, maxSalary: 240000, applicantsCount: 14, description: 'Lead automated formulation, KEBS GMP compliance, and filling line quality audits.' },
+      { id: 'req_02', title: 'Regional Supply Chain Dispatch Coordinator', location: 'Nairobi Central Hub', status: 'published', minSalary: 130000, maxSalary: 170000, applicantsCount: 22, description: 'Coordinate distributor fulfillment logistics and fleet telemetry across Kenya.' },
     ];
     return { items, total: items.length };
   }
 
   if (path === '/api/recruitment/candidates') {
     const items = [
-      { id: 'cand_01', requisitionId: 'req_01', jobTitle: 'Senior Industrial Brewing Engineer', fullName: "Peter Ndung'u", stage: 'interview', experienceYears: 6, matchScore: 94, skillsSummary: 'PLC automation, brewing chemistry, HACCP, ISO 22000' },
-      { id: 'cand_02', requisitionId: 'req_02', jobTitle: 'Regional Supply Chain Dispatch Coordinator', fullName: 'Evans Kiprono', stage: 'screening', experienceYears: 4, matchScore: 88, skillsSummary: 'Fleet GPS dispatch, cold chain monitoring' },
+      { id: 'cand_01', requisitionId: 'req_01', jobTitle: 'Senior Formulation & Production Chemist', fullName: "Peter Ndung'u", stage: 'interview', experienceYears: 6, matchScore: 94, skillsSummary: 'PLC automation, formulation chemistry, KEBS GMP, ISO 22000' },
+      { id: 'cand_02', requisitionId: 'req_02', jobTitle: 'Regional Supply Chain Dispatch Coordinator', fullName: 'Evans Kiprono', stage: 'screening', experienceYears: 4, matchScore: 88, skillsSummary: 'Fleet GPS dispatch, multi-county route monitoring' },
     ];
     return { items, total: items.length };
   }
@@ -812,7 +955,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   if (path === '/api/recruitment/interviews') {
     return {
       items: [
-        { id: 'int_01', candidateName: "Peter Ndung'u", jobTitle: 'Senior Industrial Brewing Engineer', interviewerName: 'Achieng Odhiambo', scheduledAt: '2026-03-12T10:00:00Z', mode: 'onsite', status: 'completed', overallRating: 4.5, feedbackSummary: 'Strong SCADA/PLC and brewing safety record.' },
+        { id: 'int_01', candidateName: "Peter Ndung'u", jobTitle: 'Senior Formulation & Production Chemist', interviewerName: 'Achieng Odhiambo', scheduledAt: '2026-03-12T10:00:00Z', mode: 'onsite', status: 'completed', overallRating: 4.5, feedbackSummary: 'Strong SCADA/PLC and formulation safety record.' },
       ],
       total: 1,
     };
@@ -821,7 +964,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   if (path === '/api/recruitment/match') {
     return {
       rankings: [
-        { candidateId: 'cand_01', fullName: "Peter Ndung'u", overallMatchPct: 94, semanticSkillsScorePct: 92, experienceAlignmentPct: 98, matchedJobCriteria: ['plc', 'brewing', 'iso', 'haccp'] },
+        { candidateId: 'cand_01', fullName: "Peter Ndung'u", overallMatchPct: 94, semanticSkillsScorePct: 92, experienceAlignmentPct: 98, matchedJobCriteria: ['plc', 'formulation', 'iso', 'gmp'] },
         { candidateId: 'cand_02', fullName: 'Evans Kiprono', overallMatchPct: 68, semanticSkillsScorePct: 62, experienceAlignmentPct: 80, matchedJobCriteria: ['logistics'] },
       ],
     };

@@ -22,7 +22,7 @@ export function RecruitmentPage() {
   const [showNewReqModal, setShowNewReqModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [showAiJdModal, setShowAiJdModal] = useState(false);
-  const [aiPromptTitle, setAiPromptTitle] = useState('Senior Industrial Brewing & Quality Engineer');
+  const [aiPromptTitle, setAiPromptTitle] = useState('Lead Formulation & Filling Line Engineer');
   const [generatedJd, setGeneratedJd] = useState<string | null>(null);
 
   // New req form

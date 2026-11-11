@@ -14,6 +14,8 @@ export function PayrollPage() {
   const [p9aEmployeeId, setP9aEmployeeId] = useState<string | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
+  const [showNewRunModal, setShowNewRunModal] = useState(false);
+  const [newRunPeriod, setNewRunPeriod] = useState('April 2026');
   const [statusTone, setStatusTone] = useState<'ok' | 'error'>('ok');
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [customGross, setCustomGross] = useState<number>(180000);
@@ -159,6 +161,36 @@ export function PayrollPage() {
     qc.invalidateQueries({ queryKey: ['payroll-calc'] });
   };
 
+  const handleCreateRun = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await apiPost('/api/payroll/runs', { period: newRunPeriod });
+      setShowNewRunModal(false);
+      setStatusTone('ok');
+      setStatusBanner(`Generated payroll run "${newRunPeriod}" ready for Maker-Checker review.`);
+      await qc.invalidateQueries({ queryKey: ['payroll-runs'] });
+      if (res?.run?.id) setSelectedRunId(res.run.id);
+    } catch (err: any) {
+      setStatusTone('error');
+      setStatusBanner(err?.message || 'Unable to generate payroll run.');
+    }
+  };
+
+  const handleExportRegisterCsv = () => {
+    if (!payrollItems.length) return;
+    const header = ['Employee', 'Department', 'KRA_PIN', 'GrossKES', 'NSSF_KES', 'SHIF_KES', 'AHL_KES', 'PAYE_KES', 'NetPayKES'];
+    const rows = payrollItems.map((r: any) =>
+      [`"${r.employeeName}"`, `"${r.departmentName}"`, r.kraPinMasked || '', r.grossPay, r.totalNssf, r.sha, r.housingLevy, r.netPaye, r.netPay].join(','),
+    );
+    const blob = new Blob([[header.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rekker-payroll-register-${selectedRunId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -172,6 +204,9 @@ export function PayrollPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setShowNewRunModal(true)} className="btn btn-secondary text-xs" data-testid="button-open-new-run">
+            <Plus size={15} /> Run Monthly Payroll
+          </button>
           <button onClick={() => setShowConfigModal(true)} className="btn btn-secondary text-xs">
             <Settings2 size={15} /> Configure Statutory Rates
           </button>
@@ -289,9 +324,14 @@ export function PayrollPage() {
 
       {/* Payroll Items Table */}
       <div className="surface overflow-hidden">
-        <div className="flex items-center justify-between border-b border-stone-100 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 p-4">
           <h3 className="font-display text-sm font-bold text-stone-900">{activeRun?.period || 'Current'} Payroll Register</h3>
-          <span className="rounded-md bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">{payrollItems.length} Employees</span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={handleExportRegisterCsv} disabled={!payrollItems.length} className="btn btn-secondary min-h-8 px-2.5 text-[11px]" data-testid="button-export-payroll-csv">
+              <FileText size={13} /> Export Register CSV
+            </button>
+            <span className="rounded-md bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">{payrollItems.length} Employees</span>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -489,6 +529,33 @@ export function PayrollPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {showNewRunModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4 backdrop-blur-xs" onClick={() => setShowNewRunModal(false)} data-testid="modal-new-payroll-run">
+          <form onSubmit={handleCreateRun} onClick={(e) => e.stopPropagation()} className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 text-xs shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bd2725]">Monthly Cycle Preparation</p>
+                <h3 className="font-display text-lg font-bold text-stone-900">Generate New Payroll Run</h3>
+              </div>
+              <button type="button" onClick={() => setShowNewRunModal(false)}><X size={18} /></button>
+            </div>
+            <p className="leading-5 text-stone-500">
+              Computes gross earnings, NSSF Tier I &amp; II, SHIF, Affordable Housing Levy, and PAYE using the active effective-dated statutory schedule, then enters <strong>reviewed</strong> state for separate Checker signoff.
+            </p>
+            <div>
+              <label className="label">Payroll Period Label</label>
+              <input required value={newRunPeriod} onChange={(e) => setNewRunPeriod(e.target.value)} className="field" placeholder="e.g. April 2026" data-testid="input-new-run-period" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowNewRunModal(false)} className="btn btn-secondary text-xs">Cancel</button>
+              <button type="submit" className="btn btn-primary text-xs" data-testid="button-confirm-new-run">
+                <Plus size={14} /> Generate Run
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

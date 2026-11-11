@@ -1,18 +1,29 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle, CheckCircle2, Factory, GitBranch, Layers, MapPin, Plus, ShieldCheck, Truck, Users, Warehouse,
+  AlertTriangle, CheckCircle2, Factory, GitBranch, Layers, MapPin, Plus, ShieldCheck, Truck, Users, Warehouse, X,
 } from 'lucide-react';
+import { useListEmployees } from '@workspace/api-client-react';
 import { apiGet, apiPost } from '../lib/api';
 
 export function WorkforceErpPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<'overview' | 'production' | 'drivers' | 'sales' | 'workflows'>('overview');
+  const [unitFilter, setUnitFilter] = useState<string>('all');
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [shiftEmpId, setShiftEmpId] = useState('');
+  const [shiftUnit, setShiftUnit] = useState('production');
+  const [shiftZone, setShiftZone] = useState('Formulation Line A');
+  const [shiftName, setShiftName] = useState('Morning (06:00-14:00)');
+  const [shiftSkill, setShiftSkill] = useState('Line Formulation & Filling');
+  const [shiftCostCentre, setShiftCostCentre] = useState('CC-MFG-01');
+  const [banner, setBanner] = useState<string | null>(null);
   const [wfDomain, setWfDomain] = useState('leave');
   const [wfName, setWfName] = useState('');
   const [wfLevels, setWfLevels] = useState('2');
   const [wfSla, setWfSla] = useState('24');
 
+  const employeesQ = useListEmployees({ page: 1, pageSize: 50 });
   const overviewQ = useQuery({ queryKey: ['wf-erp-overview'], queryFn: () => apiGet('/api/workforce-erp/overview') });
   const replacementsQ = useQuery({ queryKey: ['wf-erp-replacements'], queryFn: () => apiGet('/api/workforce-erp/production/replacements') });
   const driversQ = useQuery({ queryKey: ['wf-erp-drivers'], queryFn: () => apiGet('/api/workforce-erp/drivers') });
@@ -22,12 +33,45 @@ export function WorkforceErpPage() {
 
   const heatmap: any[] = overviewQ.data?.heatmap ?? [];
   const roster: any[] = overviewQ.data?.roster ?? [];
+  const filteredRoster = unitFilter === 'all' ? roster : roster.filter((r) => r.unitType === unitFilter);
   const missingCoverage: any[] = replacementsQ.data?.missingCoverageEmployees ?? [];
   const qualifiedReplacements: any[] = replacementsQ.data?.qualifiedReplacements ?? [];
   const drivers: any[] = driversQ.data?.items ?? [];
   const salesReps: any[] = salesQ.data?.items ?? [];
   const rules: any[] = rulesQ.data?.items ?? [];
   const adapters: any[] = integrationsQ.data?.adapters ?? [];
+  const employeeList = employeesQ.data?.items ?? [];
+
+  const handleAssignShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetEmpId = shiftEmpId || employeeList[0]?.id;
+    if (!targetEmpId) return;
+    await apiPost('/api/workforce-erp/shifts', {
+      employeeId: targetEmpId,
+      unitType: shiftUnit,
+      workZone: shiftZone,
+      shiftName,
+      roleSkill: shiftSkill,
+      costCentreCode: shiftCostCentre,
+    });
+    setShowShiftModal(false);
+    setBanner(`Scheduled shift assignment on ${shiftZone} (${shiftName}).`);
+    qc.invalidateQueries({ queryKey: ['wf-erp-overview'] });
+  };
+
+  const handleDeployRelief = async (replacementEmployeeId: string, name: string) => {
+    const missing = missingCoverage[0];
+    const targetZone = missing ? `${missing.departmentName} Coverage` : 'Formulation Line A';
+    const res = await apiPost('/api/workforce-erp/production/assign-relief', {
+      replacementEmployeeId,
+      targetUnitType: missing?.departmentName?.toLowerCase().includes('logistics') ? 'warehouse' : 'production',
+      targetZone,
+      shiftName: 'Morning (06:00-14:00)',
+    });
+    setBanner(`Deployed ${name} as safety-cleared relief onto ${res.targetZone ?? targetZone}.`);
+    qc.invalidateQueries({ queryKey: ['wf-erp-overview'] });
+    qc.invalidateQueries({ queryKey: ['wf-erp-replacements'] });
+  };
 
   const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +96,17 @@ export function WorkforceErpPage() {
             Connect HR workforce readiness to Manufacturing lines, Warehouse rosters, Distribution driver licensing, Sales territories, Finance cost centres, and external integration adapters.
           </p>
         </div>
+        <button onClick={() => setShowShiftModal(true)} className="btn btn-primary text-xs" data-testid="button-open-schedule-shift">
+          <Plus size={15} /> Schedule Shift
+        </button>
       </div>
+
+      {banner && (
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-900">
+          <span>{banner}</span>
+          <button onClick={() => setBanner(null)} aria-label="Dismiss notification"><X size={14} /></button>
+        </div>
+      )}
 
       {/* Module Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-stone-200 pb-3">
@@ -95,8 +149,22 @@ export function WorkforceErpPage() {
           </div>
 
           <div className="surface overflow-x-auto">
-            <div className="border-b border-stone-100 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 p-5">
               <h2 className="font-display text-lg font-bold text-stone-900">Operational Shift &amp; Competency Roster</h2>
+              <div className="flex flex-wrap gap-1.5">
+                {['all', 'production', 'warehouse', 'distribution', 'sales'].map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setUnitFilter(u)}
+                    className={`rounded-full px-3 py-1 text-[11px] font-bold capitalize ${
+                      unitFilter === u ? 'bg-[#C71D1D] text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                    }`}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
             </div>
             <table className="w-full text-left text-xs">
               <thead>
@@ -111,8 +179,8 @@ export function WorkforceErpPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {roster.map((r) => (
-                  <tr key={r.employeeId}>
+                {filteredRoster.map((r, idx) => (
+                  <tr key={`${r.employeeId}-${r.workZone}-${idx}`}>
                     <td className="p-4 font-bold text-stone-900">{r.employeeName}</td>
                     <td className="p-4 capitalize text-stone-600">{r.unitType}</td>
                     <td className="p-4 text-stone-700">{r.workZone}</td>
@@ -153,13 +221,23 @@ export function WorkforceErpPage() {
             <h2 className="font-display text-lg font-bold text-stone-900">Qualified Available Replacements</h2>
             <div className="mt-4 space-y-3">
               {qualifiedReplacements.map((q) => (
-                <div key={q.employeeId} className="flex items-center justify-between rounded-xl border border-stone-200 p-4 text-xs">
+                <div key={q.employeeId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 p-4 text-xs">
                   <div>
                     <p className="font-bold text-stone-900">{q.name}</p>
                     <p className="text-stone-500">{q.jobTitle} · {q.departmentName}</p>
                     <p className="mt-1 text-[11px] font-semibold text-emerald-700">{q.readinessNote}</p>
                   </div>
-                  <span className="rounded bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Safety Cleared</span>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Safety Cleared</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeployRelief(q.employeeId, q.name)}
+                      className="btn btn-secondary min-h-8 px-3 text-[11px]"
+                      data-testid={`button-deploy-relief-${q.employeeId}`}
+                    >
+                      Deploy Relief
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -255,6 +333,56 @@ export function WorkforceErpPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {showShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/50 p-4 backdrop-blur-xs" onClick={() => setShowShiftModal(false)} data-testid="modal-schedule-shift">
+          <form onSubmit={handleAssignShift} onClick={(e) => e.stopPropagation()} className="w-full max-w-md space-y-3 rounded-2xl bg-white p-6 text-xs shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <h3 className="font-display text-lg font-bold text-stone-900">Schedule Operational Shift</h3>
+              <button type="button" onClick={() => setShowShiftModal(false)}><X size={18} /></button>
+            </div>
+            <div>
+              <label className="label">Employee</label>
+              <select value={shiftEmpId || employeeList[0]?.id || ''} onChange={(e) => setShiftEmpId(e.target.value)} className="field">
+                {employeeList.map((emp) => (
+                  <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} · {emp.departmentName}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Unit Type</label>
+                <select value={shiftUnit} onChange={(e) => setShiftUnit(e.target.value)} className="field">
+                  <option value="production">Production</option>
+                  <option value="warehouse">Warehouse</option>
+                  <option value="distribution">Distribution</option>
+                  <option value="sales">Sales Force</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Cost Centre</label>
+                <input required value={shiftCostCentre} onChange={(e) => setShiftCostCentre(e.target.value)} className="field font-mono" />
+              </div>
+            </div>
+            <div>
+              <label className="label">Work Zone / Line</label>
+              <input required value={shiftZone} onChange={(e) => setShiftZone(e.target.value)} className="field" placeholder="e.g. Automated Filling Line B" />
+            </div>
+            <div>
+              <label className="label">Shift Window</label>
+              <input required value={shiftName} onChange={(e) => setShiftName(e.target.value)} className="field" />
+            </div>
+            <div>
+              <label className="label">Certified Role Skill</label>
+              <input required value={shiftSkill} onChange={(e) => setShiftSkill(e.target.value)} className="field" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowShiftModal(false)} className="btn btn-secondary">Cancel</button>
+              <button type="submit" className="btn btn-primary" data-testid="button-submit-shift">Save Shift Assignment</button>
+            </div>
+          </form>
         </div>
       )}
     </div>

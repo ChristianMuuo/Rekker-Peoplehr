@@ -48,7 +48,7 @@ const DEMO_AUDIT_STORE: AuditEntry[] = [
     action: "CANDIDATE_SCREEN",
     targetType: "candidate",
     targetId: "cand-001",
-    summary: "Completed phone interview scorecard for Brewing Engineer candidate",
+    summary: "Completed phone interview scorecard for Formulation & Filling Engineer candidate",
     isDemo: true,
   },
 ];

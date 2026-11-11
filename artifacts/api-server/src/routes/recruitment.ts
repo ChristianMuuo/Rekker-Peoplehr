@@ -139,7 +139,7 @@ let CANDIDATES = [
     experienceYears: 5,
     matchScore: 90,
     skillsSummary:
-      "Brewing microbiology, wort thermal control, KEBS compliance audits and SCADA PLC maintenance.",
+      "Formulation microbiology, emulsion stability control, KEBS compliance audits and SCADA PLC maintenance.",
     appliedDate: "2026-02-24",
   },
 ];
@@ -151,7 +151,7 @@ let INTERVIEWS = [
     candidateId: "cand_01",
     candidateName: "Peter Ndung'u",
     requisitionId: "req_01",
-    jobTitle: "Senior Industrial Brewing Engineer",
+    jobTitle: "Senior Formulation & Production Chemist",
     interviewerName: "Achieng Odhiambo",
     scheduledAt: "2026-03-12T10:00:00Z",
     mode: "onsite",

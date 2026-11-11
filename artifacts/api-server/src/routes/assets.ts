@@ -85,7 +85,7 @@ const DEMO_ASSETS: DemoAsset[] = [
     id: "asset-004",
     organizationId: "rekker-demo",
     assetTag: "REK-PPE-089",
-    name: "Industrial Brewing Thermal Safety Kit",
+    name: "Industrial Formulation & Chemical Safety PPE Kit",
     category: "Safety PPE",
     serialNumber: "PPE-2026-89",
     condition: "new",

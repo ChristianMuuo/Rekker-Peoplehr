@@ -8,7 +8,7 @@ Enterprise AI-powered Human Capital Management platform built for Kenyan workfor
 
 - **`artifacts/peopleos`** — React 19 + TypeScript + Vite frontend SPA (Rekker Crimson `#C71D1D` identity, Recharts analytics, dark/light theme toggle, `Cmd/Ctrl+K` quick navigation, Employee 360° profile view).
 - **`artifacts/api-server`** — Express 5 API server (`build.mjs` bundles cleanly into `dist/index.mjs`), implementing RBAC, AES-256-GCM PII encryption, ODPC field masking, sliding-window rate limiting, audit logging, Kenya payroll engine (`kenyaPayrollEngine.ts`), Safaricom Daraja M-Pesa B2C service (`mpesaService.ts`), Multi-Agent StateGraph orchestrator (`src/ai/`), and Python ML bridge (`mlBridge.ts`).
-- **`services/ml-engine`** — Python Scikit-learn & XGBoost predictive engine (`cli.py` + `server.py`) providing 8 models (Attrition XGBoost, Ridge Workforce Demand Forecast, TF-IDF Candidate-Job Matching, IsolationForest Payroll & Attendance Anomaly Detection, Skills-Gap Readiness, Employee Sentiment VADER/lexicon scoring, and Performance Trends). Missing training cohorts are explicitly flagged (`INSUFFICIENT_DATA` / `SIMULATED_DEMO_BASELINE`).
+- **`services/ml-engine`** — Python Scikit-learn & XGBoost predictive engine (`cli.py` + `ml_http_server.py`) providing 8 models (Attrition XGBoost, Ridge Workforce Demand Forecast, TF-IDF Candidate-Job Matching, IsolationForest Payroll & Attendance Anomaly Detection, Skills-Gap Readiness, Employee Sentiment VADER/lexicon scoring, and Performance Trends). Missing training cohorts are explicitly flagged (`INSUFFICIENT_DATA` / `SIMULATED_DEMO_BASELINE`).
 - **`lib/db`** — PostgreSQL + Drizzle ORM schema (`src/schema/peopleos.ts`) and additive SQL migrations (`migrations/0001_enterprise_hrms.sql`).
 
 ---
@@ -30,7 +30,7 @@ Configure these in your local shell (`.env`, never committed) and hosting provid
 |---|---|
 | `OPENAI_API_KEY` | Enables live OpenAI LLM reasoning in Multi-Agent Orchestrator (`gpt-4o-mini` by default; falls back gracefully to deterministic tool-grounded synthesis when absent) |
 | `OPENAI_MODEL` | Override LLM model name (default: `gpt-4o-mini`) |
-| `PEOPLEOS_ML_URL` | HTTP endpoint of `services/ml-engine/server.py` (when omitted, `mlBridge.ts` executes `cli.py` using the local Python interpreter / `.venv`) |
+| `PEOPLEOS_ML_URL` | HTTP endpoint of `services/ml-engine/ml_http_server.py` (when omitted, `mlBridge.ts` executes `cli.py` using the local Python interpreter / `.venv`) |
 | `PEOPLEOS_PYTHON_BIN` | Explicit path to Python binary for `mlBridge.ts` |
 | `MPESA_CONSUMER_KEY` | Safaricom Daraja OAuth Consumer Key |
 | `MPESA_CONSUMER_SECRET` | Safaricom Daraja OAuth Consumer Secret |
@@ -120,5 +120,5 @@ pnpm --filter @workspace/peopleos run build
 
 ### Backend (`artifacts/api-server`) + ML (`services/ml-engine`)
 1. Deploy `artifacts/api-server/dist/index.mjs` on Render, Railway, Cloud Run, or Fly.io with `NODE_ENV=production`, `DATABASE_URL`, `CLERK_SECRET_KEY`, and `PEOPLEOS_ENCRYPTION_KEY`.
-2. Deploy `services/ml-engine/server.py` (Python HTTP server) as an internal service and point `PEOPLEOS_ML_URL` on the API server to it, or bundle `services/ml-engine` + `.venv` in the same container alongside Node.js.
+2. Deploy `services/ml-engine/ml_http_server.py` (Python HTTP server) as an internal service and point `PEOPLEOS_ML_URL` on the API server to it, or bundle `services/ml-engine` + `.venv` in the same container alongside Node.js.
 

@@ -254,6 +254,40 @@ describe("Rekker PeopleOS Upgrades: Bulk CSV, Org Chart, Confidential HR Cases, 
       });
       assert.strictEqual(createWfRes.status, 201);
 
+      const shiftRes = await fetch(`${baseUrl}/api/workforce-erp/shifts`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...supHeaders,
+        },
+        body: JSON.stringify({
+          employeeId: "10000000-0000-4000-8000-000000000010",
+          unitType: "production",
+          workZone: "Automated Filling Line B",
+          shiftName: "Afternoon (14:00-22:00)",
+          roleSkill: "Quality Batch Inspector",
+          costCentreCode: "CC-MFG-01",
+        }),
+      });
+      assert.strictEqual(shiftRes.status, 201);
+
+      const reliefRes = await fetch(`${baseUrl}/api/workforce-erp/production/assign-relief`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...supHeaders,
+        },
+        body: JSON.stringify({
+          replacementEmployeeId: "10000000-0000-4000-8000-000000000002",
+          targetUnitType: "warehouse",
+          targetZone: "Nairobi Dispatch Warehouse",
+          shiftName: "Day (08:00-17:00)",
+        }),
+      });
+      assert.strictEqual(reliefRes.status, 201);
+      const reliefJson = (await reliefRes.json()) as any;
+      assert.strictEqual(reliefJson.assigned, true);
+
       const statusRes = await fetch(`${baseUrl}/api/integrations/status`, {
         headers: { "x-peopleos-role": "hr_admin" },
       });

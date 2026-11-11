@@ -1,0 +1,10 @@
+services/
+.venv/
+artifacts/api-server/dist/
+artifacts/mockup-sandbox/
+.replit
+.replitignore
+replit.md
+**/__pycache__/
+*.pyc
+

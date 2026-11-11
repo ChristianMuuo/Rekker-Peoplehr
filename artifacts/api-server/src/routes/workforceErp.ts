@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, workflowRulesTable } from "@workspace/db";
+import { db, employeesTable, workflowRulesTable, workforceShiftsTable } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
 import { isMpesaLiveConfigured } from "../lib/mpesaService";
 import { sanitizeText } from "../lib/security";
@@ -83,6 +83,15 @@ const DEMO_SALES_WORKFORCE = [
   },
 ];
 
+const erpShiftManagers = [
+  PEOPLEOS_ROLES.hrAdmin,
+  PEOPLEOS_ROLES.hrDirector,
+  PEOPLEOS_ROLES.hrManager,
+  PEOPLEOS_ROLES.productionSupervisor,
+  PEOPLEOS_ROLES.warehouseSupervisor,
+  PEOPLEOS_ROLES.systemAdmin,
+];
+
 const MEM_WORKFLOW_RULES = new Map<string, any[]>();
 function ensureRulesSeeded(orgId: string) {
   if (!MEM_WORKFLOW_RULES.has(orgId)) {
@@ -92,6 +101,16 @@ function ensureRulesSeeded(orgId: string) {
       { id: "wf-expense-01", organizationId: orgId, domain: "expense", name: "High-Value Travel & Field Claim Verification", thresholdAmountKes: 10000, approvalLevels: 2, requiredApproverRoles: ["department_manager", "finance_manager"], slaHours: 48, isActive: true },
       { id: "wf-hrcase-01", organizationId: orgId, domain: "hr_case", name: "Confidential HR Director Case Escalation", thresholdAmountKes: null, approvalLevels: 1, requiredApproverRoles: ["hr_director", "hr_admin"], slaHours: 12, isActive: true },
     ]);
+  }
+}
+
+const MEM_WORKFORCE_SHIFTS = new Map<string, Array<(typeof DEMO_WORKFORCE_ROSTER)[number]>>();
+function ensureShiftsSeeded(orgId: string) {
+  if (!MEM_WORKFORCE_SHIFTS.has(orgId)) {
+    MEM_WORKFORCE_SHIFTS.set(
+      orgId,
+      DEMO_WORKFORCE_ROSTER.map((r) => ({ ...r })),
+    );
   }
 }
 
@@ -105,7 +124,45 @@ router.get("/workforce-erp/overview", async (req: Request, res: Response) => {
   );
   const empStatusMap = new Map(DEMO_EMPLOYEES_LIST.map((e) => [e.id, e]));
 
-  const roster = DEMO_WORKFORCE_ROSTER.map((r) => {
+  let baseRoster: Array<{
+    employeeId: string;
+    employeeName: string;
+    unitType: string;
+    workZone: string;
+    shiftName: string;
+    roleSkill: string;
+    certificationValidUntil: string | null;
+    costCentreCode: string;
+  }>;
+
+  if (!process.env.DATABASE_URL) {
+    ensureShiftsSeeded(membership.organizationId);
+    baseRoster = MEM_WORKFORCE_SHIFTS.get(membership.organizationId)!;
+  } else {
+    const [dbShifts, dbEmps] = await Promise.all([
+      db.select().from(workforceShiftsTable).where(eq(workforceShiftsTable.organizationId, membership.organizationId)),
+      db.select().from(employeesTable).where(eq(employeesTable.organizationId, membership.organizationId)),
+    ]);
+    const dbEmpMap = new Map(dbEmps.map((e) => [e.id, e]));
+    for (const e of dbEmps) empStatusMap.set(e.id, { ...e, departmentName: "", managerName: null } as any);
+    baseRoster = dbShifts.length
+      ? dbShifts.map((s) => {
+          const emp = dbEmpMap.get(s.employeeId);
+          return {
+            employeeId: s.employeeId,
+            employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Rekker Employee",
+            unitType: s.unitType,
+            workZone: s.workZone,
+            shiftName: s.shiftName,
+            roleSkill: s.roleSkill,
+            certificationValidUntil: s.certificationValidUntil,
+            costCentreCode: s.costCentreCode,
+          };
+        })
+      : DEMO_WORKFORCE_ROSTER;
+  }
+
+  const roster = baseRoster.map((r) => {
     const emp = empStatusMap.get(r.employeeId);
     const unavailable = emp?.status === "on_leave" || onLeaveIds.has(r.employeeId);
     return {
@@ -133,6 +190,155 @@ router.get("/workforce-erp/overview", async (req: Request, res: Response) => {
     roster,
     heatmap,
     understaffedUnits: heatmap.filter((h) => h.coveragePct < 100),
+  });
+});
+
+// POST /api/workforce-erp/shifts — Assign / Update Operational Shift Allocation
+router.post("/workforce-erp/shifts", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpShiftManagers);
+  if (!membership) return;
+
+  const employeeId = sanitizeText(req.body?.employeeId, 64);
+  const unitType = sanitizeText(req.body?.unitType || "production", 30);
+  const workZone = sanitizeText(req.body?.workZone, 120);
+  const shiftName = sanitizeText(req.body?.shiftName || "Morning (06:00-14:00)", 80);
+  const roleSkill = sanitizeText(req.body?.roleSkill || "Line Operator", 120);
+  const costCentreCode = sanitizeText(req.body?.costCentreCode || "CC-MFG-01", 30);
+  const certExpiry = sanitizeText(req.body?.certificationValidUntil || "2027-06-30", 20);
+
+  if (!employeeId || !workZone) {
+    res.status(400).json({ error: "employeeId and workZone are required." });
+    return;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    ensureShiftsSeeded(membership.organizationId);
+    const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
+    const employeeName = emp ? `${emp.firstName} ${emp.lastName}` : sanitizeText(req.body?.employeeName || "Rekker Specialist", 100);
+    const roster = MEM_WORKFORCE_SHIFTS.get(membership.organizationId)!;
+    const entry = {
+      employeeId,
+      employeeName,
+      unitType,
+      workZone,
+      shiftName,
+      roleSkill,
+      certificationValidUntil: certExpiry,
+      costCentreCode,
+    };
+    const existingIdx = roster.findIndex((r) => r.employeeId === employeeId && r.unitType === unitType);
+    if (existingIdx >= 0) {
+      roster[existingIdx] = entry;
+    } else {
+      roster.unshift(entry);
+    }
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "WORKFORCE_SHIFT_ASSIGNED",
+      targetType: "workforce_shift",
+      targetId: employeeId,
+      summary: `Scheduled ${employeeName} to ${unitType} · ${workZone} (${shiftName})`,
+      isDemo: true,
+    });
+    res.status(201).json(entry);
+    return;
+  }
+
+  const [created] = await db
+    .insert(workforceShiftsTable)
+    .values({
+      organizationId: membership.organizationId,
+      employeeId,
+      unitType,
+      workZone,
+      shiftName,
+      roleSkill,
+      certificationValidUntil: certExpiry,
+      safetyCleared: true,
+      costCentreCode,
+    })
+    .returning();
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "WORKFORCE_SHIFT_ASSIGNED",
+    targetType: "workforce_shift",
+    targetId: created?.id ?? employeeId,
+    summary: `Scheduled employee ${employeeId} to ${unitType} · ${workZone} (${shiftName})`,
+  });
+  res.status(201).json(created);
+});
+
+// POST /api/workforce-erp/production/assign-relief — Deploy Safety-Cleared Relief Operator
+router.post("/workforce-erp/production/assign-relief", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpShiftManagers);
+  if (!membership) return;
+
+  const replacementEmployeeId = sanitizeText(req.body?.replacementEmployeeId, 64);
+  const targetUnitType = sanitizeText(req.body?.targetUnitType || "production", 30);
+  const targetZone = sanitizeText(req.body?.targetZone || "Formulation Line A", 120);
+  const shiftName = sanitizeText(req.body?.shiftName || "Morning (06:00-14:00)", 80);
+
+  if (!replacementEmployeeId) {
+    res.status(400).json({ error: "replacementEmployeeId is required." });
+    return;
+  }
+
+  const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === replacementEmployeeId);
+  const empName = emp ? `${emp.firstName} ${emp.lastName}` : replacementEmployeeId;
+  const ccMap: Record<string, string> = {
+    production: "CC-MFG-01",
+    warehouse: "CC-WHS-01",
+    distribution: "CC-LOG-01",
+    sales: "CC-SLS-01",
+  };
+
+  if (!process.env.DATABASE_URL) {
+    ensureShiftsSeeded(membership.organizationId);
+    MEM_WORKFORCE_SHIFTS.get(membership.organizationId)!.unshift({
+      employeeId: replacementEmployeeId,
+      employeeName: empName,
+      unitType: targetUnitType,
+      workZone: `${targetZone} (Relief)`,
+      shiftName,
+      roleSkill: emp?.jobTitle ?? "Certified Relief Operator",
+      certificationValidUntil: "2027-06-30",
+      costCentreCode: ccMap[targetUnitType] ?? "CC-MFG-01",
+    });
+  } else {
+    await db.insert(workforceShiftsTable).values({
+      organizationId: membership.organizationId,
+      employeeId: replacementEmployeeId,
+      unitType: targetUnitType,
+      workZone: `${targetZone} (Relief)`,
+      shiftName,
+      roleSkill: emp?.jobTitle ?? "Certified Relief Operator",
+      certificationValidUntil: "2027-06-30",
+      safetyCleared: true,
+      costCentreCode: ccMap[targetUnitType] ?? "CC-MFG-01",
+    });
+  }
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "SHIFT_RELIEF_ASSIGNED",
+    targetType: "workforce_shift",
+    targetId: replacementEmployeeId,
+    summary: `Deployed relief operator ${empName} to ${targetZone} (${shiftName})`,
+    isDemo: !process.env.DATABASE_URL,
+  });
+
+  res.status(201).json({
+    assigned: true,
+    replacementEmployeeId,
+    employeeName: empName,
+    targetZone: `${targetZone} (Relief)`,
+    shiftName,
   });
 });
 

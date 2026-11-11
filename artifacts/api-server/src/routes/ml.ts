@@ -20,8 +20,8 @@ const ML_EMPLOYEE_FEATURES: Record<
   string,
   { tenureMonths: number; baseSalary: number; overtimeHours: number; lateRatePct: number; skills: string[] }
 > = {
-  "10000000-0000-4000-8000-000000000001": { tenureMonths: 60, baseSalary: 320000, overtimeHours: 3, lateRatePct: 0.5, skills: ["PLC Automation", "HACCP", "ISO 22000", "Brewing Chemistry", "OSHA Safety"] },
-  "10000000-0000-4000-8000-000000000002": { tenureMonths: 45, baseSalary: 195000, overtimeHours: 9, lateRatePct: 1.5, skills: ["Brewing Chemistry", "PLC Automation", "HACCP"] },
+  "10000000-0000-4000-8000-000000000001": { tenureMonths: 60, baseSalary: 320000, overtimeHours: 3, lateRatePct: 0.5, skills: ["PLC Automation", "KEBS GMP", "ISO 22000", "Formulation Chemistry", "DOSHS Safety"] },
+  "10000000-0000-4000-8000-000000000002": { tenureMonths: 45, baseSalary: 195000, overtimeHours: 9, lateRatePct: 1.5, skills: ["Formulation Chemistry", "PLC Automation", "KEBS GMP"] },
   "10000000-0000-4000-8000-000000000003": { tenureMonths: 42, baseSalary: 245000, overtimeHours: 14, lateRatePct: 8.5, skills: ["Fleet GPS Telemetry", "Cold Chain Logistics", "Route Optimization"] },
   "10000000-0000-4000-8000-000000000004": { tenureMonths: 35, baseSalary: 135000, overtimeHours: 4, lateRatePct: 2.0, skills: ["Fleet GPS Telemetry", "Route Optimization"] },
   "10000000-0000-4000-8000-000000000005": { tenureMonths: 50, baseSalary: 265000, overtimeHours: 5, lateRatePct: 1.0, skills: ["Trade Marketing", "Brand Strategy", "Key Account Management"] },
@@ -29,7 +29,7 @@ const ML_EMPLOYEE_FEATURES: Record<
   "10000000-0000-4000-8000-000000000007": { tenureMonths: 55, baseSalary: 310000, overtimeHours: 6, lateRatePct: 0.5, skills: ["Kenya Employment Act", "HR Analytics", "ODPC Privacy", "Talent Acquisition"] },
   "10000000-0000-4000-8000-000000000008": { tenureMonths: 2, baseSalary: 105000, overtimeHours: 4, lateRatePct: 2.0, skills: ["Talent Acquisition", "Kenya Employment Act"] },
   "10000000-0000-4000-8000-000000000009": { tenureMonths: 38, baseSalary: 225000, overtimeHours: 8, lateRatePct: 1.5, skills: ["KRA iTax", "IFRS Reporting", "Payroll Governance"] },
-  "10000000-0000-4000-8000-000000000010": { tenureMonths: 22, baseSalary: 88000, overtimeHours: 11, lateRatePct: 4.5, skills: ["Brewing Chemistry", "HACCP"] },
+  "10000000-0000-4000-8000-000000000010": { tenureMonths: 22, baseSalary: 88000, overtimeHours: 11, lateRatePct: 4.5, skills: ["Formulation Chemistry", "KEBS GMP"] },
 };
 
 export async function buildDefaultPayloadForTask(
