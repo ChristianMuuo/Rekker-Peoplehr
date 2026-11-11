@@ -18,8 +18,8 @@ import type { Employee, EmployeeInput, EmployeeUpdate, LeavePolicy, LeaveRequest
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, Bell, BrainCircuit, BriefcaseBusiness,
   CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, FileText,
-  Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, Search, Settings2, ShieldCheck, Sparkles,
-  Sun, UserCheck, Users, X,
+  Filter, GitBranch, Globe, Handshake, Laptop, LayoutDashboard, LogOut, Menu, Moon, Package, Plus, Receipt, Search, Settings2, ShieldCheck, Sparkles,
+  Sun, Target, UserCheck, Users, X,
 } from 'lucide-react';
 import { Link, Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -39,6 +39,12 @@ import { SelfServicePage } from '@/pages/SelfServicePage';
 import { ExpensesPage } from '@/pages/ExpensesPage';
 import { AssetsPage } from '@/pages/AssetsPage';
 import { PredictiveMlPage } from '@/pages/PredictiveMlPage';
+import {
+  AboutPage, BrandsCatalogPage, CareersPage, ContactPage, DistributionPage, LegalPage,
+  ManufacturingPage, PartnershipsPage, PublicHomePage,
+} from '@/pages/public/CorporatePages';
+import { CustomerPortalPage, DistributorPortalPage } from '@/pages/portals/PortalsPage';
+import { CatalogueAdminPage, CrmPipelinePage, PartnerApprovalsPage } from '@/pages/erp/EcosystemErpPages';
 import { apiGet } from '@/lib/api';
 
 const queryClient = new QueryClient();
@@ -201,8 +207,13 @@ const workNav: NavItem[] = [
   { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
   { label: 'Reports & Analytics', href: '/reports', icon: ArrowDownRight },
 ];
+const commercialNav: NavItem[] = [
+  { label: 'CRM & Quotes', href: '/crm', icon: Target },
+  { label: 'Catalogue CMS', href: '/catalogue-admin', icon: Package },
+  { label: 'Partner approvals', href: '/partner-approvals', icon: Handshake },
+];
 
-function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
+function AppHomeRedirect() { return <PublicHomePage />; }
 
 function ProtectedRouter() {
   return <><Show when="signed-in"><AppFrame /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>;
@@ -250,7 +261,7 @@ function AppFrame() {
   if (isLoading) return <LoadingScreen label="Loading your workspace" />;
   if (isError || !auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
   const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const nav = [...primaryNav, ...visibleWorkNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const nav = [...primaryNav, ...commercialNav, ...visibleWorkNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
 
   const pendingApprovals = Array.isArray(approvalsQuery.data) ? approvalsQuery.data : [];
   const pendingAiApprovals = (aiApprovalsQuery.data?.items ?? []).filter(a => a.status === 'pending');
@@ -283,10 +294,12 @@ function AppFrame() {
           <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workspace</div>{renderNav(primaryNav)}
         </div>
         <div className="mt-6 flex-1 overflow-y-auto px-3">
-          <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">People operations</div>{renderNav(visibleWorkNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length))}
+          <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Commercial &amp; CRM</div>{renderNav(commercialNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">People operations</div>{renderNav(visibleWorkNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + commercialNav.length + visibleWorkNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
+          <Link href="/" className="mb-2 flex w-full items-center gap-2.5 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-back-public-site"><Globe size={15} className="text-[#C71D1D]" /> Corporate Website</Link>
           <div className="mb-3 rounded-xl bg-[#f7f4f0] p-3">
             <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#338956]" /><span className="text-xs font-bold text-stone-800">{auth.isDemo ? 'Demo workspace' : 'Live workspace'}</span></div>
             <p className="mt-1 text-[11px] leading-4 text-stone-500">{auth.organizationName} · {auth.role.replaceAll('_', ' ')}</p>
@@ -352,6 +365,9 @@ function AppFrame() {
             <Route path="/documents" component={DocumentsPage} />
             <Route path="/ml" component={PredictiveMlPage} />
             <Route path="/reports" component={ReportsPage} />
+            <Route path="/crm" component={CrmPipelinePage} />
+            <Route path="/catalogue-admin" component={CatalogueAdminPage} />
+            <Route path="/partner-approvals" component={PartnerApprovalsPage} />
             <Route component={NotFound} />
           </Switch>
         </main>
@@ -919,7 +935,20 @@ function RoutedBoundary({ children }: { children: ReactNode }) {
 }
 function RouterContents() {
   return <RoutedBoundary><Switch>
-    <Route path="/" component={AppHomeRedirect} />
+    <Route path="/" component={PublicHomePage} />
+    <Route path="/about" component={AboutPage} />
+    <Route path="/brands" component={BrandsCatalogPage} />
+    <Route path="/brands/:slug" component={BrandsCatalogPage} />
+    <Route path="/products" component={BrandsCatalogPage} />
+    <Route path="/manufacturing" component={ManufacturingPage} />
+    <Route path="/distribution" component={DistributionPage} />
+    <Route path="/partnerships" component={PartnershipsPage} />
+    <Route path="/careers" component={CareersPage} />
+    <Route path="/contact" component={ContactPage} />
+    <Route path="/privacy">{() => <LegalPage mode="privacy" />}</Route>
+    <Route path="/terms">{() => <LegalPage mode="terms" />}</Route>
+    <Route path="/portal">{() => <><Show when="signed-in"><CustomerPortalPage /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>}</Route>
+    <Route path="/distributor">{() => <><Show when="signed-in"><DistributorPortalPage /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>}</Route>
     <Route path="/sign-in/*?" component={SignInPage} />
     <Route path="/sign-up/*?" component={SignUpPage} />
     <Route component={ProtectedRouter} />

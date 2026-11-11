@@ -29,10 +29,10 @@ let REQUISITIONS = [
   {
     id: "req_01",
     organizationId: "rekker-demo",
-    title: "Senior Industrial Brewing Engineer",
+    title: "Senior Formulation & Production Chemist",
     departmentId: "20000000-0000-4000-8000-000000000001",
-    departmentName: "Manufacturing & Brewing",
-    location: "Nairobi Industrial Area Plant",
+    departmentName: "Formulation & Filling",
+    location: "Nairobi Production Facility",
     employmentType: "Full-time Permanent",
     status: "published",
     minSalary: 180000,
@@ -40,13 +40,13 @@ let REQUISITIONS = [
     openings: 1,
     applicantsCount: 14,
     description:
-      "Lead automated fermentation, continuous line quality control, HACCP sanitation, ISO 22000 compliance, and plant steam efficiency.",
+      "Lead home care and personal care formulation, automated filling line supervision, batch-level KEBS quality verification, and private label manufacturing readiness.",
     createdAt: "2026-02-10",
   },
   {
     id: "req_02",
     organizationId: "rekker-demo",
-    title: "Regional Supply Chain Dispatch Coordinator",
+    title: "National Trade & Distributor Fulfillment Coordinator",
     departmentId: "20000000-0000-4000-8000-000000000002",
     departmentName: "Logistics & Distribution",
     location: "Nairobi Central Hub",
@@ -57,17 +57,51 @@ let REQUISITIONS = [
     openings: 2,
     applicantsCount: 22,
     description:
-      "Coordinate multi-hub cold chain logistics, distributor fulfillment schedules, route optimization, and driver GPS telemetry.",
+      "Coordinate nationwide FMCG distributor fulfillment across modern trade, general trade, and regional wholesale channels from Nairobi.",
     createdAt: "2026-02-18",
   },
 ];
+
+export async function getPublicJobPostings() {
+  if (!process.env.DATABASE_URL) {
+    return REQUISITIONS.filter((r) => r.status === "published").map((r) => ({
+      id: r.id,
+      title: r.title,
+      departmentName: r.departmentName,
+      location: r.location,
+      employmentType: r.employmentType,
+      openings: r.openings,
+      description: r.description,
+      postedDate: r.createdAt,
+    }));
+  }
+  const rows = await db
+    .select()
+    .from(jobRequisitionsTable)
+    .where(eq(jobRequisitionsTable.status, "published"))
+    .orderBy(desc(jobRequisitionsTable.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    departmentName: r.departmentId.endsWith("0001")
+      ? "Formulation & Filling"
+      : r.departmentId.endsWith("0002")
+        ? "Logistics & Distribution"
+        : "Commercial & Operations",
+    location: r.location,
+    employmentType: r.employmentType,
+    openings: r.openings,
+    description: r.description,
+    postedDate: r.createdAt.toISOString().slice(0, 10),
+  }));
+}
 
 let CANDIDATES = [
   {
     id: "cand_01",
     organizationId: "rekker-demo",
     requisitionId: "req_01",
-    jobTitle: "Senior Industrial Brewing Engineer",
+    jobTitle: "Senior Formulation & Production Chemist",
     fullName: "Peter Ndung'u",
     email: "peter.ndungu@gmail.com",
     phone: "+254 712 345 678",
@@ -75,14 +109,14 @@ let CANDIDATES = [
     experienceYears: 6,
     matchScore: 94,
     skillsSummary:
-      "Strong PLC automation, brewing chemistry, HACCP, fermentation process optimization and ISO 22000 safety audits.",
+      "Strong chemical formulation, filling line automation, KEBS product testing, and GMP quality assurance.",
     appliedDate: "2026-02-14",
   },
   {
     id: "cand_02",
     organizationId: "rekker-demo",
     requisitionId: "req_02",
-    jobTitle: "Regional Supply Chain Dispatch Coordinator",
+    jobTitle: "National Trade & Distributor Fulfillment Coordinator",
     fullName: "Evans Kiprono",
     email: "evans.kiprono@yahoo.com",
     phone: "+254 723 456 789",
@@ -90,14 +124,14 @@ let CANDIDATES = [
     experienceYears: 4,
     matchScore: 88,
     skillsSummary:
-      "Fleet GPS dispatch, distributor delivery reconciliation and cold chain temperature monitoring.",
+      "Fleet dispatch, 47-county FMCG distributor reconciliation, and modern/general trade order fulfillment.",
     appliedDate: "2026-02-20",
   },
   {
     id: "cand_03",
     organizationId: "rekker-demo",
     requisitionId: "req_01",
-    jobTitle: "Senior Industrial Brewing Engineer",
+    jobTitle: "Senior Formulation & Production Chemist",
     fullName: "Grace Wambui",
     email: "grace.wambui@outlook.com",
     phone: "+254 728 991 200",

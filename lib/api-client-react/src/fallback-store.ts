@@ -53,7 +53,7 @@ export interface MockLeaveRequest {
 }
 
 const DEFAULT_DEPTS: MockDepartment[] = [
-  { id: '20000000-0000-4000-8000-000000000001', code: 'MFG', name: 'Manufacturing & Brewing', description: 'Brewery production lines, quality inspection, fermentation operations.', location: 'Nairobi Industrial Area Plant', managerEmployeeId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', headcount: 3, budgetedPositions: 15 },
+  { id: '20000000-0000-4000-8000-000000000001', code: 'MFG', name: 'Formulation & Filling', description: 'Home & personal care formulation, filling lines, batch quality inspection.', location: 'Nairobi Production Facility', managerEmployeeId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', headcount: 3, budgetedPositions: 15 },
   { id: '20000000-0000-4000-8000-000000000002', code: 'DIST', name: 'Logistics & Distribution', description: 'Fleet transport, distribution hub management, route dispatching.', location: 'Nairobi Central Logistics Hub', managerEmployeeId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', headcount: 2, budgetedPositions: 12 },
   { id: '20000000-0000-4000-8000-000000000003', code: 'BRAND', name: 'Brand & Commercial Marketing', description: 'Brand activation, trade marketing, distributor relations.', location: 'Westlands Commercial Office', managerEmployeeId: '10000000-0000-4000-8000-000000000005', managerName: 'Brenda Mutheu', headcount: 2, budgetedPositions: 8 },
   { id: '20000000-0000-4000-8000-000000000004', code: 'PEOPLE', name: 'People Operations & Culture', description: 'Workforce intelligence, statutory compliance, talent acquisition.', location: 'Westlands Commercial Office', managerEmployeeId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', headcount: 2, budgetedPositions: 6 },
@@ -175,15 +175,142 @@ const DEFAULT_STATUTORY_CONFIGS = [
   },
 ];
 
+const FALLBACK_BRANDS = [
+  { slug: 'saffron-milan', name: 'Saffron Milan', category: 'Home & Cleaning', origin: 'Rekker In-House Brand', tagline: 'Detergents, cleaning and household care built for real Kenyan homes.', description: 'Formulated for hard water and everyday household performance, manufactured and quality-tested locally.', highlights: ['Laundry detergents and fabric care', 'Dishwashing and kitchen cleaning', 'Household surface care', 'Bulk & retail pack sizes'], image: 'https://rekker.co.ke/images/brand-saffron.jpg', defaultMoqUnits: 12 },
+  { slug: 'bio-saff', name: 'Bio Saff', category: 'Beauty & Personal Care', origin: 'Rekker In-House Brand', tagline: 'Hair and body care formulated for African hair and skin.', description: 'Braid sprays, edge control, shampoos and skin care built around real routines and salon formats.', highlights: ['Hair care & braid maintenance', 'Edge control and styling', 'Body & skin care', 'Salon & retail formats'], image: 'https://rekker.co.ke/images/brand-biosaff.jpg', defaultMoqUnits: 12 },
+  { slug: 'cornells', name: 'Cornells', category: 'Fragrance & Beauty', origin: 'Starling Parfums (Distributed by Rekker)', tagline: 'Fragrance by Starling Parfums, distributed nationwide by Rekker.', description: 'Distributed across modern supermarkets and independent stockists across Kenya.', highlights: ['Signature fragrance collections', 'Gifting & seasonal sets', 'Retail & wholesale supply', 'Nationwide availability'], image: 'https://rekker.co.ke/images/brand-cornells.jpg', defaultMoqUnits: 12 },
+  { slug: 'petcare', name: 'PetCare', category: 'Pet Care', origin: 'Rekker In-House Brand', tagline: 'Little Paws, Lots of Love. Premium pet shampoo for dogs, cats and horses.', description: 'Gentle coat care crafted with pet safety and well-being in mind.', highlights: ['Gentle shampoo for dogs, cats & horses', 'Pet-safe formulation', 'Quality-led development'], image: 'https://rekker.co.ke/images/petcare-banner.jpg', defaultMoqUnits: 12 },
+];
+
+const FALLBACK_PRODUCTS: Array<any> = [
+  { id: 'prod-saffron-laundry', sku: 'SM-HC-101', slug: 'saffron-milan-laundry-care', name: 'Saffron Milan Hard-Water Laundry Detergent Line', brandSlug: 'saffron-milan', brandName: 'Saffron Milan', shortDescription: 'Formulated locally for hard water performance and everyday household laundry across Kenyan homes.', description: 'Manufactured locally in Nairobi for general trade, supermarkets, and bulk household buyers.', specifications: [{ label: 'Water Compatibility', value: 'Hard & soft Kenyan water' }], packagingInfo: 'Bulk cartons & retail packs', variants: ['Retail Pack', 'Wholesale Carton'], imageUrls: ['https://rekker.co.ke/images/brand-saffron.jpg'], moqUnits: 12, tradePriceKes: 380, isFeatured: true, status: 'published' },
+  { id: 'prod-biosaff-hair', sku: 'BS-PC-201', slug: 'bio-saff-braid-edge-care', name: 'Bio Saff Braid Spray, Edge Control & Salon Hair Care', brandSlug: 'bio-saff', brandName: 'Bio Saff', shortDescription: 'Hair care, braid maintenance, and edge styling formulated specifically for African hair and skin.', description: 'Designed for daily consumers and professional beauty salons across Kenya.', specifications: [{ label: 'Focus', value: 'African hair & skin routines' }], packagingInfo: 'Retail trays & salon packs', variants: ['Braid Spray', 'Edge Control'], imageUrls: ['https://rekker.co.ke/images/brand-biosaff.jpg'], moqUnits: 12, tradePriceKes: 450, isFeatured: true, status: 'published' },
+  { id: 'prod-cornells-fragrance', sku: 'CN-FR-301', slug: 'cornells-signature-fragrance-collection', name: 'Cornells Signature Fragrance & Gift Collection', brandSlug: 'cornells', brandName: 'Cornells', shortDescription: 'International fragrance collections by Starling Parfums distributed across Kenya by Rekker.', description: 'Supplied to modern supermarkets, beauty stockists, and wholesale fragrance distributors.', specifications: [{ label: 'Principal', value: 'Starling Parfums' }], packagingInfo: 'Signature bottles & gift sets', variants: ['Signature EDP Range'], imageUrls: ['https://rekker.co.ke/images/brand-cornells.jpg'], moqUnits: 12, tradePriceKes: 950, isFeatured: true, status: 'published' },
+  { id: 'prod-petcare-shampoo', sku: 'PC-AN-401', slug: 'petcare-gentle-pet-shampoo', name: 'PetCare Gentle Coat Shampoo (Dogs, Cats & Horses)', brandSlug: 'petcare', brandName: 'PetCare', shortDescription: 'Gentle, safety-focused coat cleansing developed by Rekker PetCare.', description: 'Little Paws, Lots of Love — crafted for everyday pet safety and coat conditioning.', specifications: [{ label: 'Suitable For', value: 'Dogs, cats, and horses' }], packagingInfo: 'Consumer & veterinary packs', variants: ['Retail Grooming Bottle'], imageUrls: ['https://rekker.co.ke/images/petcare-banner.jpg'], moqUnits: 12, tradePriceKes: 620, isFeatured: true, status: 'published' },
+];
+const FALLBACK_CRM_LEADS: Array<any> = [];
+const FALLBACK_QUOTES: Array<any> = [];
+const FALLBACK_DIST_APPS: Array<any> = [];
+const FALLBACK_WHOLESALE_ORDERS: Array<any> = [];
+const FALLBACK_TICKETS: Array<any> = [];
+
 export function handleFallbackApi(url: string, method: string = 'GET', body?: any): any {
   const path = url.split('?')[0];
   const parsedBody = body && typeof body === 'string' ? (() => { try { return JSON.parse(body); } catch { return {}; } })() : (body || {});
+
+  if (path === '/api/public/overview') {
+    return {
+      company: { name: 'Rekker Limited', tagline: 'Manufacturing and distributing the brands Kenya uses every day.', city: 'Nairobi, Kenya', email: 'info@rekker.co.ke', shopUrl: 'https://shop.rekker.co.ke', logoUrl: 'https://rekker.co.ke/Logo.jpg', heroImageUrl: 'https://rekker.co.ke/images/hero-rekker.jpg', countiesCoverageTarget: 47, orderTurnaroundTargetHours: 24 },
+      brands: FALLBACK_BRANDS,
+      featuredProducts: FALLBACK_PRODUCTS.filter(p => p.isFeatured),
+      totalPublishedProducts: FALLBACK_PRODUCTS.length,
+    };
+  }
+
+  if (path === '/api/public/catalog') {
+    return { brands: FALLBACK_BRANDS, categories: [], items: FALLBACK_PRODUCTS.filter(p => p.status === 'published'), total: FALLBACK_PRODUCTS.length };
+  }
+
+  if (path.startsWith('/api/public/catalog/')) {
+    const slug = path.split('/').pop();
+    const product = FALLBACK_PRODUCTS.find(p => p.slug === slug || p.id === slug) || FALLBACK_PRODUCTS[0];
+    return { product, related: FALLBACK_PRODUCTS.filter(p => p.id !== product.id).slice(0, 3) };
+  }
+
+  if (path === '/api/public/careers') {
+    return {
+      items: [
+        { id: 'req_01', title: 'Senior Formulation & Production Chemist', departmentName: 'Formulation & Filling', location: 'Nairobi Production Facility', employmentType: 'Full-time Permanent', openings: 1, description: 'Lead home care and personal care formulation and KEBS batch quality compliance.', postedDate: '2026-02-10' },
+        { id: 'req_02', title: 'National Trade & Distributor Fulfillment Coordinator', departmentName: 'Logistics & Distribution', location: 'Nairobi Central Hub', employmentType: 'Full-time Permanent', openings: 2, description: 'Coordinate nationwide FMCG distributor fulfillment across all 47 counties.', postedDate: '2026-02-18' },
+      ],
+      total: 2,
+    };
+  }
+
+  if (path === '/api/public/contact' && method === 'POST') {
+    const ref = `CNT-2026-${String(FALLBACK_CRM_LEADS.length + 1).padStart(3, '0')}`;
+    const now = new Date().toISOString();
+    FALLBACK_CRM_LEADS.unshift({ id: ref, referenceCode: ref, source: 'contact_form', stage: 'new_lead', customerName: parsedBody.name, companyName: parsedBody.company || null, email: parsedBody.email, phone: parsedBody.phone || null, interestCategory: parsedBody.interest || 'Trade Enquiry', priority: 'medium', estimatedValueKes: 0, notes: parsedBody.message, communicationHistory: [{ timestamp: now, actor: 'website', note: 'Submitted' }], createdAt: now, updatedAt: now });
+    return { referenceCode: ref, status: 'submitted', message: 'Thank you — our commercial team responds within one business day.', submittedAt: now };
+  }
+
+  if (path === '/api/public/quotes' && method === 'POST') {
+    const ref = `QT-2026-${String(FALLBACK_QUOTES.length + 1).padStart(3, '0')}`;
+    const now = new Date().toISOString();
+    FALLBACK_QUOTES.unshift({ id: ref, referenceCode: ref, customerUserId: 'user_demo_admin_01', customerName: parsedBody.customerName, companyName: parsedBody.companyName || null, email: parsedBody.email, phone: parsedBody.phone || null, productName: parsedBody.productName, requestedQuantity: Number(parsedBody.requestedQuantity || 12), deliveryLocation: parsedBody.deliveryLocation, status: 'submitted', createdAt: now });
+    FALLBACK_CRM_LEADS.unshift({ id: ref, referenceCode: ref, source: 'quote_request', stage: 'quotation_requested', customerName: parsedBody.customerName, companyName: parsedBody.companyName || null, email: parsedBody.email, phone: parsedBody.phone || null, interestCategory: parsedBody.productName, priority: 'medium', estimatedValueKes: 0, notes: `Qty ${parsedBody.requestedQuantity} to ${parsedBody.deliveryLocation}`, communicationHistory: [{ timestamp: now, actor: 'website_quote', note: 'Submitted' }], createdAt: now, updatedAt: now });
+    return { referenceCode: ref, status: 'submitted', message: `Quotation request ${ref} received.`, submittedAt: now };
+  }
+
+  if (path === '/api/public/distributors/apply' && method === 'POST') {
+    const ref = `DIST-2026-${String(FALLBACK_DIST_APPS.length + 1).padStart(3, '0')}`;
+    const now = new Date().toISOString();
+    FALLBACK_DIST_APPS.unshift({ id: ref, referenceCode: ref, businessName: parsedBody.businessName, contactName: parsedBody.contactName, email: parsedBody.email, phone: parsedBody.phone, businessType: parsedBody.businessType || 'stockist', distributionArea: parsedBody.distributionArea, status: 'submitted', tierName: 'Standard Trade', createdAt: now });
+    return { referenceCode: ref, status: 'submitted', message: `Partner application ${ref} submitted.`, submittedAt: now };
+  }
+
+  if (path === '/api/portal/customer/summary') {
+    return { customerId: 'user_demo_admin_01', quotations: FALLBACK_QUOTES, tickets: FALLBACK_TICKETS, authorizedDocuments: [{ id: 'doc-odpc', name: 'Rekker Commercial Terms & ODPC Privacy Notice.pdf', category: 'Legal' }] };
+  }
+  if (path === '/api/portal/customer/tickets' && method === 'POST') {
+    const tck = { id: `TCK-${Date.now()}`, ticketNumber: `TCK-2026-${FALLBACK_TICKETS.length + 1}`, subject: parsedBody.subject, category: parsedBody.category || 'Order Support', description: parsedBody.description, status: 'open', createdAt: new Date().toISOString() };
+    FALLBACK_TICKETS.unshift(tck);
+    return tck;
+  }
+
+  if (path === '/api/portal/distributor/dashboard') {
+    return { distributorId: 'user_demo_admin_01', partnerStatus: 'active', tierName: 'Regional Trade Partner', catalog: FALLBACK_PRODUCTS, orders: FALLBACK_WHOLESALE_ORDERS, applications: FALLBACK_DIST_APPS };
+  }
+  if (path === '/api/portal/distributor/orders' && method === 'POST') {
+    const items = (parsedBody.items || []).map((i: any) => { const p = FALLBACK_PRODUCTS.find(x => x.id === i.productId) || FALLBACK_PRODUCTS[0]; return { productId: p.id, sku: p.sku, productName: p.name, quantity: Number(i.quantity), unitPriceKes: p.tradePriceKes, lineTotalKes: p.tradePriceKes * Number(i.quantity) }; });
+    const order = { id: `ord-${Date.now()}`, orderNumber: `PO-WH-2026-${FALLBACK_WHOLESALE_ORDERS.length + 1}`, items, totalUnits: items.reduce((s: number, i: any) => s + i.quantity, 0), totalAmountKes: items.reduce((s: number, i: any) => s + i.lineTotalKes, 0), deliveryCounty: parsedBody.deliveryCounty, status: parsedBody.submitNow ? 'submitted' : 'draft', createdAt: new Date().toISOString() };
+    FALLBACK_WHOLESALE_ORDERS.unshift(order);
+    return order;
+  }
+
+  if (path === '/api/erp/crm/leads') {
+    if (method === 'POST') {
+      const ref = `LD-2026-${FALLBACK_CRM_LEADS.length + 1}`;
+      const rec = { id: ref, referenceCode: ref, source: 'manual', stage: 'new_lead', customerName: parsedBody.customerName, companyName: parsedBody.companyName || null, email: parsedBody.email, phone: parsedBody.phone || null, interestCategory: parsedBody.interestCategory || 'General Trade', priority: 'medium', estimatedValueKes: Number(parsedBody.estimatedValueKes || 0), notes: parsedBody.notes || '', communicationHistory: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      FALLBACK_CRM_LEADS.unshift(rec);
+      return rec;
+    }
+    return { items: FALLBACK_CRM_LEADS, total: FALLBACK_CRM_LEADS.length, stages: ['new_lead', 'contacted', 'qualified', 'quotation_requested', 'quotation_sent', 'negotiation', 'won', 'lost'] };
+  }
+  if (path.startsWith('/api/erp/crm/leads/') && path.endsWith('/stage')) {
+    const id = path.split('/')[5];
+    const lead = FALLBACK_CRM_LEADS.find(l => l.id === id);
+    if (lead) lead.stage = parsedBody.stage;
+    return lead || { ok: true };
+  }
+  if (path === '/api/erp/crm/analytics') {
+    const totalLeads = FALLBACK_CRM_LEADS.length;
+    const wonCount = FALLBACK_CRM_LEADS.filter(l => l.stage === 'won').length;
+    return { dataSource: 'ACTUAL_STORED_RECORDS', totalLeads, openOpportunities: totalLeads - wonCount, wonCount, lostCount: FALLBACK_CRM_LEADS.filter(l => l.stage === 'lost').length, wonValueKes: FALLBACK_CRM_LEADS.filter(l => l.stage === 'won').reduce((s, l) => s + (l.estimatedValueKes || 0), 0), conversionRatePct: totalLeads ? Math.round((wonCount / totalLeads) * 1000) / 10 : 0, byStage: {}, bySource: {} };
+  }
+  if (path === '/api/erp/catalog/products') {
+    if (method === 'POST') {
+      const rec = { id: `prod-${Date.now()}`, ...parsedBody, brandName: FALLBACK_BRANDS.find(b => b.slug === parsedBody.brandSlug)?.name || parsedBody.brandSlug, imageUrls: [FALLBACK_BRANDS.find(b => b.slug === parsedBody.brandSlug)?.image || 'https://rekker.co.ke/images/hero-rekker.jpg'], status: parsedBody.status || 'published' };
+      FALLBACK_PRODUCTS.unshift(rec);
+      return rec;
+    }
+    return { items: FALLBACK_PRODUCTS, categories: [], brands: FALLBACK_BRANDS };
+  }
+  if (path.startsWith('/api/erp/catalog/products/') && method === 'PATCH') {
+    const id = path.split('/').pop();
+    const p = FALLBACK_PRODUCTS.find(x => x.id === id);
+    if (p) Object.assign(p, parsedBody);
+    return p || { ok: true };
+  }
+  if (path === '/api/erp/quotations') return { items: FALLBACK_QUOTES };
+  if (path === '/api/erp/distributors/applications') return { items: FALLBACK_DIST_APPS };
+  if (path === '/api/erp/permissions') return { currentRole: 'hr_admin', roles: {}, matrix: {} };
 
   if (path === '/api/auth/context') {
     return {
       role: 'hr_admin',
       displayName: 'David Kibet',
-      organizationName: 'Rekker Breweries Kenya Ltd',
+      organizationName: 'Rekker Limited',
       canManagePeople: true,
       canApproveLeave: true,
       canViewAudit: true,
@@ -800,7 +927,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   if (path === '/api/performance/goals') {
     return {
       items: [
-        { id: 'goal_01', employeeName: 'Achieng Odhiambo', title: 'Achieve 99.8% Brewery Batch Consistency', description: 'Zero batch variations across Nairobi vats.', category: 'Quality', targetDate: '2026-06-30', progress: 85, status: 'in_progress' },
+        { id: 'goal_01', employeeName: 'Achieng Odhiambo', title: 'Achieve 99.8% Formulation Batch Consistency', description: 'Zero batch variations across Nairobi filling lines.', category: 'Quality', targetDate: '2026-06-30', progress: 85, status: 'in_progress' },
         { id: 'goal_02', employeeName: 'Juma Omondi', title: 'Reduce Transit Lead Times by 18%', description: 'Automated route dispatching.', category: 'Operational', targetDate: '2026-05-15', progress: 70, status: 'in_progress' },
       ],
       total: 2,
@@ -810,8 +937,8 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   if (path === '/api/learning/courses') {
     return {
       items: [
-        { id: 'course_01', title: 'OSHA Plant Safety & Brewery Pressure Systems', category: 'Health & Safety', durationHours: 6, provider: 'DOSHS Accredited Academy', status: 'mandatory', enrolledCount: 10, completedCount: 9 },
-        { id: 'course_02', title: 'KEBS KS EAS 104 Food Hygiene Standards', category: 'Quality & GMP', durationHours: 4, provider: 'KEBS Institute', status: 'mandatory', enrolledCount: 10, completedCount: 8 },
+        { id: 'course_01', title: 'DOSHS Plant Safety, Chemical Handling & Filling Line Operations', category: 'Health & Safety', durationHours: 6, provider: 'DOSHS Accredited Academy', status: 'mandatory', enrolledCount: 10, completedCount: 9 },
+        { id: 'course_02', title: 'KEBS Consumer Goods Batch Hygiene & Quality Standards', category: 'Quality & GMP', durationHours: 4, provider: 'KEBS Institute', status: 'mandatory', enrolledCount: 10, completedCount: 8 },
         { id: 'course_03', title: 'Kenya Data Protection Act 2019 Privacy', category: 'Legal & Compliance', durationHours: 3, provider: 'ODPC Portal', status: 'mandatory', enrolledCount: 10, completedCount: 10 },
       ],
       total: 3,
@@ -834,7 +961,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   }
 
   if (path.startsWith('/api/documents/templates/employment-contract/')) {
-    return { content: 'REPUBLIC OF KENYA - EMPLOYMENT ACT 2007 (§10 WRITTEN PARTICULARS)\nEmployer: Rekker Breweries Kenya Ltd\nCompliance: Statutory PAYE, NSSF, SHIF & ODPC 2019 privacy governed.' };
+    return { content: 'REPUBLIC OF KENYA - EMPLOYMENT ACT 2007 (§10 WRITTEN PARTICULARS)\nEmployer: Rekker Limited\nCompliance: Statutory PAYE, NSSF, SHIF & ODPC 2019 privacy governed.' };
   }
 
   if (path === '/api/ai/chat') {

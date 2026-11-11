@@ -121,3 +121,4 @@ pnpm --filter @workspace/peopleos run build
 ### Backend (`artifacts/api-server`) + ML (`services/ml-engine`)
 1. Deploy `artifacts/api-server/dist/index.mjs` on Render, Railway, Cloud Run, or Fly.io with `NODE_ENV=production`, `DATABASE_URL`, `CLERK_SECRET_KEY`, and `PEOPLEOS_ENCRYPTION_KEY`.
 2. Deploy `services/ml-engine/server.py` (Python HTTP server) as an internal service and point `PEOPLEOS_ML_URL` on the API server to it, or bundle `services/ml-engine` + `.venv` in the same container alongside Node.js.
+

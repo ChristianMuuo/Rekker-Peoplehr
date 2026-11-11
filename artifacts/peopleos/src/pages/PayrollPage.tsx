@@ -288,7 +288,7 @@ export function PayrollPage() {
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <div>
-                <h3 className="font-display text-base font-bold text-stone-900">Rekker Breweries Kenya Ltd</h3>
+                <h3 className="font-display text-base font-bold text-stone-900">Rekker Limited</h3>
                 <p className="text-xs text-stone-500">Official Payslip · {selectedPayslip.period} · {selectedPayslip.employeeName}</p>
               </div>
               <button onClick={() => setSelectedPayslip(null)}><X size={18} /></button>

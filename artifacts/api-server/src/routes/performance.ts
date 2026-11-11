@@ -15,9 +15,9 @@ let GOALS = [
     organizationId: "rekker-demo",
     employeeId: "10000000-0000-4000-8000-000000000001",
     employeeName: "Achieng Odhiambo",
-    title: "Achieve 99.8% Brewery Batch Consistency & Zero Waste Spill",
+    title: "Achieve 99.8% Batch Consistency & Zero Material Waste",
     description:
-      "Maintain strict temperature & pressure controls to prevent batch variations across Nairobi plant fermentation vats.",
+      "Maintain strict formulation viscosity, filling tolerance, and batch-level quality checks across Nairobi production lines.",
     category: "Quality",
     targetDate: "2026-06-30",
     progress: 85,

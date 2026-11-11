@@ -14,10 +14,12 @@ import assetsRouter from "./assets";
 import onboardingRouter from "./onboarding";
 import learningRouter from "./learning";
 import mlRouter from "./ml";
+import ecosystemRouter from "./ecosystem";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(ecosystemRouter);
 router.use(peopleOsRouter);
 router.use(leaveRouter);
 router.use(auditRouter);

@@ -64,7 +64,7 @@ let DOCUMENTS = [
     id: "doc-04",
     organizationId: "rekker-demo",
     employeeId: "10000000-0000-4000-8000-000000000002",
-    name: "Brewery Fermentation OSHA & HACCP Certification.pdf",
+    name: "Production Line DOSHS & KEBS Batch Compliance Record.pdf",
     category: "Compliance",
     employeeName: "Mwangi Kariuki",
     uploadedDate: "2025-06-12",
@@ -156,7 +156,7 @@ router.get(
     }
 
     const text = `REPUBLIC OF KENYA - EMPLOYMENT ACT 2007 (SECTION 10 WRITTEN PARTICULARS)
-EMPLOYER: Rekker Breweries Kenya Ltd, Nairobi
+EMPLOYER: Rekker Limited, Nairobi
 EMPLOYEE: ${emp.firstName} ${emp.lastName} (${emp.employeeNumber})
 JOB TITLE: ${emp.jobTitle} | DEPARTMENT: ${emp.departmentName}
 WORKPLACE LOCATION: ${emp.location}

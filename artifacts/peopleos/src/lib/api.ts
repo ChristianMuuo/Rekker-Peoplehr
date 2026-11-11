@@ -17,3 +17,4 @@ export async function apiPatch<T = any>(path: string, body: unknown = {}): Promi
     body: JSON.stringify(body),
   });
 }
+

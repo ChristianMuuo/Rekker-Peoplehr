@@ -94,8 +94,8 @@ export async function buildDefaultPayloadForTask(
       return {
         isDemo: true,
         records: [
-          { id: "att_01", employeeId: "10000000-0000-4000-8000-000000000001", employeeName: "Achieng Odhiambo", departmentName: "Manufacturing & Brewing", date: "2026-03-06", clockIn: "05:52", status: "on_time", overtimeHours: 0.25 },
-          { id: "att_02", employeeId: "10000000-0000-4000-8000-000000000002", employeeName: "Mwangi Kariuki", departmentName: "Manufacturing & Brewing", date: "2026-03-06", clockIn: "05:58", status: "overtime", overtimeHours: 4.5 },
+          { id: "att_01", employeeId: "10000000-0000-4000-8000-000000000001", employeeName: "Achieng Odhiambo", departmentName: "Formulation & Filling", date: "2026-03-06", clockIn: "05:52", status: "on_time", overtimeHours: 0.25 },
+          { id: "att_02", employeeId: "10000000-0000-4000-8000-000000000002", employeeName: "Mwangi Kariuki", departmentName: "Formulation & Filling", date: "2026-03-06", clockIn: "05:58", status: "overtime", overtimeHours: 4.5 },
           { id: "att_03", employeeId: "10000000-0000-4000-8000-000000000003", employeeName: "Juma Omondi", departmentName: "Logistics & Distribution", date: "2026-03-06", clockIn: "08:48", status: "late", overtimeHours: 0, anomalyFlag: "Late arrival: 18 minutes past shift start" },
           { id: "att_04", employeeId: "10000000-0000-4000-8000-000000000006", employeeName: "Brian Kiprotich", departmentName: "Brand & Commercial Marketing", date: "2026-03-06", clockIn: "08:29", status: "on_time", overtimeHours: 0 },
         ],
@@ -108,25 +108,25 @@ export async function buildDefaultPayloadForTask(
           author: l.employeeName,
           text: l.reason,
         })).concat([
-          { id: "fb_01", author: "Plant Survey", text: "Strong teamwork and safety standards on bottling line, great collaboration." },
-          { id: "fb_02", author: "Logistics Feedback", text: "Overworked during peak holiday distribution with heavy overtime stress." },
+          { id: "fb_01", author: "Plant Survey", text: "Strong teamwork and safety standards on filling line, great collaboration." },
+          { id: "fb_02", author: "Logistics Feedback", text: "Heavy seasonal dispatch workload across regional counties requiring route support." },
         ]),
       };
     case "candidate_match":
       return {
         isDemo: true,
-        jobDescription: "Senior Industrial Brewing Engineer: PLC automation, fermentation chemistry, HACCP, ISO 22000 quality audits.",
+        jobDescription: "Senior Formulation & Production Chemist: FMCG formulation chemistry, filling line QC, KEBS compliance, GMP quality audits.",
         minExperienceYears: 4,
         candidates: [
-          { id: "cand_01", fullName: "Peter Ndung'u", jobTitle: "Brewing Engineer", stage: "interview", experienceYears: 6, skillsSummary: "Strong PLC automation, brewing chemistry, thermal process optimization and ISO safety audits." },
-          { id: "cand_02", fullName: "Evans Kiprono", jobTitle: "Dispatch Coordinator", stage: "screening", experienceYears: 4, skillsSummary: "Fleet GPS dispatch, distributor delivery reconciliation and cold chain temperature monitoring." },
+          { id: "cand_01", fullName: "Peter Ndung'u", jobTitle: "Formulation Chemist", stage: "interview", experienceYears: 6, skillsSummary: "Strong formulation chemistry, filling line QC, process optimization and KEBS quality audits." },
+          { id: "cand_02", fullName: "Evans Kiprono", jobTitle: "Dispatch Coordinator", stage: "screening", experienceYears: 4, skillsSummary: "Fleet GPS dispatch, 47-county distributor delivery reconciliation and wholesale fulfillment." },
         ],
       };
     case "performance_trends":
       return {
         isDemo: true,
         goals: [
-          { id: "goal_01", title: "Achieve 99.8% Brewery Batch Consistency", employeeName: "Achieng Odhiambo", progress: 85 },
+          { id: "goal_01", title: "Achieve 99.8% Formulation Batch Consistency", employeeName: "Achieng Odhiambo", progress: 85 },
           { id: "goal_02", title: "Reduce Transit Delivery Lead Times by 18%", employeeName: "Juma Omondi", progress: 70 },
           { id: "goal_03", title: "Complete Q1 KRA Statutory Audit Package", employeeName: "Dennis Otieno", progress: 92 },
         ],
@@ -244,3 +244,4 @@ router.get("/ml/overview", async (req: Request, res: Response) => {
 });
 
 export default router;
+

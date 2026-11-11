@@ -244,8 +244,8 @@ const INITIAL_DEPARTMENTS: Department[] = [
   {
     id: 'dept_mfg_01',
     code: 'MFG',
-    name: 'Manufacturing & Brewing',
-    description: 'Brewery production lines, quality inspection, fermentation operations and packaging facilities.',
+    name: 'Formulation & Filling',
+    description: 'Home & personal care formulation, filling lines, batch quality inspection and packaging facilities.',
     location: 'Nairobi Industrial Area Plant',
     managerEmployeeId: 'emp_01',
     budgetedPositions: 15,
@@ -313,7 +313,7 @@ const INITIAL_EMPLOYEES: Employee[] = [
     probationEndDate: null,
     contractEndDate: null,
     emergencyContact: { name: 'Kevin Odhiambo', relationship: 'Spouse', phone: '+254 722 999 111' },
-    skills: ['Brewery Management', 'ISO 22000', 'HACCP', 'Lean Manufacturing', 'Team Leadership'],
+    skills: ['Formulation & Filling', 'KEBS Quality Standards', 'Batch QC', 'Lean Manufacturing', 'Team Leadership'],
   },
   {
     id: 'emp_02',
@@ -823,8 +823,8 @@ const INITIAL_GOALS: Goal[] = [
     id: 'goal_01',
     employeeId: 'emp_01',
     employeeName: 'Achieng Odhiambo',
-    title: 'Achieve 99.8% Brewery Batch Consistency & Zero Waste Spill',
-    description: 'Maintain strict temperature & pressure controls to prevent batch variations across Nairobi plant fermentation vats.',
+    title: 'Achieve 99.8% Formulation Batch Consistency & Zero Waste Spill',
+    description: 'Maintain strict batch viscosity, pH, and filling line checks across Nairobi plant lines.',
     category: 'Quality',
     targetDate: '2026-06-30',
     progress: 85,
@@ -1230,7 +1230,7 @@ class PeopleOsStore {
     ];
 
     return {
-      organizationName: 'Rekker Breweries Kenya Ltd',
+      organizationName: 'Rekker Limited',
       dataMode: 'live_interactive',
       stats: {
         totalHeadcount,

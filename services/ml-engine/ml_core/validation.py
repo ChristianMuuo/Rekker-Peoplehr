@@ -79,3 +79,4 @@ def safe_float(value: Any, default: float = 0.0, minimum: Optional[float] = None
         return v
     except (TypeError, ValueError):
         return default
+

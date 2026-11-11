@@ -820,7 +820,7 @@ router.get("/payroll/p9a/:employeeId", async (req: Request, res: Response) => {
   res.json({
     formType: "KRA Form P9A (Employee Tax Deduction Card)",
     taxYear: 2026,
-    employerName: "Rekker Breweries Kenya Ltd",
+    employerName: "Rekker Limited",
     employerPin: "P051482910K",
     employeeId,
     employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Employee",

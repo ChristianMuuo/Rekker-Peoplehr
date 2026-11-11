@@ -28,7 +28,7 @@ const DEMO_COURSES: DemoCourse[] = [
   {
     id: "course_01",
     organizationId: "rekker-demo",
-    title: "OSHA Plant Safety & Brewery Pressure Systems",
+    title: "DOSHS Plant Safety, Chemical Handling & Filling Line Operations",
     category: "Health & Safety",
     durationHours: 6,
     provider: "DOSHS Accredited Academy",
@@ -39,7 +39,7 @@ const DEMO_COURSES: DemoCourse[] = [
   {
     id: "course_02",
     organizationId: "rekker-demo",
-    title: "KEBS KS EAS 104 Food & Beverage Hygiene Standards",
+    title: "KEBS Consumer Goods Formulation & Batch Quality Standards",
     category: "Quality & GMP",
     durationHours: 4,
     provider: "KEBS Institute",
@@ -61,7 +61,7 @@ const DEMO_COURSES: DemoCourse[] = [
   {
     id: "course_04",
     organizationId: "rekker-demo",
-    title: "SCADA Automation & Continuous Fermentation Optimization",
+    title: "Automated Filling Line & Batch Quality Control Optimization",
     category: "Technical Operations",
     durationHours: 12,
     provider: "Nairobi Industrial Polytechnic",
@@ -195,3 +195,4 @@ router.post("/learning/courses", async (req: Request, res: Response) => {
 });
 
 export default router;
+

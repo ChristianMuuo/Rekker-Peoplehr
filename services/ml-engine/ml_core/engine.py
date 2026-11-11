@@ -699,3 +699,4 @@ def dispatch_ml_task(task: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if not handler:
         raise ValueError(f"Unsupported ML task: {task}")
     return handler(payload)
+

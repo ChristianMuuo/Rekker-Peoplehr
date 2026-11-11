@@ -169,3 +169,4 @@ CREATE TABLE IF NOT EXISTS "peopleos_employee_training" (
 
 CREATE INDEX IF NOT EXISTS "peopleos_emp_training_org_emp_idx"
   ON "peopleos_employee_training" ("organization_id", "employee_id");
+
