@@ -1,0 +1,1 @@
+- [Leave policy defaults](leave-policy-defaults.md) — leave entitlements are organization-defined; never prefill statutory amounts.

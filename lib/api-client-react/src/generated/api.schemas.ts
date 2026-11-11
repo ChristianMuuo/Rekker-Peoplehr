@@ -284,21 +284,13 @@ export interface LeaveRequest {
   isDemo: boolean;
 }
 
-export type LeaveRequestInputLeaveType = typeof LeaveRequestInputLeaveType[keyof typeof LeaveRequestInputLeaveType];
-
-
-export const LeaveRequestInputLeaveType = {
-  annual: 'annual',
-  sick: 'sick',
-  parental: 'parental',
-  compassionate: 'compassionate',
-  unpaid: 'unpaid',
-  other: 'other',
-} as const;
-
 export interface LeaveRequestInput {
   employeeId: string;
-  leaveType: LeaveRequestInputLeaveType;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  leaveType: string;
   startDate: string;
   endDate: string;
   /**
@@ -306,6 +298,68 @@ export interface LeaveRequestInput {
      * @maxLength 1000
      */
   reason: string;
+}
+
+export type LeaveAccrualMethod = typeof LeaveAccrualMethod[keyof typeof LeaveAccrualMethod];
+
+
+export const LeaveAccrualMethod = {
+  annual: 'annual',
+  monthly: 'monthly',
+} as const;
+
+export interface LeavePolicy {
+  id: string;
+  code: string;
+  name: string;
+  /** @minimum 0 */
+  entitlementDays: number;
+  accrualMethod: LeaveAccrualMethod;
+  active: boolean;
+}
+
+export interface LeavePolicyInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minimum 0
+     * @maximum 366
+     */
+  entitlementDays: number;
+  accrualMethod: LeaveAccrualMethod;
+}
+
+export interface LeavePolicyUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minimum 0
+     * @maximum 366
+     */
+  entitlementDays: number;
+  accrualMethod: LeaveAccrualMethod;
+  active: boolean;
+}
+
+export interface LeaveBalance {
+  employeeId: string;
+  employeeName: string;
+  leaveType: string;
+  leaveTypeName: string;
+  year: number;
+  entitlementDays: number;
+  accruedDays: number;
+  usedDays: number;
+  pendingDays: number;
+  remainingDays: number;
+  accrualMethod: LeaveAccrualMethod;
+  active: boolean;
 }
 
 export type LeaveDecisionInputDecision = typeof LeaveDecisionInputDecision[keyof typeof LeaveDecisionInputDecision];
@@ -384,6 +438,15 @@ pageSize?: number;
 export type ListLeaveRequestsParams = {
 status?: LeaveRequestStatus;
 employeeId?: string;
+};
+
+export type ListLeaveBalancesParams = {
+employeeId?: string;
+/**
+ * @minimum 2000
+ * @maximum 2100
+ */
+year?: number;
 };
 
 export type ListAuditEventsParams = {

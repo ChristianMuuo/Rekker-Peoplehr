@@ -311,6 +311,8 @@ export const ListLeaveRequestsResponse = zod.array(ListLeaveRequestsResponseItem
 /**
  * @summary Submit a leave request for the signed-in employee
  */
+export const createLeaveRequestBodyLeaveTypeMax = 64;
+
 export const createLeaveRequestBodyReasonMin = 3;
 export const createLeaveRequestBodyReasonMax = 1000;
 
@@ -318,7 +320,7 @@ export const createLeaveRequestBodyReasonMax = 1000;
 
 export const CreateLeaveRequestBody = zod.object({
   "employeeId": zod.string(),
-  "leaveType": zod.enum(['annual', 'sick', 'parental', 'compassionate', 'unpaid', 'other']),
+  "leaveType": zod.string().min(1).max(createLeaveRequestBodyLeaveTypeMax),
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date(),
   "reason": zod.string().min(createLeaveRequestBodyReasonMin).max(createLeaveRequestBodyReasonMax)
@@ -340,6 +342,119 @@ export const CreateLeaveRequestResponse = zod.object({
   "decidedAt": zod.coerce.date().nullish(),
   "isDemo": zod.boolean()
 })
+
+
+/**
+ * @summary List leave types and entitlement rules for the organization
+ */
+export const listLeavePoliciesResponseEntitlementDaysMin = 0;
+
+
+
+export const ListLeavePoliciesResponseItem = zod.object({
+  "id": zod.string(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "entitlementDays": zod.number().int().min(listLeavePoliciesResponseEntitlementDaysMin),
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "active": zod.boolean()
+})
+export const ListLeavePoliciesResponse = zod.array(ListLeavePoliciesResponseItem)
+
+
+/**
+ * @summary Create an organization leave type and entitlement rule
+ */
+export const createLeavePolicyBodyNameMax = 80;
+
+export const createLeavePolicyBodyEntitlementDaysMin = 0;
+export const createLeavePolicyBodyEntitlementDaysMax = 366;
+
+
+
+export const CreateLeavePolicyBody = zod.object({
+  "name": zod.string().min(1).max(createLeavePolicyBodyNameMax),
+  "entitlementDays": zod.number().int().min(createLeavePolicyBodyEntitlementDaysMin).max(createLeavePolicyBodyEntitlementDaysMax),
+  "accrualMethod": zod.enum(['annual', 'monthly'])
+})
+
+export const createLeavePolicyResponseEntitlementDaysMin = 0;
+
+
+
+export const CreateLeavePolicyResponse = zod.object({
+  "id": zod.string(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "entitlementDays": zod.number().int().min(createLeavePolicyResponseEntitlementDaysMin),
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "active": zod.boolean()
+})
+
+
+/**
+ * @summary Update an organization leave type and entitlement rule
+ */
+export const UpdateLeavePolicyParams = zod.object({
+  "policyId": zod.coerce.string()
+})
+
+export const updateLeavePolicyBodyNameMax = 80;
+
+export const updateLeavePolicyBodyEntitlementDaysMin = 0;
+export const updateLeavePolicyBodyEntitlementDaysMax = 366;
+
+
+
+export const UpdateLeavePolicyBody = zod.object({
+  "name": zod.string().min(1).max(updateLeavePolicyBodyNameMax),
+  "entitlementDays": zod.number().int().min(updateLeavePolicyBodyEntitlementDaysMin).max(updateLeavePolicyBodyEntitlementDaysMax),
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "active": zod.boolean()
+})
+
+export const updateLeavePolicyResponseEntitlementDaysMin = 0;
+
+
+
+export const UpdateLeavePolicyResponse = zod.object({
+  "id": zod.string(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "entitlementDays": zod.number().int().min(updateLeavePolicyResponseEntitlementDaysMin),
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "active": zod.boolean()
+})
+
+
+/**
+ * @summary Get leave balances visible to the signed-in user
+ */
+export const listLeaveBalancesQueryYearMin = 2000;
+export const listLeaveBalancesQueryYearMax = 2100;
+
+
+
+export const ListLeaveBalancesQueryParams = zod.object({
+  "employeeId": zod.coerce.string().optional(),
+  "year": zod.coerce.number().int().min(listLeaveBalancesQueryYearMin).max(listLeaveBalancesQueryYearMax).optional()
+})
+
+export const ListLeaveBalancesResponseItem = zod.object({
+  "employeeId": zod.string(),
+  "employeeName": zod.string(),
+  "leaveType": zod.string(),
+  "leaveTypeName": zod.string(),
+  "year": zod.number().int(),
+  "entitlementDays": zod.number().int(),
+  "accruedDays": zod.number().int(),
+  "usedDays": zod.number().int(),
+  "pendingDays": zod.number().int(),
+  "remainingDays": zod.number().int(),
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "active": zod.boolean()
+})
+export const ListLeaveBalancesResponse = zod.array(ListLeaveBalancesResponseItem)
 
 
 /**

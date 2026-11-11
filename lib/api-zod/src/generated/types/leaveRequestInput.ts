@@ -5,11 +5,14 @@
  * API contract for Rekker PeopleOS
  * OpenAPI spec version: 0.1.0
  */
-import type { LeaveRequestInputLeaveType } from './leaveRequestInputLeaveType';
 
 export interface LeaveRequestInput {
   employeeId: string;
-  leaveType: LeaveRequestInputLeaveType;
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  leaveType: string;
   startDate: Date;
   endDate: Date;
   /**

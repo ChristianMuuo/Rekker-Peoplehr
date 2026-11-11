@@ -1,19 +1,28 @@
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
+  CreateLeavePolicyBody,
+  CreateLeavePolicyResponse,
   CreateLeaveRequestBody,
   CreateLeaveRequestResponse,
   DecideLeaveRequestBody,
   DecideLeaveRequestParams,
   DecideLeaveRequestResponse,
   ListApprovalsResponse,
+  ListLeaveBalancesQueryParams,
+  ListLeaveBalancesResponse,
+  ListLeavePoliciesResponse,
   ListLeaveRequestsQueryParams,
   ListLeaveRequestsResponse,
+  UpdateLeavePolicyBody,
+  UpdateLeavePolicyParams,
+  UpdateLeavePolicyResponse,
 } from "@workspace/api-zod";
 import {
   auditEventsTable,
   db,
   employeesTable,
+  leavePoliciesTable,
   leaveRequestsTable,
 } from "@workspace/db";
 import {
@@ -117,6 +126,39 @@ function businessDaysBetween(start: string, end: string): number {
   return days;
 }
 
+function businessDaysForYear(start: string, end: string, year: number): number {
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const clippedStart = start < yearStart ? yearStart : start;
+  const clippedEnd = end > yearEnd ? yearEnd : end;
+  return clippedStart > clippedEnd
+    ? 0
+    : businessDaysBetween(clippedStart, clippedEnd);
+}
+
+function businessDaysByYear(start: string, end: string): Map<number, number> {
+  const days = new Map<number, number>();
+  const firstYear = Number(start.slice(0, 4));
+  const lastYear = Number(end.slice(0, 4));
+  for (let year = firstYear; year <= lastYear; year += 1) {
+    days.set(year, businessDaysForYear(start, end, year));
+  }
+  return days;
+}
+
+function accruedDaysForYear(
+  policy: { entitlementDays: number; accrualMethod: string },
+  year: number,
+  asOf: Date,
+): number {
+  if (year < asOf.getUTCFullYear()) return policy.entitlementDays;
+  if (year > asOf.getUTCFullYear()) return 0;
+  if (policy.accrualMethod === "monthly") {
+    return Math.floor((policy.entitlementDays * (asOf.getUTCMonth() + 1)) / 12);
+  }
+  return policy.entitlementDays;
+}
+
 function dateOnly(value: Date | string): string {
   return value instanceof Date ? value.toISOString().slice(0, 10) : value.slice(0, 10);
 }
@@ -126,30 +168,45 @@ async function serializeRequests(
 ) {
   if (!requests.length) return [];
   const employeeIds = [...new Set(requests.map((request) => request.employeeId))];
-  const employees = await db
-    .select({
-      id: employeesTable.id,
-      firstName: employeesTable.firstName,
-      lastName: employeesTable.lastName,
-    })
-    .from(employeesTable)
-    .where(
-      and(
-        eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
-        inArray(employeesTable.id, employeeIds),
+  const leaveTypes = [...new Set(requests.map((request) => request.leaveType))];
+  const [employees, policies] = await Promise.all([
+    db
+      .select({
+        id: employeesTable.id,
+        firstName: employeesTable.firstName,
+        lastName: employeesTable.lastName,
+      })
+      .from(employeesTable)
+      .where(
+        and(
+          eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          inArray(employeesTable.id, employeeIds),
+        ),
       ),
-    );
+    db
+      .select({ code: leavePoliciesTable.code, name: leavePoliciesTable.name })
+      .from(leavePoliciesTable)
+      .where(
+        and(
+          eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          inArray(leavePoliciesTable.code, leaveTypes),
+        ),
+      ),
+  ]);
   const employeeNames = new Map(
     employees.map((employee) => [
       employee.id,
       `${employee.firstName} ${employee.lastName}`,
     ]),
   );
+  const leaveTypeNames = new Map(
+    policies.map((policy) => [policy.code, policy.name]),
+  );
   return requests.map((request) => ({
     id: request.id,
     employeeId: request.employeeId,
     employeeName: employeeNames.get(request.employeeId) ?? "Employee",
-    leaveType: request.leaveType,
+    leaveType: leaveTypeNames.get(request.leaveType) ?? request.leaveType,
     startDate: request.startDate,
     endDate: request.endDate,
     days: request.days,
@@ -250,6 +307,349 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
   res.json(ListLeaveRequestsResponse.parse(await serializeRequests(requests)));
 });
 
+router.get("/leave-policies", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const conditions = [
+    eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+  ];
+  if (!adminRoles.includes(membership.role)) {
+    conditions.push(eq(leavePoliciesTable.active, true));
+  }
+  const policies = await db
+    .select()
+    .from(leavePoliciesTable)
+    .where(and(...conditions))
+    .orderBy(leavePoliciesTable.name);
+  res.json(
+    ListLeavePoliciesResponse.parse(
+      policies.map((policy) => ({
+        id: policy.id,
+        code: policy.code,
+        name: policy.name,
+        entitlementDays: policy.entitlementDays,
+        accrualMethod: policy.accrualMethod,
+        active: policy.active,
+      })),
+    ),
+  );
+});
+
+router.post("/leave-policies", async (req, res): Promise<void> => {
+  const body = CreateLeavePolicyBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+  const membership = await requireRoles(req, res, adminRoles);
+  if (!membership) return;
+  const name = body.data.name.trim();
+  const code = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 64)
+    .replace(/-$/g, "");
+  if (!code) {
+    res.status(400).json({ error: "Enter a leave type name with letters or numbers." });
+    return;
+  }
+  const organization = await getPeopleOsOrganization();
+  if (!organization) {
+    res.status(503).json({ error: "PeopleOS organization is not initialized." });
+    return;
+  }
+  const [existing] = await db
+    .select({ id: leavePoliciesTable.id })
+    .from(leavePoliciesTable)
+    .where(
+      and(
+        eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+        eq(leavePoliciesTable.code, code),
+      ),
+    )
+    .limit(1);
+  if (existing) {
+    res.status(409).json({ error: "A leave type with this name already exists." });
+    return;
+  }
+  const policy = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(leavePoliciesTable)
+      .values({
+        organizationId: PEOPLEOS_ORGANIZATION_ID,
+        code,
+        name,
+        entitlementDays: body.data.entitlementDays,
+        accrualMethod: body.data.accrualMethod,
+        active: true,
+        createdByUserId: membership.userId,
+      })
+      .returning();
+    if (!created) return null;
+    await tx.insert(auditEventsTable).values({
+      organizationId: PEOPLEOS_ORGANIZATION_ID,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "leave_policy_created",
+      targetType: "leave_policy",
+      targetId: created.id,
+      summary: `The ${name} leave policy was created.`,
+      isDemo: organization.isDemo,
+    });
+    return created;
+  });
+  if (!policy) {
+    res.status(500).json({ error: "Leave policy could not be created." });
+    return;
+  }
+  res.status(201).json(
+    CreateLeavePolicyResponse.parse({
+      id: policy.id,
+      code: policy.code,
+      name: policy.name,
+      entitlementDays: policy.entitlementDays,
+      accrualMethod: policy.accrualMethod,
+      active: policy.active,
+    }),
+  );
+});
+
+router.patch(
+  "/leave-policies/:policyId",
+  async (req, res): Promise<void> => {
+    const params = UpdateLeavePolicyParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const body = UpdateLeavePolicyBody.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: body.error.message });
+      return;
+    }
+    const membership = await requireRoles(req, res, adminRoles);
+    if (!membership) return;
+    const name = body.data.name.trim();
+    if (!name) {
+      res.status(400).json({ error: "Leave type name cannot be blank." });
+      return;
+    }
+    const organization = await getPeopleOsOrganization();
+    if (!organization) {
+      res.status(503).json({ error: "PeopleOS organization is not initialized." });
+      return;
+    }
+    const updated = await db.transaction(async (tx) => {
+      const [policy] = await tx
+        .update(leavePoliciesTable)
+        .set({
+          name,
+          entitlementDays: body.data.entitlementDays,
+          accrualMethod: body.data.accrualMethod,
+          active: body.data.active,
+        })
+        .where(
+          and(
+            eq(leavePoliciesTable.id, params.data.policyId),
+            eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          ),
+        )
+        .returning();
+      if (!policy) return null;
+      await tx.insert(auditEventsTable).values({
+        organizationId: PEOPLEOS_ORGANIZATION_ID,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "leave_policy_updated",
+        targetType: "leave_policy",
+        targetId: policy.id,
+        summary: `The ${policy.name} leave policy was updated.`,
+        isDemo: organization.isDemo,
+      });
+      return policy;
+    });
+    if (!updated) {
+      res.status(404).json({ error: "Leave policy not found." });
+      return;
+    }
+    res.json(
+      UpdateLeavePolicyResponse.parse({
+        id: updated.id,
+        code: updated.code,
+        name: updated.name,
+        entitlementDays: updated.entitlementDays,
+        accrualMethod: updated.accrualMethod,
+        active: updated.active,
+      }),
+    );
+  },
+);
+
+router.get("/leave-balances", async (req, res): Promise<void> => {
+  const query = ListLeaveBalancesQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const isOrganizationAdmin = adminRoles.includes(membership.role);
+  let permittedEmployees: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  }[] = [];
+
+  if (isOrganizationAdmin) {
+    const conditions = [
+      eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+    ];
+    if (query.data.employeeId) {
+      conditions.push(eq(employeesTable.id, query.data.employeeId));
+    }
+    permittedEmployees = await db
+      .select({
+        id: employeesTable.id,
+        firstName: employeesTable.firstName,
+        lastName: employeesTable.lastName,
+      })
+      .from(employeesTable)
+      .where(and(...conditions));
+  } else if (membership.role === PEOPLEOS_ROLES.departmentManager) {
+    const conditions = [
+      eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+    ];
+    if (membership.employeeId) {
+      conditions.push(
+        inArray(employeesTable.id, [
+          membership.employeeId,
+          ...(
+            await db
+              .select({ id: employeesTable.id })
+              .from(employeesTable)
+              .where(
+                and(
+                  eq(
+                    employeesTable.organizationId,
+                    PEOPLEOS_ORGANIZATION_ID,
+                  ),
+                  eq(employeesTable.managerId, membership.employeeId),
+                ),
+              )
+          ).map((employee) => employee.id),
+        ]),
+      );
+    } else {
+      res.json(ListLeaveBalancesResponse.parse([]));
+      return;
+    }
+    permittedEmployees = await db
+      .select({
+        id: employeesTable.id,
+        firstName: employeesTable.firstName,
+        lastName: employeesTable.lastName,
+      })
+      .from(employeesTable)
+      .where(and(...conditions));
+  } else if (membership.employeeId) {
+    permittedEmployees = await db
+      .select({
+        id: employeesTable.id,
+        firstName: employeesTable.firstName,
+        lastName: employeesTable.lastName,
+      })
+      .from(employeesTable)
+      .where(
+        and(
+          eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(employeesTable.id, membership.employeeId),
+        ),
+      );
+  }
+
+  if (
+    query.data.employeeId &&
+    !permittedEmployees.some((employee) => employee.id === query.data.employeeId)
+  ) {
+    res.status(403).json({ error: "You cannot view leave balances for this employee." });
+    return;
+  }
+  if (!permittedEmployees.length) {
+    res.json(ListLeaveBalancesResponse.parse([]));
+    return;
+  }
+
+  const year = query.data.year ?? new Date().getUTCFullYear();
+  const employeeIds = permittedEmployees.map((employee) => employee.id);
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const [policies, requests] = await Promise.all([
+    db
+      .select()
+      .from(leavePoliciesTable)
+      .where(eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID))
+      .orderBy(leavePoliciesTable.name),
+    db
+      .select()
+      .from(leaveRequestsTable)
+      .where(
+        and(
+          eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          inArray(leaveRequestsTable.employeeId, employeeIds),
+          inArray(leaveRequestsTable.status, ["pending", "approved"]),
+          lte(leaveRequestsTable.startDate, yearEnd),
+          gte(leaveRequestsTable.endDate, yearStart),
+        ),
+      ),
+  ]);
+  const employeesById = new Map(
+    permittedEmployees.map((employee) => [
+      employee.id,
+      `${employee.firstName} ${employee.lastName}`,
+    ]),
+  );
+  const balances = permittedEmployees.flatMap((employee) =>
+    policies.map((policy) => {
+      const relevantRequests = requests.filter(
+        (request) =>
+          request.employeeId === employee.id &&
+          request.leaveType === policy.code,
+      );
+      const usedDays = relevantRequests
+        .filter((request) => request.status === "approved")
+        .reduce(
+          (total, request) =>
+            total + businessDaysForYear(request.startDate, request.endDate, year),
+          0,
+        );
+      const pendingDays = relevantRequests
+        .filter((request) => request.status === "pending")
+        .reduce(
+          (total, request) =>
+            total + businessDaysForYear(request.startDate, request.endDate, year),
+          0,
+        );
+      const accruedDays = accruedDaysForYear(policy, year, new Date());
+      return {
+        employeeId: employee.id,
+        employeeName: employeesById.get(employee.id) ?? "Employee",
+        leaveType: policy.code,
+        leaveTypeName: policy.name,
+        year,
+        entitlementDays: policy.entitlementDays,
+        accruedDays,
+        usedDays,
+        pendingDays,
+        remainingDays: accruedDays - usedDays - pendingDays,
+        accrualMethod: policy.accrualMethod,
+        active: policy.active,
+      };
+    }),
+  );
+  res.json(ListLeaveBalancesResponse.parse(balances));
+});
+
 router.post("/leave-requests", async (req, res): Promise<void> => {
   const body = CreateLeaveRequestBody.safeParse(req.body);
   if (!body.success) {
@@ -331,33 +731,92 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Leave requests in demo mode must use synthetic employee records." });
     return;
   }
-  const overlaps = await db
-    .select({ id: leaveRequestsTable.id })
-    .from(leaveRequestsTable)
-    .where(
-      and(
-        eq(leaveRequestsTable.organizationId, organization.id),
-        eq(leaveRequestsTable.employeeId, employee.id),
-        inArray(leaveRequestsTable.status, ["pending", "approved"]),
-        lte(leaveRequestsTable.startDate, endDate),
-        gte(leaveRequestsTable.endDate, startDate),
-      ),
-    )
-    .limit(1);
-  if (overlaps.length) {
-    res.status(409).json({
-      error: "This request overlaps an existing pending or approved leave request.",
-    });
-    return;
-  }
+  const requestResult = await db.transaction(async (tx) => {
+    const [lockedEmployee] = await tx
+      .select({ id: employeesTable.id })
+      .from(employeesTable)
+      .where(
+        and(
+          eq(employeesTable.id, employee.id),
+          eq(employeesTable.organizationId, organization.id),
+        ),
+      )
+      .for("update");
+    if (!lockedEmployee) return { kind: "employee_missing" as const };
 
-  const request = await db.transaction(async (tx) => {
+    const [policy] = await tx
+      .select()
+      .from(leavePoliciesTable)
+      .where(
+        and(
+          eq(leavePoliciesTable.organizationId, organization.id),
+          eq(leavePoliciesTable.code, input.leaveType),
+          eq(leavePoliciesTable.active, true),
+        ),
+      )
+      .limit(1);
+    if (!policy) return { kind: "policy_unavailable" as const };
+
+    const overlaps = await tx
+      .select({ id: leaveRequestsTable.id })
+      .from(leaveRequestsTable)
+      .where(
+        and(
+          eq(leaveRequestsTable.organizationId, organization.id),
+          eq(leaveRequestsTable.employeeId, employee.id),
+          inArray(leaveRequestsTable.status, ["pending", "approved"]),
+          lte(leaveRequestsTable.startDate, endDate),
+          gte(leaveRequestsTable.endDate, startDate),
+        ),
+      )
+      .limit(1);
+    if (overlaps.length) return { kind: "overlap" as const };
+
+    const existingRequests = await tx
+      .select({
+        startDate: leaveRequestsTable.startDate,
+        endDate: leaveRequestsTable.endDate,
+      })
+      .from(leaveRequestsTable)
+      .where(
+        and(
+          eq(leaveRequestsTable.organizationId, organization.id),
+          eq(leaveRequestsTable.employeeId, employee.id),
+          eq(leaveRequestsTable.leaveType, policy.code),
+          inArray(leaveRequestsTable.status, ["pending", "approved"]),
+        ),
+      );
+    const requestYearDays = businessDaysByYear(startDate, endDate);
+    for (const [year, requestDaysForYear] of requestYearDays) {
+      const leaveYearStart = `${year}-01-01`;
+      const now = new Date();
+      const requestedStart = new Date(`${startDate}T00:00:00.000Z`);
+      const asOf =
+        startDate.slice(0, 4) === String(year)
+          ? new Date(Math.max(requestedStart.getTime(), now.getTime()))
+          : new Date(`${leaveYearStart}T00:00:00.000Z`);
+      const accrued = accruedDaysForYear(policy, year, asOf);
+      const reservedDays = existingRequests.reduce(
+        (total, request) =>
+          total + businessDaysForYear(request.startDate, request.endDate, year),
+        0,
+      );
+      if (reservedDays + requestDaysForYear > accrued) {
+        return {
+          kind: "insufficient_balance" as const,
+          year,
+          remainingDays: accrued - reservedDays,
+          leaveTypeName: policy.name,
+        };
+      }
+    }
+
     const [created] = await tx
       .insert(leaveRequestsTable)
       .values({
         organizationId: organization.id,
         employeeId: employee.id,
-        leaveType: input.leaveType,
+        leaveType: policy.code,
         startDate,
         endDate,
         days,
@@ -367,7 +826,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         isDemo: organization.isDemo,
       })
       .returning();
-    if (!created) return null;
+    if (!created) return { kind: "insert_failed" as const };
     await tx.insert(auditEventsTable).values({
       organizationId: organization.id,
       actorUserId: membership.userId,
@@ -378,13 +837,35 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       summary: "A leave request was submitted.",
       isDemo: organization.isDemo,
     });
-    return created;
+    return { kind: "created" as const, request: created };
   });
-  if (!request) {
+  if (requestResult.kind === "policy_unavailable") {
+    res.status(400).json({
+      error: "Choose an active leave type configured by your organization.",
+    });
+    return;
+  }
+  if (requestResult.kind === "overlap") {
+    res.status(409).json({
+      error: "This request overlaps an existing pending or approved leave request.",
+    });
+    return;
+  }
+  if (requestResult.kind === "insufficient_balance") {
+    res.status(409).json({
+      error: `This request exceeds the available ${requestResult.leaveTypeName} balance for ${requestResult.year}. ${requestResult.remainingDays} day(s) are available.`,
+    });
+    return;
+  }
+  if (requestResult.kind !== "created") {
+    if (requestResult.kind === "employee_missing") {
+      res.status(404).json({ error: "Employee not found in this organization." });
+      return;
+    }
     res.status(500).json({ error: "Leave request could not be submitted." });
     return;
   }
-  const [response] = await serializeRequests([request]);
+  const [response] = await serializeRequests([requestResult.request]);
   res.status(201).json(CreateLeaveRequestResponse.parse(response));
 });
 

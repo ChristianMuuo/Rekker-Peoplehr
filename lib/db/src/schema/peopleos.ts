@@ -132,6 +132,39 @@ export const membershipsTable = pgTable(
   ],
 );
 
+export const leavePoliciesTable = pgTable(
+  "peopleos_leave_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    entitlementDays: integer("entitlement_days").notNull().default(0),
+    accrualMethod: text("accrual_method").notNull().default("annual"),
+    active: boolean("active").notNull().default(true),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_policy_org_code_uq").on(
+      table.organizationId,
+      table.code,
+    ),
+    index("peopleos_leave_policy_org_active_idx").on(
+      table.organizationId,
+      table.active,
+    ),
+  ],
+);
+
 export const leaveRequestsTable = pgTable(
   "peopleos_leave_requests",
   {
@@ -472,9 +505,16 @@ export const insertEmployeeSchema = createInsertSchema(employeesTable).omit({
   createdAt: true,
   updatedAt: true,
 });
+export const insertLeavePolicySchema = createInsertSchema(leavePoliciesTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type InsertLeavePolicy = z.infer<typeof insertLeavePolicySchema>;
 export type EmployeeRecord = typeof employeesTable.$inferSelect;
 export type MembershipRecord = typeof membershipsTable.$inferSelect;
+export type LeavePolicyRecord = typeof leavePoliciesTable.$inferSelect;
 export type LeaveRequestRecord = typeof leaveRequestsTable.$inferSelect;
 export type JobRequisitionRecord = typeof jobRequisitionsTable.$inferSelect;
 export type CandidateRecord = typeof candidatesTable.$inferSelect;

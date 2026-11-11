@@ -207,6 +207,89 @@ paths:
           description: Invalid dates or request
         "401":
           description: Sign-in required
+  /leave-policies:
+    get:
+      operationId: listLeavePolicies
+      tags: [leave]
+      summary: List leave types and entitlement rules for the organization
+      responses:
+        "200":
+          description: Organization leave policies visible to the signed-in user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeavePolicy"
+    post:
+      operationId: createLeavePolicy
+      tags: [leave]
+      summary: Create an organization leave type and entitlement rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeavePolicyInput"
+      responses:
+        "201":
+          description: Leave policy created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeavePolicy"
+        "403":
+          description: Insufficient permission
+  /leave-policies/{policyId}:
+    patch:
+      operationId: updateLeavePolicy
+      tags: [leave]
+      summary: Update an organization leave type and entitlement rule
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeavePolicyUpdate"
+      responses:
+        "200":
+          description: Leave policy updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeavePolicy"
+        "403":
+          description: Insufficient permission
+        "404":
+          description: Leave policy not found
+  /leave-balances:
+    get:
+      operationId: listLeaveBalances
+      tags: [leave]
+      summary: Get leave balances visible to the signed-in user
+      parameters:
+        - name: employeeId
+          in: query
+          schema: { type: string }
+        - name: year
+          in: query
+          schema: { type: integer, minimum: 2000, maximum: 2100 }
+      responses:
+        "200":
+          description: Used, pending, and remaining leave balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveBalance"
+        "403":
+          description: Employee is outside the user's permitted scope
   /leave-requests/{requestId}/decision:
     post:
       operationId: decideLeaveRequest
@@ -451,10 +534,54 @@ components:
       required: [employeeId, leaveType, startDate, endDate, reason]
       properties:
         employeeId: { type: string }
-        leaveType: { type: string, enum: [annual, sick, parental, compassionate, unpaid, other] }
+        leaveType: { type: string, minLength: 1, maxLength: 64 }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         reason: { type: string, minLength: 3, maxLength: 1000 }
+    LeaveAccrualMethod:
+      type: string
+      enum: [annual, monthly]
+    LeavePolicy:
+      type: object
+      required: [id, code, name, entitlementDays, accrualMethod, active]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        entitlementDays: { type: integer, minimum: 0 }
+        accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
+        active: { type: boolean }
+    LeavePolicyInput:
+      type: object
+      required: [name, entitlementDays, accrualMethod]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
+    LeavePolicyUpdate:
+      type: object
+      required: [name, entitlementDays, accrualMethod, active]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
+        active: { type: boolean }
+    LeaveBalance:
+      type: object
+      required: [employeeId, employeeName, leaveType, leaveTypeName, year, entitlementDays, accruedDays, usedDays, pendingDays, remainingDays, accrualMethod, active]
+      properties:
+        employeeId: { type: string }
+        employeeName: { type: string }
+        leaveType: { type: string }
+        leaveTypeName: { type: string }
+        year: { type: integer }
+        entitlementDays: { type: integer }
+        accruedDays: { type: integer }
+        usedDays: { type: integer }
+        pendingDays: { type: integer }
+        remainingDays: { type: integer }
+        accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
+        active: { type: boolean }
     LeaveDecisionInput:
       type: object
       required: [decision]
