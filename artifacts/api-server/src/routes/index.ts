@@ -9,6 +9,11 @@ import payrollRouter from "./payroll";
 import performanceRouter from "./performance";
 import documentsRouter from "./documents";
 import aiRouter from "./ai";
+import expensesRouter from "./expenses";
+import assetsRouter from "./assets";
+import onboardingRouter from "./onboarding";
+import learningRouter from "./learning";
+import mlRouter from "./ml";
 
 const router: IRouter = Router();
 
@@ -22,5 +27,10 @@ router.use(payrollRouter);
 router.use(performanceRouter);
 router.use(documentsRouter);
 router.use(aiRouter);
+router.use(expensesRouter);
+router.use(assetsRouter);
+router.use(onboardingRouter);
+router.use(learningRouter);
+router.use(mlRouter);
 
 export default router;

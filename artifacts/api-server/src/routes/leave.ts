@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
@@ -25,15 +26,29 @@ import {
   leavePoliciesTable,
   leaveRequestsTable,
 } from "@workspace/db";
+import { recordAuditEvent } from "../lib/auditService";
+import { DEMO_EMPLOYEES_LIST } from "./peopleos";
 import {
   ensureMembership,
   getPeopleOsOrganization,
-  PEOPLEOS_ORGANIZATION_ID,
   PEOPLEOS_ROLES,
   requireRoles,
 } from "../middlewares/peopleosAccess";
 
 const router: IRouter = Router();
+
+export interface DemoLeavePolicyItem {
+  id: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  entitlementDays: number;
+  accrualMethod: "annual" | "monthly";
+  active: boolean;
+}
+
+// Per-organization leave policies start empty by design (never prefilled with statutory amounts).
+export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] = [];
 const approverRoles = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrManager,
@@ -164,6 +179,7 @@ function dateOnly(value: Date | string): string {
 }
 
 async function serializeRequests(
+  organizationId: string,
   requests: (typeof leaveRequestsTable.$inferSelect)[],
 ) {
   if (!requests.length) return [];
@@ -179,7 +195,7 @@ async function serializeRequests(
       .from(employeesTable)
       .where(
         and(
-          eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(employeesTable.organizationId, organizationId),
           inArray(employeesTable.id, employeeIds),
         ),
       ),
@@ -188,7 +204,7 @@ async function serializeRequests(
       .from(leavePoliciesTable)
       .where(
         and(
-          eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(leavePoliciesTable.organizationId, organizationId),
           inArray(leavePoliciesTable.code, leaveTypes),
         ),
       ),
@@ -221,6 +237,7 @@ async function serializeRequests(
 }
 
 async function canManageRequest(
+  organizationId: string,
   managerEmployeeId: string,
   role: string,
   employeeId: string,
@@ -233,7 +250,7 @@ async function canManageRequest(
     .where(
       and(
         eq(employeesTable.id, employeeId),
-        eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+        eq(employeesTable.organizationId, organizationId),
       ),
     )
     .limit(1);
@@ -250,6 +267,9 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
   if (!membership) return;
   if (!process.env.DATABASE_URL) {
     let items = [...DEMO_LEAVE_STORE];
+    if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId) {
+      items = items.filter((r) => r.employeeId === membership.employeeId);
+    }
     if (query.data.status) {
       items = items.filter((r) => r.status === query.data.status);
     }
@@ -260,7 +280,7 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
     return;
   }
   const conditions = [
-    eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+    eq(leaveRequestsTable.organizationId, membership.organizationId),
   ];
   if (query.data.status) {
     conditions.push(eq(leaveRequestsTable.status, query.data.status));
@@ -284,7 +304,7 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
       .from(employeesTable)
       .where(
         and(
-          eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(employeesTable.organizationId, membership.organizationId),
           eq(employeesTable.managerId, membership.employeeId),
         ),
       );
@@ -304,14 +324,41 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
     .from(leaveRequestsTable)
     .where(and(...conditions))
     .orderBy(leaveRequestsTable.submittedAt);
-  res.json(ListLeaveRequestsResponse.parse(await serializeRequests(requests)));
+  res.json(
+    ListLeaveRequestsResponse.parse(
+      await serializeRequests(membership.organizationId, requests),
+    ),
+  );
 });
 
 router.get("/leave-policies", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  if (!process.env.DATABASE_URL) {
+    let items = DEMO_LEAVE_POLICIES.filter(
+      (p) => p.organizationId === membership.organizationId,
+    );
+    if (!adminRoles.includes(membership.role)) {
+      items = items.filter((p) => p.active);
+    }
+    res.json(
+      ListLeavePoliciesResponse.parse(
+        items
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((policy) => ({
+            id: policy.id,
+            code: policy.code,
+            name: policy.name,
+            entitlementDays: policy.entitlementDays,
+            accrualMethod: policy.accrualMethod,
+            active: policy.active,
+          })),
+      ),
+    );
+    return;
+  }
   const conditions = [
-    eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+    eq(leavePoliciesTable.organizationId, membership.organizationId),
   ];
   if (!adminRoles.includes(membership.role)) {
     conditions.push(eq(leavePoliciesTable.active, true));
@@ -354,9 +401,49 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Enter a leave type name with letters or numbers." });
     return;
   }
-  const organization = await getPeopleOsOrganization();
+  const organization = await getPeopleOsOrganization(membership.organizationId);
   if (!organization) {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
+    return;
+  }
+  if (!process.env.DATABASE_URL) {
+    const existing = DEMO_LEAVE_POLICIES.find(
+      (p) => p.organizationId === membership.organizationId && p.code === code,
+    );
+    if (existing) {
+      res.status(409).json({ error: "A leave type with this name already exists." });
+      return;
+    }
+    const created: DemoLeavePolicyItem = {
+      id: crypto.randomUUID(),
+      organizationId: membership.organizationId,
+      code,
+      name,
+      entitlementDays: body.data.entitlementDays,
+      accrualMethod: body.data.accrualMethod,
+      active: true,
+    };
+    DEMO_LEAVE_POLICIES.push(created);
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "leave_policy_created",
+      targetType: "leave_policy",
+      targetId: created.id,
+      summary: `The ${name} leave policy was created.`,
+      isDemo: organization.isDemo,
+    });
+    res.status(201).json(
+      CreateLeavePolicyResponse.parse({
+        id: created.id,
+        code: created.code,
+        name: created.name,
+        entitlementDays: created.entitlementDays,
+        accrualMethod: created.accrualMethod,
+        active: created.active,
+      }),
+    );
     return;
   }
   const [existing] = await db
@@ -364,7 +451,7 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
     .from(leavePoliciesTable)
     .where(
       and(
-        eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+        eq(leavePoliciesTable.organizationId, membership.organizationId),
         eq(leavePoliciesTable.code, code),
       ),
     )
@@ -377,7 +464,7 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
     const [created] = await tx
       .insert(leavePoliciesTable)
       .values({
-        organizationId: PEOPLEOS_ORGANIZATION_ID,
+        organizationId: membership.organizationId,
         code,
         name,
         entitlementDays: body.data.entitlementDays,
@@ -388,7 +475,7 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       .returning();
     if (!created) return null;
     await tx.insert(auditEventsTable).values({
-      organizationId: PEOPLEOS_ORGANIZATION_ID,
+      organizationId: membership.organizationId,
       actorUserId: membership.userId,
       actor: membership.role,
       action: "leave_policy_created",
@@ -435,9 +522,45 @@ router.patch(
       res.status(400).json({ error: "Leave type name cannot be blank." });
       return;
     }
-    const organization = await getPeopleOsOrganization();
+    const organization = await getPeopleOsOrganization(membership.organizationId);
     if (!organization) {
       res.status(503).json({ error: "PeopleOS organization is not initialized." });
+      return;
+    }
+    if (!process.env.DATABASE_URL) {
+      const target = DEMO_LEAVE_POLICIES.find(
+        (p) =>
+          p.id === params.data.policyId &&
+          p.organizationId === membership.organizationId,
+      );
+      if (!target) {
+        res.status(404).json({ error: "Leave policy not found." });
+        return;
+      }
+      target.name = name;
+      target.entitlementDays = body.data.entitlementDays;
+      target.accrualMethod = body.data.accrualMethod;
+      target.active = body.data.active;
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "leave_policy_updated",
+        targetType: "leave_policy",
+        targetId: target.id,
+        summary: `The ${target.name} leave policy was updated.`,
+        isDemo: organization.isDemo,
+      });
+      res.json(
+        UpdateLeavePolicyResponse.parse({
+          id: target.id,
+          code: target.code,
+          name: target.name,
+          entitlementDays: target.entitlementDays,
+          accrualMethod: target.accrualMethod,
+          active: target.active,
+        }),
+      );
       return;
     }
     const updated = await db.transaction(async (tx) => {
@@ -452,13 +575,13 @@ router.patch(
         .where(
           and(
             eq(leavePoliciesTable.id, params.data.policyId),
-            eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+            eq(leavePoliciesTable.organizationId, membership.organizationId),
           ),
         )
         .returning();
       if (!policy) return null;
       await tx.insert(auditEventsTable).values({
-        organizationId: PEOPLEOS_ORGANIZATION_ID,
+        organizationId: membership.organizationId,
         actorUserId: membership.userId,
         actor: membership.role,
         action: "leave_policy_updated",
@@ -495,6 +618,90 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
   const isOrganizationAdmin = adminRoles.includes(membership.role);
+  const year = query.data.year ?? new Date().getUTCFullYear();
+
+  if (!process.env.DATABASE_URL) {
+    let permittedDemoEmployees = isOrganizationAdmin
+      ? DEMO_EMPLOYEES_LIST
+      : membership.role === PEOPLEOS_ROLES.departmentManager && membership.employeeId
+        ? DEMO_EMPLOYEES_LIST.filter(
+            (e) =>
+              e.id === membership.employeeId ||
+              e.managerId === membership.employeeId,
+          )
+        : membership.employeeId
+          ? DEMO_EMPLOYEES_LIST.filter((e) => e.id === membership.employeeId)
+          : [];
+
+    if (query.data.employeeId) {
+      if (!permittedDemoEmployees.some((e) => e.id === query.data.employeeId)) {
+        res
+          .status(403)
+          .json({ error: "You cannot view leave balances for this employee." });
+        return;
+      }
+      permittedDemoEmployees = permittedDemoEmployees.filter(
+        (e) => e.id === query.data.employeeId,
+      );
+    }
+
+    const policies = DEMO_LEAVE_POLICIES.filter(
+      (p) => p.organizationId === membership.organizationId,
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    const balances = permittedDemoEmployees.flatMap((employee) =>
+      policies.map((policy) => {
+        const relevantRequests = DEMO_LEAVE_STORE.filter(
+          (request) =>
+            request.employeeId === employee.id &&
+            request.leaveType === policy.code &&
+            (request.status === "approved" || request.status === "pending"),
+        );
+        const usedDays = relevantRequests
+          .filter((request) => request.status === "approved")
+          .reduce(
+            (total, request) =>
+              total +
+              businessDaysForYear(
+                dateOnly(request.startDate),
+                dateOnly(request.endDate),
+                year,
+              ),
+            0,
+          );
+        const pendingDays = relevantRequests
+          .filter((request) => request.status === "pending")
+          .reduce(
+            (total, request) =>
+              total +
+              businessDaysForYear(
+                dateOnly(request.startDate),
+                dateOnly(request.endDate),
+                year,
+              ),
+            0,
+          );
+        const accruedDays = accruedDaysForYear(policy, year, new Date());
+        return {
+          employeeId: employee.id,
+          employeeName: `${employee.firstName} ${employee.lastName}`,
+          leaveType: policy.code,
+          leaveTypeName: policy.name,
+          year,
+          entitlementDays: policy.entitlementDays,
+          accruedDays,
+          usedDays,
+          pendingDays,
+          remainingDays: accruedDays - usedDays - pendingDays,
+          accrualMethod: policy.accrualMethod,
+          active: policy.active,
+        };
+      }),
+    );
+    res.json(ListLeaveBalancesResponse.parse(balances));
+    return;
+  }
+
   let permittedEmployees: {
     id: string;
     firstName: string;
@@ -503,7 +710,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
 
   if (isOrganizationAdmin) {
     const conditions = [
-      eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+      eq(employeesTable.organizationId, membership.organizationId),
     ];
     if (query.data.employeeId) {
       conditions.push(eq(employeesTable.id, query.data.employeeId));
@@ -518,7 +725,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
       .where(and(...conditions));
   } else if (membership.role === PEOPLEOS_ROLES.departmentManager) {
     const conditions = [
-      eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+      eq(employeesTable.organizationId, membership.organizationId),
     ];
     if (membership.employeeId) {
       conditions.push(
@@ -530,10 +737,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
               .from(employeesTable)
               .where(
                 and(
-                  eq(
-                    employeesTable.organizationId,
-                    PEOPLEOS_ORGANIZATION_ID,
-                  ),
+                  eq(employeesTable.organizationId, membership.organizationId),
                   eq(employeesTable.managerId, membership.employeeId),
                 ),
               )
@@ -562,7 +766,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
       .from(employeesTable)
       .where(
         and(
-          eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(employeesTable.organizationId, membership.organizationId),
           eq(employeesTable.id, membership.employeeId),
         ),
       );
@@ -580,7 +784,6 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
     return;
   }
 
-  const year = query.data.year ?? new Date().getUTCFullYear();
   const employeeIds = permittedEmployees.map((employee) => employee.id);
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year}-12-31`;
@@ -588,14 +791,14 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
     db
       .select()
       .from(leavePoliciesTable)
-      .where(eq(leavePoliciesTable.organizationId, PEOPLEOS_ORGANIZATION_ID))
+      .where(eq(leavePoliciesTable.organizationId, membership.organizationId))
       .orderBy(leavePoliciesTable.name),
     db
       .select()
       .from(leaveRequestsTable)
       .where(
         and(
-          eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
           inArray(leaveRequestsTable.employeeId, employeeIds),
           inArray(leaveRequestsTable.status, ["pending", "approved"]),
           lte(leaveRequestsTable.startDate, yearEnd),
@@ -658,7 +861,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
-  const organization = await getPeopleOsOrganization();
+  const organization = await getPeopleOsOrganization(membership.organizationId);
   if (!organization) {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
     return;
@@ -676,16 +879,79 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     return;
   }
   if (!process.env.DATABASE_URL) {
-    const newReq = {
+    const demoEmp = DEMO_EMPLOYEES_LIST.find((e) => e.id === input.employeeId);
+    if (!demoEmp) {
+      res.status(404).json({ error: "Employee not found in this organization." });
+      return;
+    }
+    const policy = DEMO_LEAVE_POLICIES.find(
+      (p) =>
+        p.organizationId === membership.organizationId &&
+        p.code === input.leaveType &&
+        p.active,
+    );
+    if (!policy) {
+      res.status(400).json({
+        error: "Choose an active leave type configured by your organization.",
+      });
+      return;
+    }
+    const overlap = DEMO_LEAVE_STORE.some(
+      (r) =>
+        r.employeeId === demoEmp.id &&
+        (r.status === "pending" || r.status === "approved") &&
+        dateOnly(r.startDate) <= endDate &&
+        dateOnly(r.endDate) >= startDate,
+    );
+    if (overlap) {
+      res.status(409).json({
+        error: "This request overlaps an existing pending or approved leave request.",
+      });
+      return;
+    }
+    const existingRequests = DEMO_LEAVE_STORE.filter(
+      (r) =>
+        r.employeeId === demoEmp.id &&
+        r.leaveType === policy.code &&
+        (r.status === "pending" || r.status === "approved"),
+    );
+    const requestYearDays = businessDaysByYear(startDate, endDate);
+    for (const [year, requestDaysForYear] of requestYearDays) {
+      const leaveYearStart = `${year}-01-01`;
+      const now = new Date();
+      const requestedStart = new Date(`${startDate}T00:00:00.000Z`);
+      const asOf =
+        startDate.slice(0, 4) === String(year)
+          ? new Date(Math.max(requestedStart.getTime(), now.getTime()))
+          : new Date(`${leaveYearStart}T00:00:00.000Z`);
+      const accrued = accruedDaysForYear(policy, year, asOf);
+      const reservedDays = existingRequests.reduce(
+        (total, request) =>
+          total +
+          businessDaysForYear(
+            dateOnly(request.startDate),
+            dateOnly(request.endDate),
+            year,
+          ),
+        0,
+      );
+      if (reservedDays + requestDaysForYear > accrued) {
+        res.status(409).json({
+          error: `This request exceeds the available ${policy.name} balance for ${year}. ${accrued - reservedDays} day(s) are available.`,
+        });
+        return;
+      }
+    }
+    const newReq: DemoLeaveItem = {
       id: `leave-${Date.now()}`,
-      employeeId: input.employeeId,
-      employeeName: "Employee Request",
-      leaveType: input.leaveType,
+      employeeId: demoEmp.id,
+      employeeName: `${demoEmp.firstName} ${demoEmp.lastName}`,
+      leaveType: policy.code,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       days,
       reason: input.reason,
-      status: "pending" as const,
+      status: "pending",
       approverId: null,
       decisionComment: null,
       submittedAt: new Date(),
@@ -693,6 +959,16 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       isDemo: true,
     };
     DEMO_LEAVE_STORE.unshift(newReq);
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "leave_request_submitted",
+      targetType: "leave_request",
+      targetId: newReq.id,
+      summary: `Leave request submitted for ${newReq.employeeName}.`,
+      isDemo: true,
+    });
     res.status(201).json(CreateLeaveRequestResponse.parse(newReq));
     return;
   }
@@ -865,7 +1141,9 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Leave request could not be submitted." });
     return;
   }
-  const [response] = await serializeRequests([requestResult.request]);
+  const [response] = await serializeRequests(organization.id, [
+    requestResult.request,
+  ]);
   res.status(201).json(CreateLeaveRequestResponse.parse(response));
 });
 
@@ -886,7 +1164,7 @@ router.get("/approvals", async (req, res): Promise<void> => {
     return;
   }
   const conditions = [
-    eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+    eq(leaveRequestsTable.organizationId, membership.organizationId),
     eq(leaveRequestsTable.status, "pending"),
   ];
   if (
@@ -898,7 +1176,7 @@ router.get("/approvals", async (req, res): Promise<void> => {
       .from(employeesTable)
       .where(
         and(
-          eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(employeesTable.organizationId, membership.organizationId),
           eq(employeesTable.managerId, membership.employeeId),
         ),
       );
@@ -918,7 +1196,7 @@ router.get("/approvals", async (req, res): Promise<void> => {
     .from(leaveRequestsTable)
     .where(and(...conditions))
     .orderBy(leaveRequestsTable.submittedAt);
-  const people = await serializeRequests(requests);
+  const people = await serializeRequests(membership.organizationId, requests);
   const response = people.map((request) => ({
     id: request.id,
     type: "leave" as const,
@@ -951,10 +1229,24 @@ router.post(
         res.status(404).json({ error: "Leave request not found." });
         return;
       }
+      if (target.status !== "pending") {
+        res.status(409).json({ error: "This request has already been decided." });
+        return;
+      }
       target.status = body.data.decision === "approve" ? "approved" : "rejected";
       target.decisionComment = body.data.comment ?? null;
       target.decidedAt = new Date();
       target.approverId = membership.userId;
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: target.status === "approved" ? "leave_request_approved" : "leave_request_rejected",
+        targetType: "leave_request",
+        targetId: target.id,
+        summary: `Leave request for ${target.employeeName} was ${target.status}.`,
+        isDemo: true,
+      });
       res.json(DecideLeaveRequestResponse.parse(target));
       return;
     }
@@ -964,7 +1256,7 @@ router.post(
       .where(
         and(
           eq(leaveRequestsTable.id, params.data.requestId),
-          eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
         ),
       )
       .limit(1);
@@ -979,6 +1271,7 @@ router.post(
     if (
       membership.role === PEOPLEOS_ROLES.departmentManager &&
       !(await canManageRequest(
+        membership.organizationId,
         membership.employeeId ?? "",
         membership.role,
         request.employeeId,
@@ -1004,14 +1297,14 @@ router.post(
         .where(
           and(
             eq(leaveRequestsTable.id, request.id),
-            eq(leaveRequestsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
             eq(leaveRequestsTable.status, "pending"),
           ),
         )
         .returning();
       if (!result) return null;
       await tx.insert(auditEventsTable).values({
-        organizationId: PEOPLEOS_ORGANIZATION_ID,
+        organizationId: membership.organizationId,
         actorUserId: membership.userId,
         actor: membership.role,
         action: status === "approved" ? "leave_request_approved" : "leave_request_rejected",
@@ -1026,7 +1319,9 @@ router.post(
       res.status(409).json({ error: "This request has already been decided." });
       return;
     }
-    const [response] = await serializeRequests([updated]);
+    const [response] = await serializeRequests(membership.organizationId, [
+      updated,
+    ]);
     res.json(DecideLeaveRequestResponse.parse(response));
   },
 );

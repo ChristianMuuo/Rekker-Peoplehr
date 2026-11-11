@@ -23,17 +23,76 @@ export const PEOPLEOS_ROLES = {
   payrollOfficer: "payroll_officer",
 } as const;
 
+const VALID_ROLES = new Set<string>(Object.values(PEOPLEOS_ROLES));
+
 export type PeopleOsOrganization = {
   id: string;
   name: string;
   isDemo: boolean;
 };
 
-export async function getPeopleOsOrganization(): Promise<PeopleOsOrganization | null> {
+export interface AuthSessionMeta {
+  userId: string;
+  authProvider: "clerk" | "demo_sandbox";
+  mfaVerified: boolean;
+}
+
+export function isDemoAuthPermitted(): boolean {
+  if (process.env.CLERK_SECRET_KEY) return false;
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.PEOPLEOS_DEMO_AUTH === "true"
+  );
+}
+
+export function getAuthSessionMeta(req: Request): AuthSessionMeta | null {
+  try {
+    const auth = getAuth(req);
+    if (auth?.userId) {
+      const claims = (auth.sessionClaims ?? {}) as Record<string, unknown>;
+      const fva = claims.fva as number[] | undefined;
+      const mfaVerified = Array.isArray(fva) && fva.length >= 2 && fva[1]! >= 0;
+      return {
+        userId: auth.userId,
+        authProvider: "clerk",
+        mfaVerified,
+      };
+    }
+  } catch {
+    // Fall through to demo sandbox check
+  }
+
+  if (isDemoAuthPermitted()) {
+    const headerUser = req.headers["x-peopleos-user-id"];
+    const userId =
+      typeof headerUser === "string" && headerUser.trim().length > 0
+        ? headerUser.trim().slice(0, 128)
+        : "user_demo_admin_01";
+    return {
+      userId,
+      authProvider: "demo_sandbox",
+      mfaVerified: false,
+    };
+  }
+
+  return null;
+}
+
+export async function getPeopleOsOrganization(
+  requestedOrgId?: string,
+): Promise<PeopleOsOrganization | null> {
+  const orgId =
+    requestedOrgId && isDemoAuthPermitted()
+      ? requestedOrgId
+      : PEOPLEOS_ORGANIZATION_ID;
+
   if (!process.env.DATABASE_URL) {
     return {
-      id: PEOPLEOS_ORGANIZATION_ID,
-      name: "Rekker Breweries Kenya Ltd",
+      id: orgId,
+      name:
+        orgId === "rekker-demo"
+          ? "Rekker Breweries Kenya Ltd"
+          : `Organization (${orgId})`,
       isDemo: true,
     };
   }
@@ -45,13 +104,15 @@ export async function getPeopleOsOrganization(): Promise<PeopleOsOrganization | 
         isDemo: organizationsTable.isDemo,
       })
       .from(organizationsTable)
-      .where(eq(organizationsTable.id, PEOPLEOS_ORGANIZATION_ID))
+      .where(eq(organizationsTable.id, orgId))
       .limit(1);
-    return organization ?? {
-      id: PEOPLEOS_ORGANIZATION_ID,
-      name: "Rekker Breweries Kenya Ltd",
-      isDemo: true,
-    };
+    return (
+      organization ?? {
+        id: PEOPLEOS_ORGANIZATION_ID,
+        name: "Rekker Breweries Kenya Ltd",
+        isDemo: true,
+      }
+    );
   } catch {
     return {
       id: PEOPLEOS_ORGANIZATION_ID,
@@ -61,44 +122,94 @@ export async function getPeopleOsOrganization(): Promise<PeopleOsOrganization | 
   }
 }
 
+export function assertSameTenant(
+  membership: MembershipRecord,
+  resourceOrgId: string | null | undefined,
+): boolean {
+  if (!resourceOrgId) return false;
+  return membership.organizationId === resourceOrgId;
+}
+
 export async function ensureMembership(
   req: Request,
   res: Response,
 ): Promise<MembershipRecord | null> {
-  let userId: string | null | undefined = null;
-  try {
-    userId = getAuth(req).userId;
-  } catch {}
-
-  if (!userId && (process.env.NODE_ENV !== "production" || !process.env.CLERK_SECRET_KEY)) {
-    userId = (req.headers["x-peopleos-user-id"] as string) || "user_demo_admin_01";
-  }
-
-  if (!userId) {
+  const session = getAuthSessionMeta(req);
+  if (!session) {
     res.status(401).json({ error: "Sign in to access this PeopleOS action." });
     return null;
   }
 
-  const organization = await getPeopleOsOrganization();
+  const userId = session.userId;
+  const requestedOrgHeader = req.headers["x-peopleos-org-id"];
+  const requestedOrgId =
+    typeof requestedOrgHeader === "string" && requestedOrgHeader.trim()
+      ? requestedOrgHeader.trim()
+      : undefined;
+
+  // Reject cross-tenant header access in live mode
+  if (
+    requestedOrgId &&
+    requestedOrgId !== PEOPLEOS_ORGANIZATION_ID &&
+    !isDemoAuthPermitted()
+  ) {
+    res.status(403).json({
+      error: "Cross-tenant organization access is prohibited.",
+    });
+    return null;
+  }
+
+  const organization = await getPeopleOsOrganization(requestedOrgId);
   if (!organization) {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
     return null;
   }
 
+  // Enforce strict tenant isolation: if a non-demo organization is requested with mismatched ID, deny
+  if (
+    requestedOrgId &&
+    !organization.isDemo &&
+    requestedOrgId !== organization.id
+  ) {
+    res.status(403).json({
+      error: "Cross-tenant organization access is prohibited.",
+    });
+    return null;
+  }
+
+  const rawHeaderRole = req.headers["x-peopleos-role"];
+  const requestedRole =
+    typeof rawHeaderRole === "string" && isDemoAuthPermitted()
+      ? rawHeaderRole.trim()
+      : undefined;
+
+  if (requestedRole && !VALID_ROLES.has(requestedRole)) {
+    res.status(403).json({ error: "Invalid organization role specified." });
+    return null;
+  }
+
   const simulatedRole =
-    (req.headers["x-peopleos-role"] as string) ||
+    requestedRole ||
     (userId.includes("employee")
       ? PEOPLEOS_ROLES.employee
-      : userId.includes("manager")
-      ? PEOPLEOS_ROLES.hrManager
-      : PEOPLEOS_ROLES.hrAdmin);
+      : userId.includes("recruiter")
+        ? PEOPLEOS_ROLES.recruiter
+        : userId.includes("payroll")
+          ? PEOPLEOS_ROLES.payrollOfficer
+          : userId.includes("auditor")
+            ? PEOPLEOS_ROLES.auditor
+            : userId.includes("manager")
+              ? PEOPLEOS_ROLES.hrManager
+              : PEOPLEOS_ROLES.hrAdmin);
 
   if (!process.env.DATABASE_URL) {
     return {
       userId,
       organizationId: organization.id,
       role: simulatedRole,
-      employeeId: null,
+      employeeId: userId.includes("employee")
+        ? "10000000-0000-4000-8000-000000000002"
+        : "10000000-0000-4000-8000-000000000007",
       createdAt: new Date(),
     };
   }
@@ -144,6 +255,10 @@ export async function ensureMembership(
     }
     return membership;
   } catch {
+    if (!organization.isDemo) {
+      res.status(503).json({ error: "Authorization database unavailable." });
+      return null;
+    }
     return {
       userId,
       organizationId: organization.id,
@@ -161,14 +276,15 @@ export async function getReadAccess(
   organization: PeopleOsOrganization;
   membership: MembershipRecord | null;
 } | null> {
-  const organization = await getPeopleOsOrganization();
+  const membership = await ensureMembership(req, res);
+  if (!membership) return null;
+
+  const organization = await getPeopleOsOrganization(membership.organizationId);
   if (!organization) {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
     return null;
   }
 
-  const membership = await ensureMembership(req, res);
-  if (!membership) return null;
   return { organization, membership };
 }
 

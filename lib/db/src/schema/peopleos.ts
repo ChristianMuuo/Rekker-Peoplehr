@@ -500,6 +500,285 @@ export const policiesTable = pgTable(
   ],
 );
 
+export const interviewsTable = pgTable(
+  "peopleos_interviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidatesTable.id, { onDelete: "cascade" }),
+    requisitionId: uuid("requisition_id")
+      .notNull()
+      .references(() => jobRequisitionsTable.id, { onDelete: "cascade" }),
+    interviewerName: text("interviewer_name").notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    mode: text("mode").notNull().default("onsite"),
+    status: text("status").notNull().default("scheduled"),
+    scorecardJson: text("scorecard_json"),
+    overallRating: integer("overall_rating"),
+    feedbackSummary: text("feedback_summary"),
+    recommendation: text("recommendation").default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_interviews_org_cand_idx").on(
+      table.organizationId,
+      table.candidateId,
+    ),
+  ],
+);
+
+export const onboardingTasksTable = pgTable(
+  "peopleos_onboarding_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeesTable.id, { onDelete: "cascade" }),
+    workflowType: text("workflow_type").notNull().default("onboarding"),
+    title: text("title").notNull(),
+    category: text("category").notNull(),
+    assigneeRole: text("assignee_role").notNull().default("hr_admin"),
+    dueDate: date("due_date", { mode: "string" }).notNull(),
+    completed: boolean("completed").notNull().default(false),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_onboarding_org_emp_idx").on(
+      table.organizationId,
+      table.employeeId,
+    ),
+  ],
+);
+
+export const expensesTable = pgTable(
+  "peopleos_expenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeesTable.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    category: text("category").notNull(),
+    amountKes: integer("amount_kes").notNull(),
+    incurredDate: date("incurred_date", { mode: "string" }).notNull(),
+    receiptReference: text("receipt_reference"),
+    notes: text("notes"),
+    status: text("status").notNull().default("pending"),
+    approverUserId: text("approver_user_id"),
+    decisionComment: text("decision_comment"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_expenses_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+  ],
+);
+
+export const assetsTable = pgTable(
+  "peopleos_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    assetTag: text("asset_tag").notNull(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    serialNumber: text("serial_number").notNull(),
+    condition: text("condition").notNull().default("good"),
+    assignedEmployeeId: uuid("assigned_employee_id").references(
+      () => employeesTable.id,
+      { onDelete: "set null" },
+    ),
+    assignedDate: date("assigned_date", { mode: "string" }),
+    returnDueDate: date("return_due_date", { mode: "string" }),
+    status: text("status").notNull().default("available"),
+    valueKes: integer("value_kes").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_assets_org_tag_uq").on(
+      table.organizationId,
+      table.assetTag,
+    ),
+    index("peopleos_assets_org_emp_idx").on(
+      table.organizationId,
+      table.assignedEmployeeId,
+    ),
+  ],
+);
+
+export const statutoryConfigsTable = pgTable(
+  "peopleos_statutory_configs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    effectiveFrom: date("effective_from", { mode: "string" }).notNull(),
+    effectiveTo: date("effective_to", { mode: "string" }),
+    configJson: text("config_json").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_statutory_org_eff_idx").on(
+      table.organizationId,
+      table.effectiveFrom,
+    ),
+  ],
+);
+
+export const payrollDisbursementsTable = pgTable(
+  "peopleos_payroll_disbursements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    payrollRunId: uuid("payroll_run_id")
+      .notNull()
+      .references(() => payrollRunsTable.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeesTable.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull().default("mpesa_b2c"),
+    recipientMasked: text("recipient_masked").notNull(),
+    amountKes: integer("amount_kes").notNull(),
+    providerMode: text("provider_mode").notNull().default("SANDBOX_SIMULATION"),
+    transactionReference: text("transaction_reference").notNull(),
+    status: text("status").notNull().default("queued"),
+    initiatedByUserId: text("initiated_by_user_id").notNull(),
+    initiatedAt: timestamp("initiated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_disb_org_run_idx").on(
+      table.organizationId,
+      table.payrollRunId,
+    ),
+  ],
+);
+
+export const aiAgentRunsTable = pgTable(
+  "peopleos_ai_agent_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id").notNull(),
+    userId: text("user_id").notNull(),
+    userRole: text("user_role").notNull(),
+    requestedAgent: text("requested_agent").notNull(),
+    resolvedAgent: text("resolved_agent").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    estimatedCostMicros: integer("estimated_cost_micros").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    toolsCalledJson: text("tools_called_json").notNull().default("[]"),
+    status: text("status").notNull().default("completed"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_ai_runs_org_time_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const aiApprovalRequestsTable = pgTable(
+  "peopleos_ai_approval_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    agentRole: text("agent_role").notNull(),
+    requestedByUserId: text("requested_by_user_id").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    proposedAction: text("proposed_action").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    rationale: text("rationale").notNull(),
+    status: text("status").notNull().default("pending"),
+    decidedByUserId: text("decided_by_user_id"),
+    decisionComment: text("decision_comment"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_ai_approvals_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+  ],
+);
+
+export const employeeTrainingTable = pgTable(
+  "peopleos_employee_training",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => coursesTable.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeesTable.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("enrolled"),
+    progressPct: integer("progress_pct").notNull().default(0),
+    certificateNumber: text("certificate_number"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    enrolledAt: timestamp("enrolled_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("peopleos_emp_training_org_emp_idx").on(
+      table.organizationId,
+      table.employeeId,
+    ),
+  ],
+);
+
 export const insertEmployeeSchema = createInsertSchema(employeesTable).omit({
   id: true,
   createdAt: true,
@@ -518,6 +797,15 @@ export type LeavePolicyRecord = typeof leavePoliciesTable.$inferSelect;
 export type LeaveRequestRecord = typeof leaveRequestsTable.$inferSelect;
 export type JobRequisitionRecord = typeof jobRequisitionsTable.$inferSelect;
 export type CandidateRecord = typeof candidatesTable.$inferSelect;
+export type InterviewRecord = typeof interviewsTable.$inferSelect;
+export type OnboardingTaskRecord = typeof onboardingTasksTable.$inferSelect;
+export type ExpenseRecord = typeof expensesTable.$inferSelect;
+export type AssetRecord = typeof assetsTable.$inferSelect;
+export type StatutoryConfigRecord = typeof statutoryConfigsTable.$inferSelect;
+export type PayrollDisbursementRecord = typeof payrollDisbursementsTable.$inferSelect;
+export type AiAgentRunRecord = typeof aiAgentRunsTable.$inferSelect;
+export type AiApprovalRequestRecord = typeof aiApprovalRequestsTable.$inferSelect;
+export type EmployeeTrainingRecord = typeof employeeTrainingTable.$inferSelect;
 export type AttendanceRecordEntity = typeof attendanceRecordsTable.$inferSelect;
 export type PayrollRunRecord = typeof payrollRunsTable.$inferSelect;
 export type PayrollItemRecord = typeof payrollItemsTable.$inferSelect;

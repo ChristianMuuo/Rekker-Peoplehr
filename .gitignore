@@ -53,3 +53,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Python ML Service
+.venv/
+__pycache__/
+*.pyc
+services/ml-engine/model_registry/

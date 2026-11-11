@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { UnifiedAuthProvider, Show, SignIn, SignUp, useClerk, useUser, hasValidClerkKey } from './auth';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getGetEmployeeQueryKey,
   getGetPeopleOsOverviewQueryKey, getListApprovalsQueryKey, getListAuditEventsQueryKey,
@@ -16,10 +16,10 @@ import {
 } from '@workspace/api-client-react';
 import type { Employee, EmployeeInput, EmployeeUpdate, LeavePolicy, LeaveRequestInput } from '@workspace/api-client-react';
 import {
-  Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, BriefcaseBusiness,
+  Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, Bell, BrainCircuit, BriefcaseBusiness,
   CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, FileText,
-  Filter, GitBranch, LayoutDashboard, LogOut, Menu, Plus, Search, Settings2, ShieldCheck, Sparkles,
-  Users, X,
+  Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, Search, Settings2, ShieldCheck, Sparkles,
+  Sun, UserCheck, Users, X,
 } from 'lucide-react';
 import { Link, Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -35,6 +35,11 @@ import { LearningPage } from '@/pages/LearningPage';
 import { DocumentsPage } from '@/pages/DocumentsPage';
 import { ReportsPage } from '@/pages/ReportsPage';
 import { AgentHubPage } from '@/pages/AgentHubPage';
+import { SelfServicePage } from '@/pages/SelfServicePage';
+import { ExpensesPage } from '@/pages/ExpensesPage';
+import { AssetsPage } from '@/pages/AssetsPage';
+import { PredictiveMlPage } from '@/pages/PredictiveMlPage';
+import { apiGet } from '@/lib/api';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -177,6 +182,7 @@ function Home() {
 type NavItem = { label: string; href: string; icon: typeof Users; permission?: 'canViewAudit' | 'canViewPayroll' | 'canManageSettings' };
 const primaryNav: NavItem[] = [
   { label: 'Overview', href: '/overview', icon: LayoutDashboard },
+  { label: 'My workspace', href: '/self-service', icon: UserCheck },
   { label: 'People', href: '/people', icon: Users },
   { label: 'Organization', href: '/organization', icon: GitBranch },
   { label: 'Leave', href: '/leave', icon: CalendarDays },
@@ -187,9 +193,12 @@ const workNav: NavItem[] = [
   { label: 'Onboarding', href: '/onboarding', icon: ArrowRight },
   { label: 'Attendance', href: '/attendance', icon: Clock3 },
   { label: 'Payroll', href: '/payroll', icon: Activity, permission: 'canViewPayroll' },
+  { label: 'Expenses', href: '/expenses', icon: Receipt },
+  { label: 'Company assets', href: '/assets', icon: Laptop },
   { label: 'Performance', href: '/performance', icon: ArrowUpRight },
   { label: 'Learning', href: '/learning', icon: FileText },
   { label: 'Documents', href: '/documents', icon: FileText },
+  { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
   { label: 'Reports & Analytics', href: '/reports', icon: ArrowDownRight },
 ];
 
@@ -200,19 +209,63 @@ function ProtectedRouter() {
 }
 function AppFrame() {
   const { data: auth, isLoading, isError, refetch } = useGetAuthContext();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => typeof window !== 'undefined' && window.localStorage.getItem('peopleos-theme') === 'dark');
   const { signOut } = useClerk();
+
+  const approvalsQuery = useListApprovals();
+  const quickEmployees = useListEmployees({ page: 1, pageSize: 25 });
+  const aiApprovalsQuery = useQuery({
+    queryKey: ['header-ai-approvals'],
+    queryFn: () => apiGet<{ items?: Array<{ id: string; summary: string; agentKey: string; status: string }> }>('/api/ai/approvals'),
+    enabled: !!auth,
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('peopleos-theme', darkMode ? 'dark' : 'light');
+    }
+  }, [darkMode]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false);
+        setNotifOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   if (isLoading) return <LoadingScreen label="Loading your workspace" />;
   if (isError || !auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
   const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
   const nav = [...primaryNav, ...visibleWorkNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+
+  const pendingApprovals = Array.isArray(approvalsQuery.data) ? approvalsQuery.data : [];
+  const pendingAiApprovals = (aiApprovalsQuery.data?.items ?? []).filter(a => a.status === 'pending');
+  const notificationCount = pendingApprovals.length + pendingAiApprovals.length;
+
+  const qLower = searchQuery.trim().toLowerCase();
+  const matchedNav = nav.filter(n => !qLower || n.label.toLowerCase().includes(qLower) || n.href.toLowerCase().includes(qLower)).slice(0, 6);
+  const matchedPeople = (quickEmployees.data?.items ?? []).filter(p => !qLower || `${p.firstName} ${p.lastName} ${p.jobTitle} ${p.employeeNumber} ${p.departmentName}`.toLowerCase().includes(qLower)).slice(0, 6);
+
   const renderNav = (items: NavItem[]) => items.map(item => {
     const Icon = item.icon;
     return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} data-testid={`link-nav-${item.href.slice(1)}`}
       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${location === item.href || (item.href === '/people' && location.startsWith('/people/')) ? 'bg-[#f9e9e6] text-[#a91919]' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950'}`}>
       <Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>
-      {item.href === '/approvals' && <span className="ml-auto rounded-full bg-[#f5d8d4] px-2 py-0.5 text-[10px] text-[#a91919]" data-testid="badge-approvals-nav">Open</span>}
+      {item.href === '/approvals' && <span className="ml-auto rounded-full bg-[#f5d8d4] px-2 py-0.5 text-[10px] text-[#a91919]" data-testid="badge-approvals-nav">{notificationCount > 0 ? notificationCount : 'Open'}</span>}
     </Link>;
   });
   return <div className="app-shell">
@@ -247,7 +300,28 @@ function AppFrame() {
             <button className="btn btn-ghost min-h-9 px-2 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu" data-testid="button-open-menu"><Menu size={19} /></button>
             <span className="text-[11px] font-semibold text-stone-400">REKKER /</span><span className="text-xs font-bold text-stone-800">{nav.find(n => n.href === location)?.label ?? (location.startsWith('/people/') ? 'Employee profile' : 'PeopleOS')}</span>
           </div>
-          <div className="flex items-center gap-2 md:gap-4">
+          <div className="relative flex items-center gap-2 md:gap-3">
+            <button onClick={() => setSearchOpen(true)} className="hidden items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs text-stone-500 hover:border-stone-300 sm:inline-flex" data-testid="button-global-search">
+              <Search size={14} /><span>Quick jump</span><kbd className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-400">⌘K</kbd>
+            </button>
+            <button onClick={() => setSearchOpen(true)} className="btn btn-ghost min-h-9 px-2 sm:hidden" aria-label="Quick search"><Search size={17} /></button>
+            <button onClick={() => setDarkMode(d => !d)} className="btn btn-ghost min-h-9 px-2" aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} data-testid="button-theme-toggle">
+              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            <div className="relative">
+              <button onClick={() => setNotifOpen(o => !o)} className="btn btn-ghost relative min-h-9 px-2" aria-label="Notifications" data-testid="button-notifications">
+                <Bell size={17} />
+                {notificationCount > 0 && <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C71D1D] px-1 text-[9px] font-bold text-white">{notificationCount}</span>}
+              </button>
+              {notifOpen && <div className="surface absolute right-0 top-11 z-50 w-80 p-4 shadow-xl" data-testid="popover-notifications">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-2"><span className="text-xs font-bold text-stone-900">Action queue ({notificationCount})</span><button onClick={() => setNotifOpen(false)} className="text-stone-400 hover:text-stone-700"><X size={14} /></button></div>
+                <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+                  {pendingAiApprovals.map(a => <Link key={a.id} href="/agent-hub" onClick={() => setNotifOpen(false)} className="block rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs hover:bg-amber-50"><p className="font-bold text-amber-900">AI proposal · {a.agentKey}</p><p className="mt-0.5 text-amber-800">{a.summary}</p></Link>)}
+                  {pendingApprovals.slice(0, 5).map(item => <Link key={item.id} href="/approvals" onClick={() => setNotifOpen(false)} className="block rounded-lg border border-stone-200 p-2.5 text-xs hover:bg-stone-50"><p className="font-bold text-stone-800">{item.requester}</p><p className="mt-0.5 text-stone-500">{item.title} · {item.type.replaceAll('_', ' ')}</p></Link>)}
+                  {notificationCount === 0 && <p className="py-4 text-center text-xs text-stone-500">All queues are clear.</p>}
+                </div>
+              </div>}
+            </div>
             <span className="hidden text-xs text-stone-500 sm:inline" data-testid="text-auth-display-name">{auth.displayName}</span>
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eee2d8] font-display text-xs font-bold text-stone-700" data-testid="avatar-user">{auth.displayName.split(' ').map(v => v[0]).join('').slice(0, 2).toUpperCase()}</div>
           </div>
@@ -257,6 +331,7 @@ function AppFrame() {
           <Switch>
             <Route path="/dashboard"><Redirect to="/overview" /></Route>
             <Route path="/overview" component={OverviewPage} />
+            <Route path="/self-service" component={SelfServicePage} />
             <Route path="/people" component={PeoplePage} />
             <Route path="/people/:employeeId" component={EmployeePage} />
             <Route path="/organization" component={OrganizationPage} />
@@ -270,15 +345,32 @@ function AppFrame() {
             <Route path="/onboarding" component={OnboardingPage} />
             <Route path="/attendance" component={AttendancePage} />
             <Route path="/payroll" component={PayrollPage} />
+            <Route path="/expenses" component={ExpensesPage} />
+            <Route path="/assets" component={AssetsPage} />
             <Route path="/performance" component={PerformancePage} />
             <Route path="/learning" component={LearningPage} />
             <Route path="/documents" component={DocumentsPage} />
+            <Route path="/ml" component={PredictiveMlPage} />
             <Route path="/reports" component={ReportsPage} />
             <Route component={NotFound} />
           </Switch>
         </main>
       </div>
     </div>
+    {searchOpen && <div className="fixed inset-0 z-50 flex items-start justify-center bg-stone-950/50 p-4 pt-20" onClick={() => setSearchOpen(false)} data-testid="dialog-global-search">
+      <div className="surface w-full max-w-lg overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-stone-200 px-4 py-3">
+          <Search size={16} className="text-stone-400" />
+          <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Jump to any PeopleOS module or employee..." className="w-full bg-transparent text-sm text-stone-900 outline-none" data-testid="input-global-search" />
+          <button onClick={() => setSearchOpen(false)} className="text-xs font-semibold text-stone-400 hover:text-stone-700">Esc</button>
+        </div>
+        <div className="max-h-80 overflow-y-auto p-3 space-y-4">
+          {matchedNav.length > 0 && <div><p className="px-2 text-[10px] font-bold uppercase tracking-[.14em] text-stone-400">Modules</p><div className="mt-1 space-y-1">{matchedNav.map(item => { const Icon = item.icon; return <button key={item.href} onClick={() => { setLocation(item.href); setSearchOpen(false); setSearchQuery(''); }} className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-stone-700 hover:bg-stone-100"><Icon size={15} className="text-[#C71D1D]" /><span>{item.label}</span><span className="ml-auto text-[10px] text-stone-400">{item.href}</span></button>; })}</div></div>}
+          {matchedPeople.length > 0 && <div><p className="px-2 text-[10px] font-bold uppercase tracking-[.14em] text-stone-400">People</p><div className="mt-1 space-y-1">{matchedPeople.map(emp => <button key={emp.id} onClick={() => { setLocation(`/people/${emp.id}`); setSearchOpen(false); setSearchQuery(''); }} className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs hover:bg-stone-100"><span><strong className="text-stone-800">{emp.firstName} {emp.lastName}</strong> <span className="text-stone-500">· {emp.jobTitle}</span></span><span className="font-mono text-[10px] text-stone-400">{emp.employeeNumber}</span></button>)}</div></div>}
+          {matchedNav.length === 0 && matchedPeople.length === 0 && <p className="py-6 text-center text-xs text-stone-500">No modules or people match "{searchQuery}".</p>}
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 
@@ -496,6 +588,11 @@ function formatDate(value: string) { if (!value) return '—'; const date = new 
 function EmployeePage() {
   const params = (useLocation()[0].split('/').filter(Boolean).at(-1) ?? '');
   const employee = useGetEmployee(params, { query: { enabled: !!params, queryKey: getGetEmployeeQueryKey(params) } });
+  const profile360 = useQuery({
+    queryKey: ['employee-360', params],
+    queryFn: () => apiGet<any>(`/api/employees/${params}/profile-360`),
+    enabled: !!params,
+  });
   const departments = useListDepartments();
   const auth = useGetAuthContext();
   const [editing, setEditing] = useState(false);
@@ -504,6 +601,7 @@ function EmployeePage() {
   if (employee.isLoading) return <LoadingScreen label="Loading employee profile" />;
   if (employee.isError || !employee.data) return <ErrorState title="Employee profile unavailable" onRetry={() => employee.refetch()} />;
   const person = employee.data;
+  const p360 = profile360.data;
   return <div>
     <Link href="/people" className="mb-5 inline-flex items-center gap-2 text-xs font-bold text-stone-500 hover:text-stone-900" data-testid="link-back-people"><ChevronLeft size={15} /> People directory</Link>
     <section className="surface p-5 md:p-7">
@@ -518,6 +616,30 @@ function EmployeePage() {
         <Info label="Probation end" value={person.probationEndDate ? formatDate(person.probationEndDate) : 'Not recorded'} testId="employee-probation" /><Info label="Contract end" value={person.contractEndDate ? formatDate(person.contractEndDate) : 'Not recorded'} testId="employee-contract-end" />
       </div>
     </section>
+    {p360 && <section className="mt-4 grid gap-4 lg:grid-cols-3" data-testid="section-employee-360">
+      <div className="surface p-5">
+        <div className="flex items-center justify-between"><h2 className="font-display text-base font-semibold text-stone-900">Statutory identifiers</h2><span className="rounded-full bg-[#e8f2eb] px-2 py-0.5 text-[10px] font-bold text-[#34734d]">ODPC Masked</span></div>
+        <div className="mt-4 space-y-2.5 text-xs">
+          <div className="flex justify-between"><span className="text-stone-500">KRA PIN</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.kraPin ?? 'RESTRICTED'}</span></div>
+          <div className="flex justify-between"><span className="text-stone-500">National ID</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.nationalId ?? 'RESTRICTED'}</span></div>
+          <div className="flex justify-between"><span className="text-stone-500">NSSF No.</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.nssfNo ?? 'RESTRICTED'}</span></div>
+          <div className="flex justify-between"><span className="text-stone-500">SHIF / SHA</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.shaNo ?? 'RESTRICTED'}</span></div>
+        </div>
+        <p className="mt-3 text-[10px] text-stone-400">{p360.statutoryIdentifiers?.encryptionStatus ?? 'AES-256-GCM Field Protection'}</p>
+      </div>
+      <div className="surface p-5">
+        <h2 className="font-display text-base font-semibold text-stone-900">Reporting line & emergency</h2>
+        <p className="mt-3 text-xs text-stone-500">Reports to: <strong className="text-stone-800">{p360.reportingLine?.managerName || 'Executive Board'}</strong></p>
+        {Array.isArray(p360.reportingLine?.directReports) && p360.reportingLine.directReports.length > 0 && <div className="mt-3"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Direct reports</p><div className="mt-1.5 flex flex-wrap gap-1.5">{p360.reportingLine.directReports.map((r: any) => <Link key={r.id} href={`/people/${r.id}`} className="rounded-lg bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-200">{r.name}</Link>)}</div></div>}
+        {p360.emergencyContact ? <div className="mt-4 border-t border-stone-100 pt-3 text-xs"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Next of kin</p><p className="mt-1 font-semibold text-stone-800">{p360.emergencyContact.name} · {p360.emergencyContact.relationship}</p><p className="font-mono text-[11px] text-stone-500">{p360.emergencyContact.phone}</p></div> : <p className="mt-4 text-xs text-stone-400">Emergency contact visible to HR or self only.</p>}
+      </div>
+      <div className="surface p-5">
+        <h2 className="font-display text-base font-semibold text-stone-900">Compensation & capabilities</h2>
+        <div className="mt-3 rounded-lg bg-[#f7f4f0] p-3 text-xs">{p360.compensationSummary?.authorizedToView ? <><p className="font-semibold text-stone-800">{p360.compensationSummary.currency} · {p360.compensationSummary.payFrequency}</p><p className="mt-0.5 text-stone-500">Channel: {p360.compensationSummary.paymentChannel}</p></> : <p className="text-stone-500">Compensation visible to payroll officers or employee.</p>}</div>
+        {Array.isArray(p360.skills) && p360.skills.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{p360.skills.map((skill: string) => <span key={skill} className="rounded-full bg-[#f9e9e6] px-2.5 py-1 text-[10px] font-semibold text-[#a91919]">{skill}</span>)}</div>}
+        <div className="mt-4 flex flex-wrap gap-2"><Link href="/documents" className="btn btn-secondary min-h-8 px-3 text-xs">Employment Act §10</Link>{p360.compensationSummary?.authorizedToView && <Link href="/self-service" className="btn btn-secondary min-h-8 px-3 text-xs">View P9A card</Link>}</div>
+      </div>
+    </section>}
     {editing && <Modal title="Edit employee details" onClose={() => setEditing(false)} testId="dialog-edit-employee">
       <EmployeeForm employee={person} departments={departments.data ?? []} pending={update.isPending} onCancel={() => setEditing(false)} onSubmit={values => {
         const data: EmployeeUpdate = { preferredName: values.preferredName, phone: values.phone, jobTitle: values.jobTitle, departmentId: values.departmentId, managerId: values.managerId, location: values.location, status: values.status, probationEndDate: values.probationEndDate, contractEndDate: values.contractEndDate };
@@ -742,8 +864,14 @@ function AuditPage() {
 function SettingsPage() {
   const auth = useGetAuthContext();
   const provider = useGetAgentProviderStatus();
+  const securityQuery = useQuery({
+    queryKey: ['security-status'],
+    queryFn: () => apiGet<any>('/api/security/status'),
+    enabled: !!auth.data?.canManageSettings,
+  });
   if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading settings" />;
-  return <div><PageHeading eyebrow="Workspace / Configuration" title="Settings" description="Role access and provider readiness for this PeopleOS workspace." />
+  const sec = securityQuery.data;
+  return <div><PageHeading eyebrow="Workspace / Configuration" title="Settings" description="Role access, security controls, and provider readiness for this PeopleOS workspace." />
     {!auth.data?.canManageSettings ? <div className="surface"><EmptyState title="Settings access is restricted" message="Only authorized system administrators can manage workspace settings. Your role can still review permitted PeopleOS information." /></div> : <>
       <section className="surface p-5 md:p-7" data-testid="section-role-access">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#a91919]"><ShieldCheck size={18} /></div><div><h2 className="font-display text-lg font-semibold text-stone-900">Your access profile</h2><p className="text-xs text-stone-500">Permissions are supplied by the PeopleOS authorization service.</p></div></div>
@@ -758,6 +886,15 @@ function SettingsPage() {
           ].map(([label,value,allowed]) => <div key={String(label)} className="flex items-center justify-between rounded-xl border border-stone-200 p-4" data-testid={`card-permission-${String(label).toLowerCase().replaceAll(' ','-')}`}><div><p className="text-xs font-bold capitalize text-stone-700">{label}</p><p className="mt-1 text-[10px] capitalize text-stone-400">{typeof value === 'boolean' ? (value ? 'Granted' : 'Not granted') : value}</p></div><span className={`h-2.5 w-2.5 rounded-full ${allowed ? 'bg-[#338956]' : 'bg-stone-300'}`} /></div>)}
         </div>
         <p className="mt-4 text-[10px] text-stone-400">UI visibility is not a security boundary. The server enforces access for every request.</p>
+      </section>
+      <section className="surface mt-4 p-5 md:p-7" data-testid="section-security-posture">
+        <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Enterprise security posture</h2><p className="mt-1 text-xs text-stone-500">Server-enforced encryption, Kenya ODPC PII protection, rate limiting, and session verification.</p></div><span className="rounded-full bg-[#e8f2eb] px-2.5 py-1 text-[10px] font-bold text-[#34734d]">{sec?.encryptionStandard ?? 'AES-256-GCM'}</span></div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Auth provider</p><p className="mt-1 text-xs font-bold capitalize text-stone-800">{String(sec?.authProvider ?? 'clerk_or_sandbox').replaceAll('_', ' ')}</p></div>
+          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Session MFA</p><p className="mt-1 text-xs font-bold text-stone-800">{sec?.mfaVerified ? 'MFA Verified' : 'Standard / Sandbox'}</p></div>
+          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">ODPC masking</p><p className="mt-1 text-xs font-bold text-[#34734d]">{sec?.odpcCompliantMasking !== false ? 'Enforced' : 'Disabled'}</p></div>
+          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">API rate limiter</p><p className="mt-1 text-xs font-bold text-[#34734d]">{sec?.rateLimitingActive !== false ? 'Sliding window active' : 'Inactive'}</p></div>
+        </div>
       </section>
       <section className="surface mt-4 p-5 md:p-7" data-testid="section-provider-setup">
         <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">AI provider setup</h2><p className="mt-1 text-xs text-stone-500">Provider credentials are not editable in this interface.</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${provider.data?.configured ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`} data-testid="status-settings-provider">{provider.data?.configured ? 'Configured' : 'Setup required'}</span></div>

@@ -28,8 +28,9 @@ describe("Rekker AI Multi-Agent Intelligence Engine", () => {
   test("RAG policy engine retrieves accurate statutory citations with source metadata", () => {
     const leaveResults = retrieveRelevantPolicies("annual leave entitlement in Kenya", 1);
     assert.strictEqual(leaveResults.length, 1);
-    assert.strictEqual(leaveResults[0].title, "Annual Leave Entitlement & Coverage Policy");
-    assert.ok(leaveResults[0].content.includes("21 working days"));
+    assert.strictEqual(leaveResults[0].title, "Organization Leave Policy & Statutory Floor Governance");
+    assert.ok(leaveResults[0].content.includes("Section 28"));
+    assert.ok(leaveResults[0].content.includes("configured directly per organization"));
     assert.ok(leaveResults[0].sourceDocument.includes("Kenya Employment Act"));
 
     const maternityResults = retrieveRelevantPolicies("maternity and paternity leave days", 1);
