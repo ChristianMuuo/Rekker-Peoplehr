@@ -15,34 +15,45 @@ export const PEOPLEOS_ROLES = {
   employee: "employee",
   departmentManager: "department_manager",
   hrAdmin: "hr_admin",
-  systemAdmin: "system_admin",
+  hrDirector: "hr_director",
+  hrManager: "hr_manager",
+  hrOfficer: "hr_officer",
+  payrollOfficer: "payroll_officer",
+  financeManager: "finance_manager",
+  productionSupervisor: "production_supervisor",
+  warehouseSupervisor: "warehouse_supervisor",
+  salesManager: "sales_manager",
+  recruiter: "recruiter",
   executive: "read_only_executive",
   auditor: "auditor",
-  hrManager: "hr_manager",
-  recruiter: "recruiter",
-  payrollOfficer: "payroll_officer",
-  salesManager: "sales_manager",
-  salesRep: "sales_rep",
-  financeManager: "finance_manager",
-  inventoryManager: "inventory_manager",
-  productionManager: "production_manager",
-  procurementManager: "procurement_manager",
-  qualityManager: "quality_manager",
-  distributor: "distributor",
-  customer: "customer",
+  systemAdmin: "system_admin",
 } as const;
 
 export const MODULE_PERMISSION_MATRIX: Record<
   string,
-  { readRoles: readonly string[]; writeRoles: readonly string[]; tenantScoped: boolean }
+  { readRoles: readonly string[]; writeRoles: readonly string[]; confidentialIsolated?: boolean }
 > = {
-  publicWebsite: { readRoles: ["*"], writeRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin], tenantScoped: false },
-  catalogueCms: { readRoles: ["*"], writeRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin, PEOPLEOS_ROLES.salesManager], tenantScoped: true },
-  crmPipeline: { readRoles: [PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.salesRep, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin, PEOPLEOS_ROLES.executive], writeRoles: [PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.salesRep, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin], tenantScoped: true },
-  customerPortal: { readRoles: [PEOPLEOS_ROLES.customer, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.salesRep, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin], writeRoles: [PEOPLEOS_ROLES.customer, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin], tenantScoped: true },
-  distributorPortal: { readRoles: [PEOPLEOS_ROLES.distributor, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.salesRep, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin], writeRoles: [PEOPLEOS_ROLES.distributor, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin], tenantScoped: true },
-  hrAndPayroll: { readRoles: [PEOPLEOS_ROLES.employee, PEOPLEOS_ROLES.departmentManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.payrollOfficer, PEOPLEOS_ROLES.recruiter, PEOPLEOS_ROLES.executive, PEOPLEOS_ROLES.auditor, PEOPLEOS_ROLES.systemAdmin], writeRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.payrollOfficer, PEOPLEOS_ROLES.systemAdmin], tenantScoped: true },
-  auditTrail: { readRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.auditor, PEOPLEOS_ROLES.systemAdmin], writeRoles: [], tenantScoped: true },
+  hrAndPeopleCore: {
+    readRoles: Object.values(PEOPLEOS_ROLES),
+    writeRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.hrOfficer, PEOPLEOS_ROLES.systemAdmin],
+  },
+  confidentialHrCases: {
+    readRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.employee],
+    writeRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.employee],
+    confidentialIsolated: true,
+  },
+  payrollAndJournal: {
+    readRoles: [PEOPLEOS_ROLES.payrollOfficer, PEOPLEOS_ROLES.financeManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.systemAdmin, PEOPLEOS_ROLES.auditor],
+    writeRoles: [PEOPLEOS_ROLES.payrollOfficer, PEOPLEOS_ROLES.financeManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin],
+  },
+  workforceErpOperations: {
+    readRoles: [PEOPLEOS_ROLES.productionSupervisor, PEOPLEOS_ROLES.warehouseSupervisor, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.financeManager, PEOPLEOS_ROLES.departmentManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.executive, PEOPLEOS_ROLES.systemAdmin],
+    writeRoles: [PEOPLEOS_ROLES.productionSupervisor, PEOPLEOS_ROLES.warehouseSupervisor, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.systemAdmin],
+  },
+  auditTrail: {
+    readRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.auditor, PEOPLEOS_ROLES.systemAdmin],
+    writeRoles: [],
+  },
 };
 
 const VALID_ROLES = new Set<string>(Object.values(PEOPLEOS_ROLES));
@@ -212,12 +223,14 @@ export async function ensureMembership(
 
   const simulatedRole =
     requestedRole ||
-      (userId.includes("employee")
-        ? PEOPLEOS_ROLES.employee
-        : userId.includes("distributor")
-          ? PEOPLEOS_ROLES.distributor
-          : userId.includes("customer")
-            ? PEOPLEOS_ROLES.customer
+    (userId.includes("employee")
+      ? PEOPLEOS_ROLES.employee
+      : userId.includes("production")
+        ? PEOPLEOS_ROLES.productionSupervisor
+        : userId.includes("warehouse")
+          ? PEOPLEOS_ROLES.warehouseSupervisor
+          : userId.includes("finance")
+            ? PEOPLEOS_ROLES.financeManager
             : userId.includes("sales")
               ? PEOPLEOS_ROLES.salesManager
               : userId.includes("recruiter")
@@ -226,9 +239,11 @@ export async function ensureMembership(
                   ? PEOPLEOS_ROLES.payrollOfficer
                   : userId.includes("auditor")
                     ? PEOPLEOS_ROLES.auditor
-                    : userId.includes("manager")
-                      ? PEOPLEOS_ROLES.hrManager
-                      : PEOPLEOS_ROLES.hrAdmin);
+                    : userId.includes("director")
+                      ? PEOPLEOS_ROLES.hrDirector
+                      : userId.includes("manager")
+                        ? PEOPLEOS_ROLES.hrManager
+                        : PEOPLEOS_ROLES.hrAdmin);
 
   if (!process.env.DATABASE_URL) {
     return {

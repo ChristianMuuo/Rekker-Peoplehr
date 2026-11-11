@@ -34,15 +34,20 @@ const router: IRouter = Router();
 
 const payrollViewRoles = [
   PEOPLEOS_ROLES.hrAdmin,
+  PEOPLEOS_ROLES.hrDirector,
   PEOPLEOS_ROLES.hrManager,
   PEOPLEOS_ROLES.payrollOfficer,
+  PEOPLEOS_ROLES.financeManager,
+  PEOPLEOS_ROLES.auditor,
   PEOPLEOS_ROLES.executive,
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
 const payrollActionRoles = [
   PEOPLEOS_ROLES.hrAdmin,
+  PEOPLEOS_ROLES.hrDirector,
   PEOPLEOS_ROLES.payrollOfficer,
+  PEOPLEOS_ROLES.financeManager,
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
@@ -566,6 +571,17 @@ router.post("/payroll/approve", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Payroll run not found." });
       return;
     }
+    // Enforce Maker-Checker Governance: Preparer cannot authorize their own run
+    if (
+      run.createdByUserId === membership.userId &&
+      process.env.PEOPLEOS_ALLOW_SOLO_APPROVE !== "true"
+    ) {
+      res.status(403).json({
+        error:
+          "Maker-Checker policy violation: the user who generated this payroll run cannot self-approve disbursement.",
+      });
+      return;
+    }
 
     run.status = "approved";
     run.approvedBy = `${membership.userId} (${membership.role})`;
@@ -596,6 +612,18 @@ router.post("/payroll/approve", async (req: Request, res: Response) => {
   const target = runs.find((r) => r.period === period || r.id === period);
   if (!target) {
     res.status(404).json({ error: "Payroll run not found." });
+    return;
+  }
+  const creatorUserId = (target as { createdByUserId?: string | null }).createdByUserId;
+  if (
+    creatorUserId &&
+    creatorUserId === membership.userId &&
+    process.env.PEOPLEOS_ALLOW_SOLO_APPROVE !== "true"
+  ) {
+    res.status(403).json({
+      error:
+        "Maker-Checker policy violation: the user who prepared this payroll run cannot self-approve disbursement.",
+    });
     return;
   }
 
@@ -892,6 +920,104 @@ router.get("/payroll/anomalies", async (req: Request, res: Response) => {
             status: "passed",
           },
         ],
+  });
+});
+
+// GET /api/payroll/runs/:runId/journal — Balanced Double-Entry Finance Cost-Centre Journal
+router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, payrollViewRoles);
+  if (!membership) return;
+
+  const runId = String(req.params.runId ?? "run_2026_03");
+  const cfg = await getActiveStatutoryConfig(membership.organizationId);
+  const items = buildDemoItemsForRun(runId, "March 2026", cfg);
+
+  const costCentreMap: Record<string, string> = {
+    "Formulation & Filling": "CC-MFG-01",
+    "Manufacturing & Brewing": "CC-MFG-01",
+    "Logistics & Distribution": "CC-LOG-01",
+    "Brand & Commercial Marketing": "CC-SLS-01",
+    "People Operations & Culture": "CC-HR-01",
+    "Finance & Supply Chain": "CC-FIN-01",
+  };
+
+  const deptTotals = new Map<string, { costCentre: string; dept: string; gross: number; empNssf: number; empAhl: number }>();
+  let totalNetPay = 0;
+  let totalPaye = 0;
+  let totalEmployeeNssf = 0;
+  let totalEmployerNssf = 0;
+  let totalShif = 0;
+  let totalEmployeeAhl = 0;
+  let totalEmployerAhl = 0;
+
+  for (const row of items) {
+    const deptName = (row as { departmentName?: string }).departmentName ?? "Formulation & Filling";
+    const cc = costCentreMap[deptName] ?? "CC-GEN-01";
+    const entry = deptTotals.get(cc) ?? { costCentre: cc, dept: deptName, gross: 0, empNssf: 0, empAhl: 0 };
+    entry.gross += row.grossPay;
+    entry.empNssf += row.employerNssf;
+    entry.empAhl += row.employerHousingLevy;
+    deptTotals.set(cc, entry);
+
+    totalNetPay += row.netPay;
+    totalPaye += row.netPaye;
+    totalEmployeeNssf += row.totalNssf;
+    totalEmployerNssf += row.employerNssf;
+    totalShif += row.sha;
+    totalEmployeeAhl += row.housingLevy;
+    totalEmployerAhl += row.employerHousingLevy;
+  }
+
+  const lines: Array<{
+    accountCode: string;
+    accountName: string;
+    costCentre: string;
+    debitKes: number;
+    creditKes: number;
+  }> = [];
+
+  for (const d of deptTotals.values()) {
+    lines.push({
+      accountCode: "6100",
+      accountName: `Salaries & Allowances Expense (${d.dept})`,
+      costCentre: d.costCentre,
+      debitKes: d.gross,
+      creditKes: 0,
+    });
+    lines.push({
+      accountCode: "6110",
+      accountName: `Employer NSSF Expense (${d.dept})`,
+      costCentre: d.costCentre,
+      debitKes: d.empNssf,
+      creditKes: 0,
+    });
+    lines.push({
+      accountCode: "6120",
+      accountName: `Employer Housing Levy Expense (${d.dept})`,
+      costCentre: d.costCentre,
+      debitKes: d.empAhl,
+      creditKes: 0,
+    });
+  }
+
+  lines.push(
+    { accountCode: "2100", accountName: "Net Salaries Payable (M-Pesa / Bank Clearing)", costCentre: "BALANCE_SHEET", debitKes: 0, creditKes: totalNetPay },
+    { accountCode: "2210", accountName: "KRA PAYE Tax Payable", costCentre: "BALANCE_SHEET", debitKes: 0, creditKes: totalPaye },
+    { accountCode: "2220", accountName: "NSSF Statutory Payable (Employee + Employer)", costCentre: "BALANCE_SHEET", debitKes: 0, creditKes: totalEmployeeNssf + totalEmployerNssf },
+    { accountCode: "2230", accountName: "SHA / SHIF Contribution Payable", costCentre: "BALANCE_SHEET", debitKes: 0, creditKes: totalShif },
+    { accountCode: "2240", accountName: "Affordable Housing Levy Payable (Employee + Employer)", costCentre: "BALANCE_SHEET", debitKes: 0, creditKes: totalEmployeeAhl + totalEmployerAhl },
+  );
+
+  const totalDebits = lines.reduce((s, l) => s + l.debitKes, 0);
+  const totalCredits = lines.reduce((s, l) => s + l.creditKes, 0);
+
+  res.json({
+    runId,
+    configName: cfg.name,
+    balanced: totalDebits === totalCredits,
+    totalDebitsKes: totalDebits,
+    totalCreditsKes: totalCredits,
+    lines,
   });
 });
 

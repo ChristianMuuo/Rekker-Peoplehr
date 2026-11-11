@@ -14,12 +14,14 @@ import assetsRouter from "./assets";
 import onboardingRouter from "./onboarding";
 import learningRouter from "./learning";
 import mlRouter from "./ml";
-import ecosystemRouter from "./ecosystem";
+import hrCasesRouter from "./hrCases";
+import workforceErpRouter from "./workforceErp";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
-router.use(ecosystemRouter);
+router.use(hrCasesRouter);
+router.use(workforceErpRouter);
 router.use(peopleOsRouter);
 router.use(leaveRouter);
 router.use(auditRouter);

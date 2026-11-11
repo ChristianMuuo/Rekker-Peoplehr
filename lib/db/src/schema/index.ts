@@ -18,4 +18,4 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./peopleos";
-export * from "./ecosystem";
+export * from "./hrOperations";

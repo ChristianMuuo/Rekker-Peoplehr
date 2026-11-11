@@ -18,8 +18,8 @@ import type { Employee, EmployeeInput, EmployeeUpdate, LeavePolicy, LeaveRequest
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, Bell, BrainCircuit, BriefcaseBusiness,
   CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, FileText,
-  Filter, GitBranch, Handshake, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, Search, Settings2, ShieldCheck, Sparkles,
-  Sun, Target, UserCheck, Users, X,
+  Factory, Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, Search, Settings2, ShieldAlert, ShieldCheck, Sparkles,
+  Sun, Target, Upload, UserCheck, Users, X,
 } from 'lucide-react';
 import { Link, Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -39,10 +39,9 @@ import { SelfServicePage } from '@/pages/SelfServicePage';
 import { ExpensesPage } from '@/pages/ExpensesPage';
 import { AssetsPage } from '@/pages/AssetsPage';
 import { PredictiveMlPage } from '@/pages/PredictiveMlPage';
-import { CareersPage, LegalPage } from '@/pages/CareersPage';
-import { CustomerPortalPage, DistributorPortalPage } from '@/pages/portals/PortalsPage';
-import { CrmPipelinePage, PartnerApprovalsPage } from '@/pages/erp/EcosystemErpPages';
-import { apiGet } from '@/lib/api';
+import { WorkforceErpPage } from '@/pages/WorkforceErpPage';
+import { HrCasesPage } from '@/pages/HrCasesPage';
+import { apiGet, apiPost } from '@/lib/api';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -148,7 +147,6 @@ function Home() {
               <Link href="/sign-in" className="btn btn-primary min-h-12 px-5" data-testid="link-home-enter">Open PeopleOS <ArrowRight size={16} /></Link>
               <a href="https://rekker.co.ke/" target="_blank" rel="noreferrer" className="btn min-h-12 border border-white/20 px-5 text-white hover:bg-white/10" data-testid="link-official-site">rekker.co.ke ↗</a>
               <a href="https://shop.rekker.co.ke/" target="_blank" rel="noreferrer" className="btn min-h-12 border border-white/20 px-5 text-white hover:bg-white/10" data-testid="link-official-shop">shop.rekker.co.ke ↗</a>
-              <Link href="/careers" className="btn min-h-12 border border-white/20 px-5 text-white hover:bg-white/10" data-testid="link-home-careers">Careers</Link>
             </div>
           </div>
           <div className="relative mt-14 grid max-w-[800px] grid-cols-1 gap-px overflow-hidden rounded-xl border border-white/10 bg-white/10 sm:grid-cols-3">
@@ -206,9 +204,9 @@ const workNav: NavItem[] = [
   { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
   { label: 'Reports & Analytics', href: '/reports', icon: ArrowDownRight },
 ];
-const commercialNav: NavItem[] = [
-  { label: 'CRM & Quotes', href: '/crm', icon: Target },
-  { label: 'Partner approvals', href: '/partner-approvals', icon: Handshake },
+const workforceErpNav: NavItem[] = [
+  { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
+  { label: 'HR Cases', href: '/hr-cases', icon: ShieldAlert },
 ];
 
 function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
@@ -259,7 +257,7 @@ function AppFrame() {
   if (isLoading) return <LoadingScreen label="Loading your workspace" />;
   if (isError || !auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
   const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const nav = [...primaryNav, ...commercialNav, ...visibleWorkNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
 
   const pendingApprovals = Array.isArray(approvalsQuery.data) ? approvalsQuery.data : [];
   const pendingAiApprovals = (aiApprovalsQuery.data?.items ?? []).filter(a => a.status === 'pending');
@@ -292,18 +290,14 @@ function AppFrame() {
           <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workspace</div>{renderNav(primaryNav)}
         </div>
         <div className="mt-6 flex-1 overflow-y-auto px-3">
-          <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Commercial &amp; CRM</div>{renderNav(commercialNav)}
           <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">People operations</div>{renderNav(visibleWorkNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + commercialNav.length + visibleWorkNav.length))}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workforce ERP &amp; Relations</div>{renderNav(workforceErpNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
           <div className="mb-2 grid grid-cols-2 gap-1.5">
             <a href="https://rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-rekker">rekker.co.ke ↗</a>
             <a href="https://shop.rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-shop">shop.rekker ↗</a>
-          </div>
-          <div className="mb-2 grid grid-cols-2 gap-1.5">
-            <Link href="/portal" className="flex items-center justify-center rounded-lg bg-stone-100 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-200">Buyer Portal</Link>
-            <Link href="/distributor" className="flex items-center justify-center rounded-lg bg-stone-100 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-200">Partner Portal</Link>
           </div>
           <div className="mb-3 rounded-xl bg-[#f7f4f0] p-3">
             <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#338956]" /><span className="text-xs font-bold text-stone-800">{auth.isDemo ? 'Demo workspace' : 'Live workspace'}</span></div>
@@ -370,8 +364,8 @@ function AppFrame() {
             <Route path="/documents" component={DocumentsPage} />
             <Route path="/ml" component={PredictiveMlPage} />
             <Route path="/reports" component={ReportsPage} />
-            <Route path="/crm" component={CrmPipelinePage} />
-            <Route path="/partner-approvals" component={PartnerApprovalsPage} />
+            <Route path="/workforce-erp" component={WorkforceErpPage} />
+            <Route path="/hr-cases" component={HrCasesPage} />
             <Route component={NotFound} />
           </Switch>
         </main>
@@ -530,7 +524,7 @@ function PeoplePage() {
   const create = useCreateEmployee();
   const canCreate = !!auth.data?.canManagePeople;
   return <div>
-    <PageHeading eyebrow="People operations / Records" title="People directory" description="Find colleagues and review the work details available to your role." action={canCreate ? <button className="btn btn-primary" onClick={() => setCreateOpen(true)} data-testid="button-create-employee"><Plus size={16} /> Add employee</button> : undefined} />
+    <PageHeading eyebrow="People operations / Records" title="People directory" description="Find colleagues and review the work details available to your role." action={canCreate ? <div className="flex flex-wrap items-center gap-2"><BulkEmployeeImportButton /><button className="btn btn-primary" onClick={() => setCreateOpen(true)} data-testid="button-create-employee"><Plus size={16} /> Add employee</button></div> : undefined} />
     <div className="surface p-4">
       <div className="grid gap-3 md:grid-cols-[1fr_210px_180px_auto]">
         <label className="relative"><span className="sr-only">Search people</span><Search size={16} className="absolute left-3 top-3 text-stone-400" /><input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="field pl-9" placeholder="Search name, role or employee number" data-testid="input-people-search" /></label>
@@ -604,6 +598,107 @@ function Modal({ title, children, onClose, testId }: { title: string; children: 
     </div>
   </div>;
 }
+const SAMPLE_EMPLOYEE_CSV = `employeeNumber,firstName,lastName,workEmail,jobTitle,departmentCode,location,employmentType,startDate
+REK-204,Faith,Mutuku,faith.mutuku@rekker.co.ke,Filling Line Operator,PROD,Nairobi Production Facility,permanent,2026-04-01
+REK-205,Peter,Njoroge,peter.njoroge@rekker.co.ke,Warehouse Dispatch Clerk,LOG,Nairobi Production Facility,permanent,2026-04-01`;
+
+function BulkEmployeeImportButton() {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [csvText, setCsvText] = useState(SAMPLE_EMPLOYEE_CSV);
+  const [preview, setPreview] = useState<any | null>(null);
+  const [commitResult, setCommitResult] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const runPreview = async () => {
+    setBusy(true);
+    setError(null);
+    setCommitResult(null);
+    try {
+      const data = await apiPost('/api/peopleos/employees/import-preview', { csvText });
+      setPreview(data);
+    } catch (e: any) {
+      setError(e?.message || 'Unable to validate CSV rows.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runCommit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await apiPost('/api/peopleos/employees/import', { csvText });
+      setCommitResult(data);
+      setPreview(null);
+      await qc.invalidateQueries();
+    } catch (e: any) {
+      setError(e?.message || 'Bulk employee import failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <>
+    <button type="button" className="btn btn-secondary" onClick={() => { setOpen(true); setPreview(null); setCommitResult(null); setError(null); }} data-testid="button-open-csv-import">
+      <Upload size={15} /> Import CSV
+    </button>
+    {open && <Modal title="Bulk import employees (CSV)" onClose={() => setOpen(false)} testId="dialog-csv-import">
+      <div className="space-y-4 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <span className="text-stone-600">Upload a <code>.csv</code> file or paste rows below. Duplicates are automatically quarantined before commit.</span>
+          <label className="btn btn-secondary min-h-8 cursor-pointer px-3 text-xs">
+            Choose .csv file
+            <input type="file" accept=".csv,text/csv" className="hidden" onChange={async e => {
+              const file = e.target.files?.[0];
+              if (file) {
+                setCsvText(await file.text());
+                setPreview(null);
+                setCommitResult(null);
+              }
+            }} />
+          </label>
+        </div>
+        <textarea value={csvText} onChange={e => { setCsvText(e.target.value); setPreview(null); }} rows={5} className="field w-full font-mono text-[11px]" placeholder="employeeNumber,firstName,lastName,workEmail,jobTitle,departmentCode,location,employmentType,startDate" data-testid="textarea-csv-import" />
+        {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-semibold text-red-800">{error}</div>}
+        {commitResult && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-900">
+          Imported {commitResult.importedCount ?? 0} employee record(s). Skipped {commitResult.skippedDuplicatesCount ?? 0} duplicate(s).
+        </div>}
+        {preview && <div className="space-y-2">
+          <div className="flex flex-wrap gap-2 text-[11px] font-bold">
+            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-800">Valid: {preview.validCount}</span>
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-800">Duplicates: {preview.duplicateCount}</span>
+            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-red-800">Errors: {preview.errorCount}</span>
+          </div>
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-stone-200">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-stone-50 text-stone-500"><tr><th className="px-2 py-1.5">Row</th><th className="px-2 py-1.5">Emp #</th><th className="px-2 py-1.5">Name</th><th className="px-2 py-1.5">Dept</th><th className="px-2 py-1.5">Status</th></tr></thead>
+              <tbody className="divide-y divide-stone-100">
+                {(preview.rows ?? []).map((r: any) => <tr key={r.rowNumber}>
+                  <td className="px-2 py-1">{r.rowNumber}</td>
+                  <td className="px-2 py-1 font-mono">{r.employeeNumber || '—'}</td>
+                  <td className="px-2 py-1">{r.firstName} {r.lastName}</td>
+                  <td className="px-2 py-1">{r.departmentName}</td>
+                  <td className="px-2 py-1"><span className={`font-bold ${r.status === 'valid' ? 'text-emerald-700' : r.status === 'duplicate' ? 'text-amber-700' : 'text-red-700'}`}>{r.status}{r.errors?.length ? `: ${r.errors.join('; ')}` : ''}</span></td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        </div>}
+        <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
+          <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>Close</button>
+          <button type="button" className="btn btn-secondary" disabled={busy || !csvText.trim()} onClick={runPreview} data-testid="button-preview-csv">
+            {busy ? 'Validating…' : 'Preview & Validate'}
+          </button>
+          <button type="button" className="btn btn-primary" disabled={busy || !preview || preview.validCount === 0} onClick={runCommit} data-testid="button-commit-csv">
+            Import {preview?.validCount ?? 0} Valid Row(s)
+          </button>
+        </div>
+      </div>
+    </Modal>}
+  </>;
+}
 function formatDate(value: string) { if (!value) return '—'; const date = new Date(`${value.slice(0,10)}T00:00:00`); return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }).format(date); }
 function EmployeePage() {
   const params = (useLocation()[0].split('/').filter(Boolean).at(-1) ?? '');
@@ -673,12 +768,52 @@ function Info({ label, value, testId }: { label: string; value: string; testId: 
   return <div data-testid={`info-${testId}`}><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">{label}</p><p className="mt-1.5 text-sm font-semibold capitalize text-stone-700">{value}</p></div>;
 }
 
+function OrgTreeBranch({ node, byManager, depth = 0 }: { node: any; byManager: Map<string, any[]>; depth?: number }) {
+  const children = byManager.get(node.id) ?? [];
+  return <div className={depth > 0 ? 'ml-4 border-l border-stone-200 pl-4 mt-2.5' : 'mt-2.5'}>
+    <Link href={`/people/${node.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-[#faf8f5] px-3.5 py-2.5 text-xs transition-colors hover:border-[#C71D1D]/40 hover:bg-white">
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] font-bold text-[#bd2725]">{node.employeeNumber}</span>
+          <span className="font-semibold text-stone-900">{node.fullName}</span>
+          <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-stone-600 ring-1 ring-stone-200">{node.departmentName}</span>
+        </div>
+        <p className="mt-0.5 text-[11px] text-stone-500">{node.jobTitle}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {node.directReportsCount > 0 && <span className="rounded-full bg-[#f9e9e6] px-2 py-0.5 text-[10px] font-bold text-[#a91919]">{node.directReportsCount} direct report{node.directReportsCount === 1 ? '' : 's'}</span>}
+        <StatusPill status={node.status} />
+      </div>
+    </Link>
+    {children.length > 0 && <div className="space-y-1">{children.map(child => <OrgTreeBranch key={child.id} node={child} byManager={byManager} depth={depth + 1} />)}</div>}
+  </div>;
+}
+
 function OrganizationPage() {
   const query = useListDepartments();
+  const orgChartQuery = useQuery({
+    queryKey: ['peopleos-org-chart'],
+    queryFn: () => apiGet<{ totalNodes: number; nodes: any[] }>('/api/peopleos/org-chart'),
+  });
   if (query.isLoading) return <LoadingScreen label="Loading departments" />;
   if (query.isError) return <ErrorState title="Organization view could not load" onRetry={() => query.refetch()} />;
-  return <div><PageHeading eyebrow="Structure / Teams" title="Organization" description="Department structure, team leads and planned capacity across the operation." />
-    <div className="mb-4 flex flex-wrap gap-2"><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 ring-1 ring-stone-200" data-testid="text-department-count">{query.data?.length ?? 0} departments</span><span className="rounded-full bg-[#e8f2eb] px-3 py-1.5 text-xs font-semibold text-[#34734d]" data-testid="text-organization-headcount">{query.data?.reduce((sum,d) => sum + d.headcount,0) ?? 0} current team members</span></div>
+
+  const orgNodes = orgChartQuery.data?.nodes ?? [];
+  const nodeIds = new Set(orgNodes.map((n: any) => n.id));
+  const byManager = new Map<string, any[]>();
+  const roots: any[] = [];
+  for (const node of orgNodes) {
+    if (!node.managerId || !nodeIds.has(node.managerId)) {
+      roots.push(node);
+    } else {
+      const list = byManager.get(node.managerId) ?? [];
+      list.push(node);
+      byManager.set(node.managerId, list);
+    }
+  }
+
+  return <div><PageHeading eyebrow="Structure / Teams" title="Organization" description="Department structure, visual reporting lines and planned capacity across the operation." />
+    <div className="mb-4 flex flex-wrap gap-2"><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 ring-1 ring-stone-200" data-testid="text-department-count">{query.data?.length ?? 0} departments</span><span className="rounded-full bg-[#e8f2eb] px-3 py-1.5 text-xs font-semibold text-[#34734d]" data-testid="text-organization-headcount">{query.data?.reduce((sum,d) => sum + d.headcount,0) ?? 0} current team members</span><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 ring-1 ring-stone-200" data-testid="text-org-chart-nodes">{orgNodes.length} reporting nodes</span></div>
     {!query.data?.length ? <div className="surface"><EmptyState title="No department structure available" message="Department data will appear here once it is available to your role." /></div> :
       <div className="grid gap-4 lg:grid-cols-2">{query.data.map(dept => <section className="surface p-5 md:p-6" key={dept.id} data-testid={`card-department-${dept.id}`}>
         <div className="flex items-start justify-between"><div><span className="font-mono text-[10px] font-bold tracking-widest text-[#bd2725]">{dept.code}</span><h2 className="mt-2 font-display text-xl font-semibold text-stone-900">{dept.name}</h2></div><span className="rounded-lg bg-[#f5f1ec] p-2 text-stone-500"><GitBranch size={17} /></span></div>
@@ -686,6 +821,16 @@ function OrganizationPage() {
         <div className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-[#faf8f5] p-4"><div><p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Headcount</p><p className="mt-1 font-display text-2xl font-semibold text-stone-900">{dept.headcount}<span className="ml-1 text-xs font-medium text-stone-400">/ {dept.budgetedPositions}</span></p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Department lead</p><p className="mt-2 text-sm font-semibold text-stone-700">{dept.managerName || 'Not assigned'}</p></div></div>
         <div className="mt-4 flex items-center gap-2 text-xs text-stone-500"><span className="h-2 w-2 rounded-full bg-[#338956]" />{dept.location}</div>
       </section>)}</div>}
+    {roots.length > 0 && <section className="surface mt-6 p-5 md:p-6" data-testid="section-org-hierarchy">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bd2725]">Phase 2 · Visual Reporting Lines</p>
+          <h2 className="mt-1 font-display text-lg font-semibold text-stone-900">Organizational Hierarchy Tree</h2>
+        </div>
+        <span className="rounded-md bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-600">{roots.length} top-level lead{roots.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="mt-3 space-y-2">{roots.map(root => <OrgTreeBranch key={root.id} node={root} byManager={byManager} />)}</div>
+    </section>}
   </div>;
 }
 
@@ -940,11 +1085,6 @@ function RoutedBoundary({ children }: { children: ReactNode }) {
 function RouterContents() {
   return <RoutedBoundary><Switch>
     <Route path="/" component={AppHomeRedirect} />
-    <Route path="/careers" component={CareersPage} />
-    <Route path="/privacy">{() => <LegalPage mode="privacy" />}</Route>
-    <Route path="/terms">{() => <LegalPage mode="terms" />}</Route>
-    <Route path="/portal">{() => <><Show when="signed-in"><CustomerPortalPage /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>}</Route>
-    <Route path="/distributor">{() => <><Show when="signed-in"><DistributorPortalPage /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>}</Route>
     <Route path="/sign-in/*?" component={SignInPage} />
     <Route path="/sign-up/*?" component={SignUpPage} />
     <Route component={ProtectedRouter} />

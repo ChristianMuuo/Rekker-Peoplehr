@@ -175,90 +175,63 @@ const DEFAULT_STATUTORY_CONFIGS = [
   },
 ];
 
-const FALLBACK_B2B_PRICEBOOK = [
-  { sku: 'SM-HC-101', name: 'Saffron Milan Hard-Water Laundry Carton', brandName: 'Saffron Milan', moqUnits: 12, wholesaleUnitKes: 380 },
-  { sku: 'SM-SC-102', name: 'Saffron Milan Surface & Dishwashing Carton', brandName: 'Saffron Milan', moqUnits: 12, wholesaleUnitKes: 320 },
-  { sku: 'BS-PC-201', name: 'Bio Saff Salon & Hair Care Trade Pack', brandName: 'Bio Saff', moqUnits: 12, wholesaleUnitKes: 450 },
-  { sku: 'CN-FR-301', name: 'Cornells Signature Fragrance Trade Case', brandName: 'Cornells', moqUnits: 12, wholesaleUnitKes: 950 },
-  { sku: 'PC-AN-401', name: 'PetCare Coat Shampoo Trade Case', brandName: 'PetCare', moqUnits: 12, wholesaleUnitKes: 620 },
+const FALLBACK_HR_CASES: Array<any> = [
+  { id: 'hrc-001', caseNumber: 'HRC-2026-001', category: 'workplace_query', severity: 'low', title: 'Fixed-Term Contract Renewal Clarification', description: 'Review timeline and statutory gratuity query ahead of 30 April contract end.', confidentialNotes: 'HR Director noted positive KPI attainment; renewal addendum drafted.', status: 'investigating', resolutionSummary: null, createdAt: '2026-03-01T09:30:00Z' },
 ];
-const FALLBACK_CRM_LEADS: Array<any> = [];
-const FALLBACK_QUOTES: Array<any> = [];
-const FALLBACK_DIST_APPS: Array<any> = [];
-const FALLBACK_WHOLESALE_ORDERS: Array<any> = [];
-const FALLBACK_TICKETS: Array<any> = [];
+const FALLBACK_WF_RULES: Array<any> = [
+  { id: 'wf-leave-01', domain: 'leave', name: 'Department Manager + HR Signoff', approvalLevels: 2, slaHours: 24, requiredApproverRoles: ['department_manager', 'hr_manager'], isActive: true },
+  { id: 'wf-payroll-01', domain: 'payroll', name: 'Dual Maker-Checker Statutory Disbursement', approvalLevels: 2, slaHours: 48, requiredApproverRoles: ['payroll_officer', 'finance_manager'], isActive: true },
+];
 
 export function handleFallbackApi(url: string, method: string = 'GET', body?: any): any {
   const path = url.split('?')[0];
   const parsedBody = body && typeof body === 'string' ? (() => { try { return JSON.parse(body); } catch { return {}; } })() : (body || {});
 
-  if (path === '/api/public/careers') {
+  if (path === '/api/hr-cases') {
+    if (method === 'POST') {
+      const rec = { id: `hrc-${Date.now()}`, caseNumber: `HRC-2026-0${FALLBACK_HR_CASES.length + 1}`, category: parsedBody.category || 'grievance', severity: parsedBody.severity || 'medium', title: parsedBody.title, description: parsedBody.description, confidentialNotes: parsedBody.confidentialNotes || '', status: 'open', createdAt: new Date().toISOString() };
+      FALLBACK_HR_CASES.unshift(rec);
+      return rec;
+    }
+    return { items: FALLBACK_HR_CASES, total: FALLBACK_HR_CASES.length, accessScope: 'HR_CASE_OFFICER_FULL' };
+  }
+  if (path === '/api/workforce-erp/overview') {
     return {
-      items: [
-        { id: 'req_01', title: 'Senior Formulation & Production Chemist', departmentName: 'Formulation & Filling', location: 'Nairobi Production Facility', employmentType: 'Full-time Permanent', openings: 1, description: 'Lead home care and personal care formulation and KEBS batch quality compliance.', postedDate: '2026-02-10' },
-        { id: 'req_02', title: 'National Trade & Distributor Fulfillment Coordinator', departmentName: 'Logistics & Distribution', location: 'Nairobi Central Hub', employmentType: 'Full-time Permanent', openings: 2, description: 'Coordinate nationwide FMCG distributor fulfillment across all 47 counties.', postedDate: '2026-02-18' },
+      dataScope: 'ERP_WORKFORCE_AVAILABILITY',
+      roster: [
+        { employeeId: '10000000-0000-4000-8000-000000000001', employeeName: 'Achieng Odhiambo', unitType: 'production', workZone: 'Formulation Line A', shiftName: 'Morning (06:00-14:00)', roleSkill: 'Lead Formulation Chemist', certificationValidUntil: '2027-01-15', costCentreCode: 'CC-MFG-01', availableToday: true },
+        { employeeId: '10000000-0000-4000-8000-000000000004', employeeName: 'Wanjiku Kimani', unitType: 'warehouse', workZone: 'Nairobi Dispatch Warehouse', shiftName: 'Day (08:00-17:00)', roleSkill: 'Forklift Operator', certificationValidUntil: '2026-04-05', costCentreCode: 'CC-WHS-01', availableToday: false },
       ],
-      total: 2,
+      heatmap: [
+        { unitType: 'production', scheduled: 2, present: 2, awayOrPendingLeave: 0, coveragePct: 100 },
+        { unitType: 'warehouse', scheduled: 1, present: 0, awayOrPendingLeave: 1, coveragePct: 0 },
+        { unitType: 'distribution', scheduled: 1, present: 1, awayOrPendingLeave: 0, coveragePct: 100 },
+        { unitType: 'sales', scheduled: 2, present: 1, awayOrPendingLeave: 1, coveragePct: 50 },
+      ],
+      understaffedUnits: [{ unitType: 'warehouse', coveragePct: 0 }],
     };
   }
-
-  if (path === '/api/portal/customer/summary') {
-    return { customerId: 'user_demo_admin_01', quotations: FALLBACK_QUOTES, tickets: FALLBACK_TICKETS, authorizedDocuments: [{ id: 'doc-odpc', name: 'Rekker Commercial Terms & ODPC Privacy Notice.pdf', category: 'Legal' }] };
+  if (path === '/api/workforce-erp/drivers') {
+    return { items: [{ employeeId: '10000000-0000-4000-8000-000000000003', driverName: 'Juma Omondi', licenseNumber: 'DL-KE-881204', licenseClass: 'BCE Commercial Heavy', licenseExpiry: '2026-03-29', psvOrSafetyCertExpiry: '2026-04-12', assignedVehicle: 'KDM 482L · Box Truck', routeCorridor: 'Nairobi -> Nakuru', daysRemaining: 23, alertLevel: 'expiring_soon' }], alertsCount: 1 };
   }
-  if (path === '/api/portal/customer/quotes' && method === 'POST') {
-    const ref = `QT-2026-${String(FALLBACK_QUOTES.length + 1).padStart(3, '0')}`;
-    const now = new Date().toISOString();
-    FALLBACK_QUOTES.unshift({ id: ref, referenceCode: ref, customerUserId: 'user_demo_admin_01', customerName: parsedBody.customerName || 'B2B Buyer', companyName: parsedBody.companyName || null, email: parsedBody.email, phone: parsedBody.phone || null, productName: parsedBody.productName, requestedQuantity: Number(parsedBody.requestedQuantity || 12), deliveryLocation: parsedBody.deliveryLocation, status: 'submitted', createdAt: now });
-    FALLBACK_CRM_LEADS.unshift({ id: ref, referenceCode: ref, source: 'customer_portal', stage: 'quotation_requested', customerName: parsedBody.customerName || 'B2B Buyer', companyName: parsedBody.companyName || null, email: parsedBody.email, phone: parsedBody.phone || null, interestCategory: parsedBody.productName, priority: 'medium', estimatedValueKes: 0, notes: `Qty ${parsedBody.requestedQuantity} to ${parsedBody.deliveryLocation}`, communicationHistory: [{ timestamp: now, actor: 'portal', note: 'Submitted' }], createdAt: now, updatedAt: now });
-    return { referenceCode: ref, status: 'submitted', message: `Quotation ${ref} submitted.`, submittedAt: now };
+  if (path === '/api/workforce-erp/production/replacements') {
+    return { missingCoverageEmployees: [{ employeeId: '10000000-0000-4000-8000-000000000004', name: 'Wanjiku Kimani', departmentName: 'Logistics & Distribution' }], qualifiedReplacements: [{ employeeId: '10000000-0000-4000-8000-000000000002', name: 'Mwangi Kariuki', departmentName: 'Formulation & Filling', jobTitle: 'Senior Production Operator', safetyCleared: true, readinessNote: 'Direct Production Line Certified' }] };
   }
-  if (path === '/api/portal/customer/tickets' && method === 'POST') {
-    const tck = { id: `TCK-${Date.now()}`, ticketNumber: `TCK-2026-${FALLBACK_TICKETS.length + 1}`, subject: parsedBody.subject, category: parsedBody.category || 'Order Support', description: parsedBody.description, status: 'open', createdAt: new Date().toISOString() };
-    FALLBACK_TICKETS.unshift(tck);
-    return tck;
+  if (path === '/api/workforce-erp/sales-force') {
+    return { items: [{ employeeId: '10000000-0000-4000-8000-000000000005', repName: 'Brenda Mutheu', territory: 'Nairobi Metro & Modern Trade', costCentreCode: 'CC-SLS-01', monthlyTargetKes: 2500000, actualAttributedKes: 2310000, commissionRatePct: 2.5, attainmentPct: 92.4, estimatedCommissionKes: 57750 }], totalAttributedKes: 2310000 };
   }
-
-  if (path === '/api/portal/distributor/dashboard') {
-    return { distributorId: 'user_demo_admin_01', partnerStatus: 'active', tierName: 'Regional Trade Partner', pricebook: FALLBACK_B2B_PRICEBOOK, orders: FALLBACK_WHOLESALE_ORDERS, applications: FALLBACK_DIST_APPS };
+  if (path === '/api/workflow-rules') {
+    return { items: FALLBACK_WF_RULES };
   }
-  if (path === '/api/portal/distributor/orders' && method === 'POST') {
-    const items = (parsedBody.items || []).map((i: any) => { const p = FALLBACK_B2B_PRICEBOOK.find(x => x.sku === i.sku) || FALLBACK_B2B_PRICEBOOK[0]; return { sku: p.sku, productName: p.name, quantity: Number(i.quantity), unitPriceKes: p.wholesaleUnitKes, lineTotalKes: p.wholesaleUnitKes * Number(i.quantity) }; });
-    const order = { id: `ord-${Date.now()}`, orderNumber: `PO-WH-2026-${FALLBACK_WHOLESALE_ORDERS.length + 1}`, items, totalUnits: items.reduce((s: number, i: any) => s + i.quantity, 0), totalAmountKes: items.reduce((s: number, i: any) => s + i.lineTotalKes, 0), deliveryCounty: parsedBody.deliveryCounty, status: parsedBody.submitNow ? 'submitted' : 'draft', createdAt: new Date().toISOString() };
-    FALLBACK_WHOLESALE_ORDERS.unshift(order);
-    return order;
+  if (path === '/api/integrations/status') {
+    return { adapters: [{ key: 'mpesa_daraja', name: 'Safaricom M-Pesa Daraja B2C', category: 'Kenyan Payroll', configured: false, status: 'AWAITING_CREDENTIALS', detail: 'Static browser preview mode.' }] };
   }
-
-  if (path === '/api/erp/crm/leads') {
-    if (method === 'POST') {
-      const ref = `LD-2026-${FALLBACK_CRM_LEADS.length + 1}`;
-      const rec = { id: ref, referenceCode: ref, source: parsedBody.source || 'manual', stage: 'new_lead', customerName: parsedBody.customerName, companyName: parsedBody.companyName || null, email: parsedBody.email, phone: parsedBody.phone || null, interestCategory: parsedBody.interestCategory || 'General Trade', priority: 'medium', estimatedValueKes: Number(parsedBody.estimatedValueKes || 0), notes: parsedBody.notes || '', communicationHistory: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-      FALLBACK_CRM_LEADS.unshift(rec);
-      return rec;
-    }
-    return { items: FALLBACK_CRM_LEADS, total: FALLBACK_CRM_LEADS.length, stages: ['new_lead', 'contacted', 'qualified', 'quotation_requested', 'quotation_sent', 'negotiation', 'won', 'lost'] };
+  if (path === '/api/peopleos/org-chart') {
+    return { totalNodes: DEFAULT_EMPS.length, nodes: DEFAULT_EMPS.map(e => ({ id: e.id, employeeNumber: e.employeeNumber, fullName: `${e.firstName} ${e.lastName}`, jobTitle: e.jobTitle, departmentName: e.departmentName, managerId: e.managerId ?? null, managerName: e.managerName ?? null, status: e.status, directReportsCount: 0 })) };
   }
-  if (path.startsWith('/api/erp/crm/leads/') && path.endsWith('/stage')) {
-    const id = path.split('/')[5];
-    const lead = FALLBACK_CRM_LEADS.find(l => l.id === id);
-    if (lead) lead.stage = parsedBody.stage;
-    return lead || { ok: true };
+  if (path.endsWith('/journal')) {
+    return { runId: 'run_2026_03', balanced: true, totalDebitsKes: 1200000, totalCreditsKes: 1200000, lines: [{ accountCode: '6100', accountName: 'Salaries & Wages Expense', costCentre: 'CC-MFG-01', debitKes: 1200000, creditKes: 0 }, { accountCode: '2100', accountName: 'Net Salaries Payable', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: 1200000 }] };
   }
-  if (path === '/api/erp/crm/analytics') {
-    const totalLeads = FALLBACK_CRM_LEADS.length;
-    const wonCount = FALLBACK_CRM_LEADS.filter(l => l.stage === 'won').length;
-    return { dataSource: 'ACTUAL_STORED_RECORDS', totalLeads, openOpportunities: totalLeads - wonCount, wonCount, lostCount: FALLBACK_CRM_LEADS.filter(l => l.stage === 'lost').length, wonValueKes: FALLBACK_CRM_LEADS.filter(l => l.stage === 'won').reduce((s, l) => s + (l.estimatedValueKes || 0), 0), conversionRatePct: totalLeads ? Math.round((wonCount / totalLeads) * 1000) / 10 : 0, byStage: {}, bySource: {} };
-  }
-  if (path === '/api/erp/quotations') return { items: FALLBACK_QUOTES };
-  if (path === '/api/erp/distributors/applications') {
-    if (method === 'POST') {
-      const ref = `DIST-2026-${FALLBACK_DIST_APPS.length + 1}`;
-      const rec = { id: ref, referenceCode: ref, ...parsedBody, status: 'submitted', tierName: 'Standard Trade', createdAt: new Date().toISOString() };
-      FALLBACK_DIST_APPS.unshift(rec);
-      return rec;
-    }
-    return { items: FALLBACK_DIST_APPS };
-  }
-  if (path === '/api/erp/permissions') return { currentRole: 'hr_admin', roles: {}, matrix: {} };
 
   if (path === '/api/auth/context') {
     return {

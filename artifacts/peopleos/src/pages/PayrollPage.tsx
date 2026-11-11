@@ -13,6 +13,8 @@ export function PayrollPage() {
   const [selectedPayslip, setSelectedPayslip] = useState<any | null>(null);
   const [p9aEmployeeId, setP9aEmployeeId] = useState<string | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showJournalModal, setShowJournalModal] = useState(false);
+  const [statusTone, setStatusTone] = useState<'ok' | 'error'>('ok');
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [customGross, setCustomGross] = useState<number>(180000);
 
@@ -73,22 +75,59 @@ export function PayrollPage() {
 
   const handleApproveRun = async () => {
     if (!activeRun) return;
-    const res = await apiPost('/api/payroll/approve', { period: activeRun.id });
-    setStatusBanner(res.message || `Payroll run ${activeRun.period} approved for disbursement.`);
-    qc.invalidateQueries({ queryKey: ['payroll-runs'] });
-    qc.invalidateQueries({ queryKey: ['payroll-items', selectedRunId] });
+    try {
+      const res = await apiPost('/api/payroll/approve', { period: activeRun.id });
+      setStatusTone('ok');
+      setStatusBanner(res.message || `Payroll run ${activeRun.period} approved for disbursement.`);
+      qc.invalidateQueries({ queryKey: ['payroll-runs'] });
+      qc.invalidateQueries({ queryKey: ['payroll-items', selectedRunId] });
+      qc.invalidateQueries({ queryKey: ['payroll-journal', selectedRunId] });
+    } catch (err: any) {
+      setStatusTone('error');
+      setStatusBanner(err?.message || 'Maker-Checker rule prevented self-approval on this payroll run.');
+    }
+  };
+
+  const journalQuery = useQuery({
+    queryKey: ['payroll-journal', selectedRunId],
+    queryFn: () => apiGet<any>(`/api/payroll/runs/${selectedRunId}/journal`),
+    enabled: showJournalModal && !!selectedRunId,
+  });
+
+  const handleExportJournalCsv = () => {
+    const linesData: any[] = journalQuery.data?.lines ?? [];
+    if (!linesData.length) return;
+    const header = ['AccountCode', 'AccountName', 'CostCentre', 'DebitKES', 'CreditKES'];
+    const rows = linesData.map((l: any) =>
+      [
+        l.accountCode,
+        `"${String(l.accountName).replace(/"/g, '""')}"`,
+        `"${String(l.costCentre || 'Rekker HQ').replace(/"/g, '""')}"`,
+        l.debitKes ?? 0,
+        l.creditKes ?? 0,
+      ].join(','),
+    );
+    const blob = new Blob([[header.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `rekker-gl-journal-${selectedRunId}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleMpesaDisburse = async () => {
     if (!activeRun) return;
     try {
       const res = await apiPost(`/api/payroll/runs/${activeRun.id}/disburse-mpesa`, {});
+      setStatusTone('ok');
       setStatusBanner(
         `Disbursed KES ${(res.totalDisbursedKes || 0).toLocaleString()} to ${res.totalEmployeesPaid} employees via M-Pesa B2C (${res.providerMode}).`,
       );
       qc.invalidateQueries({ queryKey: ['payroll-runs'] });
       qc.invalidateQueries({ queryKey: ['payroll-items', selectedRunId] });
     } catch (err: any) {
+      setStatusTone('error');
       setStatusBanner(err?.message || 'Disbursement blocked until payroll run receives human approval.');
     }
   };
@@ -136,6 +175,9 @@ export function PayrollPage() {
           <button onClick={() => setShowConfigModal(true)} className="btn btn-secondary text-xs">
             <Settings2 size={15} /> Configure Statutory Rates
           </button>
+          <button onClick={() => setShowJournalModal(true)} className="btn btn-secondary text-xs" data-testid="button-payroll-journal">
+            <FileText size={15} /> Finance GL Journal
+          </button>
           {activeRun?.status === 'reviewed' && (
             <button onClick={handleApproveRun} className="btn btn-primary text-xs">
               <ShieldCheck size={15} /> Approve Payroll Run
@@ -155,7 +197,13 @@ export function PayrollPage() {
       </div>
 
       {statusBanner && (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-900">
+        <div
+          className={`flex items-center justify-between rounded-xl border px-4 py-3 text-xs font-semibold ${
+            statusTone === 'error'
+              ? 'border-red-200 bg-red-50 text-red-900'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+          }`}
+        >
           <span>{statusBanner}</span>
           <button onClick={() => setStatusBanner(null)}><X size={14} /></button>
         </div>
@@ -363,6 +411,83 @@ export function PayrollPage() {
                 <button type="submit" className="btn btn-primary text-xs"><Plus size={14} /> Save & Activate Schedule</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showJournalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4 backdrop-blur-xs" data-testid="modal-payroll-journal">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bd2725]">Finance ERP Integration / Cost-Centre GL</p>
+                <h2 className="font-display text-xl font-bold text-stone-900">Double-Entry Payroll Journal ({activeRun?.period ?? selectedRunId})</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportJournalCsv}
+                  disabled={!journalQuery.data?.lines?.length}
+                  className="btn btn-secondary min-h-8 px-3 text-xs"
+                  data-testid="button-export-journal-csv"
+                >
+                  <FileText size={14} /> Export GL CSV
+                </button>
+                <button onClick={() => setShowJournalModal(false)} className="btn btn-ghost min-h-8 px-2" aria-label="Close GL journal">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {journalQuery.isLoading ? (
+              <p className="py-8 text-center text-sm text-stone-500">Generating cost-centre general ledger journal…</p>
+            ) : journalQuery.isError ? (
+              <p className="py-6 text-sm text-red-700">Failed to generate GL journal for this payroll run.</p>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs">
+                  <span>
+                    <strong className="text-stone-800">Schedule:</strong> {journalQuery.data?.configName ?? 'Kenya Statutory 2025/2026'}
+                  </span>
+                  <div className="flex items-center gap-4">
+                    <span>Debits: <strong>KES {(journalQuery.data?.totalDebitsKes ?? 0).toLocaleString()}</strong></span>
+                    <span>Credits: <strong>KES {(journalQuery.data?.totalCreditsKes ?? 0).toLocaleString()}</strong></span>
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${journalQuery.data?.balanced ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                      {journalQuery.data?.balanced ? 'BALANCED' : 'UNBALANCED'}
+                    </span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-stone-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-stone-50 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                      <tr>
+                        <th className="px-3 py-2.5">Account</th>
+                        <th className="px-3 py-2.5">Cost Centre</th>
+                        <th className="px-3 py-2.5 text-right">Debit (KES)</th>
+                        <th className="px-3 py-2.5 text-right">Credit (KES)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {(journalQuery.data?.lines ?? []).map((line: any, idx: number) => (
+                        <tr key={`${line.accountCode}-${idx}`} className="hover:bg-stone-50/70">
+                          <td className="px-3 py-2.5">
+                            <span className="font-mono text-[11px] font-bold text-stone-700">{line.accountCode}</span>{' '}
+                            <span className="text-stone-800">{line.accountName}</span>
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-[11px] text-stone-600">{line.costCentre}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-stone-900">
+                            {line.debitKes > 0 ? line.debitKes.toLocaleString() : '—'}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono text-stone-900">
+                            {line.creditKes > 0 ? line.creditKes.toLocaleString() : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

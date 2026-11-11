@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
@@ -22,7 +23,8 @@ import {
   employeesTable,
   leaveRequestsTable,
 } from "@workspace/db";
-import { maskKraPin, maskNationalId, maskPhoneNumber } from "../lib/security";
+import { maskKraPin, maskNationalId, maskPhoneNumber, sanitizeText } from "../lib/security";
+import { recordAuditEvent } from "../lib/auditService";
 import {
   getAuthSessionMeta,
   getPeopleOsOrganization,
@@ -1100,6 +1102,245 @@ router.get(["/agents/status", "/agent-provider/status"], (_req, res): void => {
         : "10-Agent StateGraph Supervisor, RAG policy engine, and Python Scikit-learn/XGBoost ML tools are active. Add OPENAI_API_KEY in Secrets to enable generative LLM synthesis.",
     }),
   );
+});
+
+function parseEmployeeCsv(csvText: string) {
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return [];
+  const rawHeaders = lines[0]!.split(",").map((h) => h.trim().toLowerCase());
+  const hasHeader = rawHeaders.includes("firstname") || rawHeaders.includes("first_name") || rawHeaders.includes("employeenumber") || rawHeaders.includes("employee_number");
+  const startIdx = hasHeader ? 1 : 0;
+
+  return lines.slice(startIdx).map((line, i) => {
+    const cols = line.split(",").map((c) => c.trim());
+    const idxMap = (aliases: string[], fallbackIdx: number) => {
+      if (!hasHeader) return cols[fallbackIdx] ?? "";
+      for (const a of aliases) {
+        const pos = rawHeaders.indexOf(a);
+        if (pos >= 0) return cols[pos] ?? "";
+      }
+      return cols[fallbackIdx] ?? "";
+    };
+    return {
+      rowNumber: startIdx + i + 1,
+      employeeNumber: sanitizeText(idxMap(["employeenumber", "employee_number", "emp_no"], 0), 40).toUpperCase(),
+      firstName: sanitizeText(idxMap(["firstname", "first_name"], 1), 80),
+      lastName: sanitizeText(idxMap(["lastname", "last_name"], 2), 80),
+      workEmail: sanitizeText(idxMap(["workemail", "work_email", "email"], 3), 160).toLowerCase(),
+      jobTitle: sanitizeText(idxMap(["jobtitle", "job_title", "role"], 4), 120),
+      departmentCode: sanitizeText(idxMap(["departmentcode", "department_code", "dept"], 5) || "PEOPLE", 24).toUpperCase(),
+      location: sanitizeText(idxMap(["location"], 6) || "Nairobi Production Facility", 120),
+      employmentType: sanitizeText(idxMap(["employmenttype", "employment_type"], 7) || "permanent", 30) as DemoEmployeeItem["employmentType"],
+      startDate: sanitizeText(idxMap(["startdate", "start_date"], 8) || new Date().toISOString().slice(0, 10), 20),
+    };
+  });
+}
+
+// POST /api/peopleos/employees/import-preview — Validate & Detect Duplicates Before Bulk Import
+router.post("/peopleos/employees/import-preview", async (req, res): Promise<void> => {
+  const membership = await requireRoles(req, res, peopleManagers);
+  if (!membership) return;
+
+  const csvText = String(req.body?.csvText ?? "");
+  const parsed = parseEmployeeCsv(csvText);
+  if (!parsed.length) {
+    res.status(400).json({ error: "No employee CSV rows supplied." });
+    return;
+  }
+
+  let existingNumbers = new Set<string>();
+  let existingEmails = new Set<string>();
+  let depts = DEMO_DEPARTMENTS_LIST;
+
+  if (!process.env.DATABASE_URL) {
+    existingNumbers = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.employeeNumber.toUpperCase()));
+    existingEmails = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.workEmail.toLowerCase()));
+  } else {
+    const dbEmps = await db
+      .select({ empNo: employeesTable.employeeNumber, email: employeesTable.workEmail })
+      .from(employeesTable)
+      .where(eq(employeesTable.organizationId, membership.organizationId));
+    existingNumbers = new Set(dbEmps.map((e) => e.empNo.toUpperCase()));
+    existingEmails = new Set(dbEmps.map((e) => e.email.toLowerCase()));
+  }
+
+  const seenNumbers = new Set<string>();
+  const seenEmails = new Set<string>();
+  const validTypes = new Set(["permanent", "fixed_term", "casual", "intern"]);
+
+  const evaluated = parsed.map((row) => {
+    const errors: string[] = [];
+    if (!row.employeeNumber) errors.push("Missing employeeNumber");
+    if (!row.firstName || !row.lastName) errors.push("Missing first/last name");
+    if (!row.workEmail || !row.workEmail.includes("@")) errors.push("Invalid workEmail");
+    if (!row.jobTitle) errors.push("Missing jobTitle");
+    const dept = depts.find((d) => d.code.toUpperCase() === row.departmentCode) ?? depts[0]!;
+    const empType = validTypes.has(row.employmentType) ? row.employmentType : "permanent";
+
+    const isDuplicateExisting =
+      existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail);
+    const isDuplicateInBatch =
+      seenNumbers.has(row.employeeNumber) || seenEmails.has(row.workEmail);
+    if (isDuplicateExisting) errors.push("Duplicate existing employeeNumber or workEmail");
+    if (isDuplicateInBatch) errors.push("Duplicate within CSV batch");
+
+    if (row.employeeNumber) seenNumbers.add(row.employeeNumber);
+    if (row.workEmail) seenEmails.add(row.workEmail);
+
+    return {
+      ...row,
+      departmentId: dept.id,
+      departmentName: dept.name,
+      employmentType: empType,
+      status: isDuplicateExisting || isDuplicateInBatch ? "duplicate" : errors.length ? "error" : "valid",
+      errors,
+    };
+  });
+
+  res.json({
+    totalRows: evaluated.length,
+    validCount: evaluated.filter((r) => r.status === "valid").length,
+    duplicateCount: evaluated.filter((r) => r.status === "duplicate").length,
+    errorCount: evaluated.filter((r) => r.status === "error").length,
+    rows: evaluated,
+  });
+});
+
+// POST /api/peopleos/employees/import — Commit Validated Non-Duplicate CSV Employees
+router.post("/peopleos/employees/import", async (req, res): Promise<void> => {
+  const membership = await requireRoles(req, res, peopleManagers);
+  if (!membership) return;
+
+  const csvText = String(req.body?.csvText ?? "");
+  const parsed = parseEmployeeCsv(csvText);
+  if (!parsed.length) {
+    res.status(400).json({ error: "No employee CSV rows supplied." });
+    return;
+  }
+
+  let existingNumbers = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.employeeNumber.toUpperCase()));
+  let existingEmails = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.workEmail.toLowerCase()));
+  if (process.env.DATABASE_URL) {
+    const dbEmps = await db
+      .select({ empNo: employeesTable.employeeNumber, email: employeesTable.workEmail })
+      .from(employeesTable)
+      .where(eq(employeesTable.organizationId, membership.organizationId));
+    existingNumbers = new Set(dbEmps.map((e) => e.empNo.toUpperCase()));
+    existingEmails = new Set(dbEmps.map((e) => e.email.toLowerCase()));
+  }
+
+  const imported: any[] = [];
+  const skippedDuplicates: string[] = [];
+
+  for (const row of parsed) {
+    if (
+      !row.employeeNumber ||
+      !row.firstName ||
+      !row.lastName ||
+      !row.workEmail.includes("@") ||
+      !row.jobTitle
+    ) {
+      continue;
+    }
+    if (existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail)) {
+      skippedDuplicates.push(row.employeeNumber || row.workEmail);
+      continue;
+    }
+    existingNumbers.add(row.employeeNumber);
+    existingEmails.add(row.workEmail);
+    const dept =
+      DEMO_DEPARTMENTS_LIST.find((d) => d.code.toUpperCase() === row.departmentCode) ??
+      DEMO_DEPARTMENTS_LIST[0]!;
+
+    if (!process.env.DATABASE_URL) {
+      const rec: DemoEmployeeItem = {
+        id: crypto.randomUUID(),
+        employeeNumber: row.employeeNumber,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        preferredName: row.firstName,
+        workEmail: row.workEmail,
+        phone: null,
+        jobTitle: row.jobTitle,
+        departmentId: dept.id,
+        departmentName: dept.name,
+        managerId: dept.managerEmployeeId ?? null,
+        managerName: dept.managerName ?? null,
+        location: row.location,
+        employmentType: (["permanent", "fixed_term", "casual", "intern"].includes(row.employmentType)
+          ? row.employmentType
+          : "permanent") as DemoEmployeeItem["employmentType"],
+        status: "active",
+        startDate: row.startDate,
+        probationEndDate: null,
+        contractEndDate: null,
+        isDemo: true,
+      };
+      DEMO_EMPLOYEES_LIST.push(rec);
+      imported.push(rec);
+    } else {
+      const [created] = await db
+        .insert(employeesTable)
+        .values({
+          organizationId: membership.organizationId,
+          employeeNumber: row.employeeNumber,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          preferredName: row.firstName,
+          workEmail: row.workEmail,
+          jobTitle: row.jobTitle,
+          departmentId: dept.id,
+          location: row.location,
+          employmentType: row.employmentType || "permanent",
+          status: "active",
+          startDate: row.startDate,
+          isDemo: false,
+        })
+        .returning();
+      if (created) imported.push(created);
+    }
+  }
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "EMPLOYEE_BULK_IMPORTED",
+    targetType: "employee_batch",
+    targetId: `batch-${Date.now()}`,
+    summary: `Imported ${imported.length} employees via CSV (${skippedDuplicates.length} duplicate(s) skipped)`,
+    isDemo: !process.env.DATABASE_URL,
+  });
+
+  res.status(201).json({
+    importedCount: imported.length,
+    skippedDuplicatesCount: skippedDuplicates.length,
+    skippedDuplicates,
+    imported,
+  });
+});
+
+// GET /api/peopleos/org-chart — Hierarchical Reporting Lines
+router.get("/peopleos/org-chart", async (req, res): Promise<void> => {
+  const access = await getReadAccess(req, res);
+  if (!access || !access.membership) return;
+
+  const nodes = DEMO_EMPLOYEES_LIST.map((e) => ({
+    id: e.id,
+    employeeNumber: e.employeeNumber,
+    fullName: `${e.firstName} ${e.lastName}`,
+    jobTitle: e.jobTitle,
+    departmentName: e.departmentName,
+    managerId: e.managerId,
+    managerName: e.managerName,
+    status: e.status,
+    directReportsCount: DEMO_EMPLOYEES_LIST.filter((c) => c.managerId === e.id).length,
+  }));
+
+  res.json({ totalNodes: nodes.length, nodes });
 });
 
 export default router;
