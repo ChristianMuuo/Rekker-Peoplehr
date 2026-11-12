@@ -7,56 +7,18 @@ import {
   organizationsTable,
   type MembershipRecord,
 } from "@workspace/db";
+import { resolveAuthMode } from "../config/env";
+import {
+  ALL_VALID_ROLES,
+  MODULE_PERMISSION_MATRIX,
+  PEOPLEOS_ROLES,
+} from "../lib/authorization";
+import { logger } from "../lib/logger";
+
+export { MODULE_PERMISSION_MATRIX, PEOPLEOS_ROLES };
 
 export const PEOPLEOS_ORGANIZATION_ID =
   process.env.PEOPLEOS_ORGANIZATION_ID ?? "rekker-demo";
-
-export const PEOPLEOS_ROLES = {
-  employee: "employee",
-  departmentManager: "department_manager",
-  hrAdmin: "hr_admin",
-  hrDirector: "hr_director",
-  hrManager: "hr_manager",
-  hrOfficer: "hr_officer",
-  payrollOfficer: "payroll_officer",
-  financeManager: "finance_manager",
-  productionSupervisor: "production_supervisor",
-  warehouseSupervisor: "warehouse_supervisor",
-  salesManager: "sales_manager",
-  recruiter: "recruiter",
-  executive: "read_only_executive",
-  auditor: "auditor",
-  systemAdmin: "system_admin",
-} as const;
-
-export const MODULE_PERMISSION_MATRIX: Record<
-  string,
-  { readRoles: readonly string[]; writeRoles: readonly string[]; confidentialIsolated?: boolean }
-> = {
-  hrAndPeopleCore: {
-    readRoles: Object.values(PEOPLEOS_ROLES),
-    writeRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.hrOfficer, PEOPLEOS_ROLES.systemAdmin],
-  },
-  confidentialHrCases: {
-    readRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.employee],
-    writeRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.employee],
-    confidentialIsolated: true,
-  },
-  payrollAndJournal: {
-    readRoles: [PEOPLEOS_ROLES.payrollOfficer, PEOPLEOS_ROLES.financeManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.systemAdmin, PEOPLEOS_ROLES.auditor],
-    writeRoles: [PEOPLEOS_ROLES.payrollOfficer, PEOPLEOS_ROLES.financeManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.systemAdmin],
-  },
-  workforceErpOperations: {
-    readRoles: [PEOPLEOS_ROLES.productionSupervisor, PEOPLEOS_ROLES.warehouseSupervisor, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.financeManager, PEOPLEOS_ROLES.departmentManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.executive, PEOPLEOS_ROLES.systemAdmin],
-    writeRoles: [PEOPLEOS_ROLES.productionSupervisor, PEOPLEOS_ROLES.warehouseSupervisor, PEOPLEOS_ROLES.salesManager, PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrManager, PEOPLEOS_ROLES.systemAdmin],
-  },
-  auditTrail: {
-    readRoles: [PEOPLEOS_ROLES.hrAdmin, PEOPLEOS_ROLES.hrDirector, PEOPLEOS_ROLES.auditor, PEOPLEOS_ROLES.systemAdmin],
-    writeRoles: [],
-  },
-};
-
-const VALID_ROLES = new Set<string>(Object.values(PEOPLEOS_ROLES));
 
 export type PeopleOsOrganization = {
   id: string;
@@ -71,11 +33,10 @@ export interface AuthSessionMeta {
 }
 
 export function isDemoAuthPermitted(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
   if (process.env.CLERK_SECRET_KEY) return false;
-  return (
-    process.env.NODE_ENV !== "production" ||
-    process.env.PEOPLEOS_DEMO_AUTH === "true"
-  );
+  const resolved = resolveAuthMode(process.env);
+  return resolved.authMode === "demo" && resolved.errors.length === 0;
 }
 
 export function getAuthSessionMeta(req: Request): AuthSessionMeta | null {
@@ -92,10 +53,13 @@ export function getAuthSessionMeta(req: Request): AuthSessionMeta | null {
       };
     }
   } catch {
-    // Fall through to demo sandbox check
+    // Only fall back when explicit non-production demo mode is active
   }
 
   if (isDemoAuthPermitted()) {
+    if (req.headers["x-peopleos-auth"] === "signed-out") {
+      return null;
+    }
     const headerUser = req.headers["x-peopleos-user-id"];
     const userId =
       typeof headerUser === "string" && headerUser.trim().length > 0
@@ -114,21 +78,24 @@ export function getAuthSessionMeta(req: Request): AuthSessionMeta | null {
 export async function getPeopleOsOrganization(
   requestedOrgId?: string,
 ): Promise<PeopleOsOrganization | null> {
+  const demoPermitted = isDemoAuthPermitted();
   const orgId =
-    requestedOrgId && isDemoAuthPermitted()
-      ? requestedOrgId
-      : PEOPLEOS_ORGANIZATION_ID;
+    requestedOrgId && demoPermitted ? requestedOrgId : PEOPLEOS_ORGANIZATION_ID;
 
   if (!process.env.DATABASE_URL) {
+    if (process.env.NODE_ENV === "production" || !demoPermitted) {
+      return null;
+    }
     return {
       id: orgId,
       name:
         orgId === "rekker-demo"
-          ? "Rekker Limited"
-          : `Organization (${orgId})`,
+          ? "Rekker Limited (Sandbox)"
+          : `Sandbox Org (${orgId})`,
       isDemo: true,
     };
   }
+
   try {
     const [organization] = await db
       .select({
@@ -139,19 +106,17 @@ export async function getPeopleOsOrganization(
       .from(organizationsTable)
       .where(eq(organizationsTable.id, orgId))
       .limit(1);
-    return (
-      organization ?? {
-        id: PEOPLEOS_ORGANIZATION_ID,
-        name: "Rekker Breweries Kenya Ltd",
-        isDemo: true,
-      }
-    );
-  } catch {
-    return {
-      id: PEOPLEOS_ORGANIZATION_ID,
-      name: "Rekker Breweries Kenya Ltd",
-      isDemo: true,
-    };
+
+    // Fail closed if organization row does not exist in PostgreSQL
+    if (!organization) {
+      logger.warn({ orgId }, "Organization lookup returned null; failing closed");
+      return null;
+    }
+    return organization;
+  } catch (err) {
+    // Never downgrade to fabricated demo organization when database lookup fails
+    logger.error({ err, orgId }, "Organization database query failed; failing closed");
+    return null;
   }
 }
 
@@ -167,9 +132,23 @@ export async function ensureMembership(
   req: Request,
   res: Response,
 ): Promise<MembershipRecord | null> {
+  const demoPermitted = isDemoAuthPermitted();
+
+  // Reject spoofed demo role/user headers whenever Clerk or Production auth is enforced
+  if (!demoPermitted && (req.headers["x-peopleos-role"] || req.headers["x-peopleos-user-id"])) {
+    res.status(403).json({
+      error: "Simulated identity or role headers are prohibited outside explicit sandbox mode.",
+      code: "DEMO_HEADERS_FORBIDDEN",
+    });
+    return null;
+  }
+
   const session = getAuthSessionMeta(req);
   if (!session) {
-    res.status(401).json({ error: "Sign in to access this PeopleOS action." });
+    res.status(401).json({
+      error: "Sign in to access this PeopleOS action.",
+      code: "UNAUTHENTICATED",
+    });
     return null;
   }
 
@@ -180,25 +159,28 @@ export async function ensureMembership(
       ? requestedOrgHeader.trim()
       : undefined;
 
-  // Reject cross-tenant header access in live mode
+  // Reject cross-tenant header access unless explicitly in demo sandbox mode
   if (
     requestedOrgId &&
     requestedOrgId !== PEOPLEOS_ORGANIZATION_ID &&
-    !isDemoAuthPermitted()
+    !demoPermitted
   ) {
     res.status(403).json({
       error: "Cross-tenant organization access is prohibited.",
+      code: "CROSS_TENANT_DENIED",
     });
     return null;
   }
 
   const organization = await getPeopleOsOrganization(requestedOrgId);
   if (!organization) {
-    res.status(503).json({ error: "PeopleOS organization is not initialized." });
+    res.status(503).json({
+      error: "PeopleOS organization is unavailable or not initialized.",
+      code: "ORGANIZATION_UNAVAILABLE",
+    });
     return null;
   }
 
-  // Enforce strict tenant isolation: if a non-demo organization is requested with mismatched ID, deny
   if (
     requestedOrgId &&
     !organization.isDemo &&
@@ -206,18 +188,22 @@ export async function ensureMembership(
   ) {
     res.status(403).json({
       error: "Cross-tenant organization access is prohibited.",
+      code: "CROSS_TENANT_DENIED",
     });
     return null;
   }
 
   const rawHeaderRole = req.headers["x-peopleos-role"];
   const requestedRole =
-    typeof rawHeaderRole === "string" && isDemoAuthPermitted()
+    typeof rawHeaderRole === "string" && demoPermitted
       ? rawHeaderRole.trim()
       : undefined;
 
-  if (requestedRole && !VALID_ROLES.has(requestedRole)) {
-    res.status(403).json({ error: "Invalid organization role specified." });
+  if (requestedRole && !ALL_VALID_ROLES.has(requestedRole)) {
+    res.status(403).json({
+      error: "Invalid organization role specified.",
+      code: "INVALID_ROLE",
+    });
     return null;
   }
 
@@ -245,14 +231,20 @@ export async function ensureMembership(
                         ? PEOPLEOS_ROLES.hrManager
                         : PEOPLEOS_ROLES.hrAdmin);
 
+  const demoEmployeeId =
+    simulatedRole === PEOPLEOS_ROLES.employee
+      ? "10000000-0000-4000-8000-000000000002"
+      : simulatedRole === PEOPLEOS_ROLES.departmentManager ||
+          simulatedRole === PEOPLEOS_ROLES.productionSupervisor
+        ? "10000000-0000-4000-8000-000000000001"
+        : "10000000-0000-4000-8000-000000000007";
+
   if (!process.env.DATABASE_URL) {
     return {
       userId,
       organizationId: organization.id,
       role: simulatedRole,
-      employeeId: userId.includes("employee")
-        ? "10000000-0000-4000-8000-000000000002"
-        : "10000000-0000-4000-8000-000000000007",
+      employeeId: demoEmployeeId,
       createdAt: new Date(),
     };
   }
@@ -269,7 +261,7 @@ export async function ensureMembership(
       )
       .limit(1);
 
-    if (!membership && organization.isDemo) {
+    if (!membership && organization.isDemo && demoPermitted) {
       await db
         .insert(membershipsTable)
         .values({
@@ -293,22 +285,18 @@ export async function ensureMembership(
     if (!membership) {
       res.status(403).json({
         error: "You do not have a membership in this PeopleOS organization.",
+        code: "NO_ORGANIZATION_MEMBERSHIP",
       });
       return null;
     }
     return membership;
-  } catch {
-    if (!organization.isDemo) {
-      res.status(503).json({ error: "Authorization database unavailable." });
-      return null;
-    }
-    return {
-      userId,
-      organizationId: organization.id,
-      role: simulatedRole,
-      employeeId: null,
-      createdAt: new Date(),
-    };
+  } catch (err) {
+    logger.error({ err, organizationId: organization.id }, "Membership lookup failed; failing closed");
+    res.status(503).json({
+      error: "Authorization database unavailable.",
+      code: "AUTH_DB_UNAVAILABLE",
+    });
+    return null;
   }
 }
 
@@ -324,7 +312,10 @@ export async function getReadAccess(
 
   const organization = await getPeopleOsOrganization(membership.organizationId);
   if (!organization) {
-    res.status(503).json({ error: "PeopleOS organization is not initialized." });
+    res.status(503).json({
+      error: "PeopleOS organization is not initialized.",
+      code: "ORGANIZATION_UNAVAILABLE",
+    });
     return null;
   }
 
@@ -339,7 +330,10 @@ export async function requireRoles(
   const membership = await ensureMembership(req, res);
   if (!membership) return null;
   if (!allowedRoles.includes(membership.role)) {
-    res.status(403).json({ error: "You do not have permission for this action." });
+    res.status(403).json({
+      error: "You do not have permission for this action.",
+      code: "FORBIDDEN",
+    });
     return null;
   }
   return membership;

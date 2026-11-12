@@ -35,7 +35,9 @@ export function isMpesaLiveConfigured(): boolean {
       process.env.MPESA_CONSUMER_SECRET &&
       process.env.MPESA_SHORTCODE &&
       process.env.MPESA_SECURITY_CREDENTIAL &&
-      process.env.MPESA_INITIATOR_NAME,
+      process.env.MPESA_INITIATOR_NAME &&
+      process.env.MPESA_TIMEOUT_URL &&
+      process.env.MPESA_RESULT_URL,
   );
 }
 
@@ -52,6 +54,7 @@ async function getDarajaAccessToken(): Promise<string> {
     `${baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
     {
       headers: { Authorization: `Basic ${creds}` },
+      signal: AbortSignal.timeout(10_000),
     },
   );
   if (!res.ok) {
@@ -114,6 +117,7 @@ export async function initiateMpesaSalaryPayout(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({
         OriginatorConversationID: `REKKER-${crypto.randomUUID()}`,
         InitiatorName: process.env.MPESA_INITIATOR_NAME,
@@ -123,12 +127,8 @@ export async function initiateMpesaSalaryPayout(
         PartyA: process.env.MPESA_SHORTCODE,
         PartyB: msisdn,
         Remarks: `Rekker PeopleOS Salary - ${item.period}`,
-        QueueTimeOutURL:
-          process.env.MPESA_TIMEOUT_URL ||
-          "https://rekker.co.ke/api/mpesa/timeout",
-        ResultURL:
-          process.env.MPESA_RESULT_URL ||
-          "https://rekker.co.ke/api/mpesa/result",
+        QueueTimeOutURL: process.env.MPESA_TIMEOUT_URL,
+        ResultURL: process.env.MPESA_RESULT_URL,
         Occasion: item.period,
       }),
     });

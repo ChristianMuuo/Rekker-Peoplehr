@@ -336,6 +336,7 @@ export const payrollRunsTable = pgTable(
     totalSha: integer("total_sha").notNull().default(0),
     totalHousingLevy: integer("total_housing_levy").notNull().default(0),
     status: text("status").notNull().default("draft"),
+    createdByUserId: text("created_by_user_id"),
     approvedByUserId: text("approved_by_user_id"),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -438,6 +439,9 @@ export const documentsTable = pgTable(
     category: text("category").notNull(),
     fileUrl: text("file_url"),
     fileSize: text("file_size"),
+    mimeType: text("mime_type"),
+    checksumSha256: text("checksum_sha256"),
+    uploadedByUserId: text("uploaded_by_user_id"),
     expiryDate: date("expiry_date", { mode: "string" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -9,6 +9,7 @@ export type ErrorType<T = unknown> = ApiError<T>;
 export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
+export type DemoAuthHeadersProvider = () => Record<string, string> | null;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
@@ -19,6 +20,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _demoAuthHeadersProvider: DemoAuthHeadersProvider | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -44,6 +46,38 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+export function setDemoAuthHeadersProvider(provider: DemoAuthHeadersProvider | null): void {
+  _demoAuthHeadersProvider = provider;
+}
+
+let _testFallbackOverride: boolean | null = null;
+export function __setFallbackAllowedForTest(enabled: boolean | null): void {
+  _testFallbackOverride = enabled;
+}
+
+function getEnvVar(key: string): string | undefined {
+  try {
+    const metaEnv = (import.meta as { env?: Record<string, string | undefined> }).env;
+    if (metaEnv && typeof metaEnv[key] === "string") return metaEnv[key];
+  } catch {
+    // Ignore in non-Vite environments
+  }
+  const nodeProcess = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process;
+  return nodeProcess?.env?.[key];
+}
+
+export function isStaticFallbackPermitted(): boolean {
+  if (_testFallbackOverride !== null) return _testFallbackOverride;
+  if (getEnvVar("VITE_PEOPLEOS_STRICT_API") === "true") return false;
+  if (getEnvVar("VITE_PEOPLEOS_DEMO_FALLBACK") === "true") return true;
+  if (getEnvVar("VITE_API_BASE_URL")) return false;
+  // Static preview fallback allowed in browser SPA deployments when explicitly non-strict
+  const mode = getEnvVar("MODE") ?? getEnvVar("NODE_ENV");
+  return mode !== "test";
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -351,6 +385,24 @@ export async function customFetch<T = unknown>(
     headers.set("accept", DEFAULT_JSON_ACCEPT);
   }
 
+  if (!headers.has("x-correlation-id")) {
+    const cid =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `cid-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    headers.set("x-correlation-id", cid);
+  }
+
+  // Attach sandbox demo identity headers only when DemoAuthProvider explicitly registers them
+  if (_demoAuthHeadersProvider) {
+    const demoHeaders = _demoAuthHeadersProvider();
+    if (demoHeaders) {
+      for (const [k, v] of Object.entries(demoHeaders)) {
+        if (!headers.has(k)) headers.set(k, v);
+      }
+    }
+  }
+
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
   if (_authTokenGetter && !headers.has("authorization")) {
@@ -361,19 +413,33 @@ export async function customFetch<T = unknown>(
   }
 
   const requestInfo = { method, url: resolveUrl(input) };
+  const allowFallback = isStaticFallbackPermitted();
 
   try {
     const response = await fetch(input, { ...init, method, headers });
     const contentType = response.headers.get("content-type") || "";
+    const isHtmlResponse = contentType.includes("text/html");
 
-    if (response.ok && (contentType.includes("json") || responseType !== "json")) {
+    if (response.ok && (!isHtmlResponse || responseType === "text")) {
       return (await parseSuccessBody(response, responseType, requestInfo)) as T;
     }
 
-    // If server returned 404, 500, or HTML (e.g. Vite SPA fallback index.html), fall through to mock store
-    return handleFallbackApi(requestInfo.url, method, init.body) as T;
-  } catch (_err) {
-    // Network error or backend offline: return rich resilient fallback
-    return handleFallbackApi(requestInfo.url, method, init.body) as T;
+    // Static SPA host (e.g. Vite/Vercel rewrite returning index.html for /api/*) when explicitly in preview fallback
+    if (isHtmlResponse && allowFallback) {
+      return handleFallbackApi(requestInfo.url, method, init.body) as T;
+    }
+
+    // Never hide real API errors (401, 403, 404, 409, 422, 429, 500, 502, 503) behind mock data
+    const errData = await parseErrorBody(response, method);
+    throw new ApiError(response, errData, requestInfo);
+  } catch (err) {
+    if (err instanceof ApiError || err instanceof ResponseParseError) {
+      throw err;
+    }
+    // Network unreachable: use static fallback ONLY in explicitly allowed preview/sandbox environments
+    if (allowFallback) {
+      return handleFallbackApi(requestInfo.url, method, init.body) as T;
+    }
+    throw err;
   }
 }

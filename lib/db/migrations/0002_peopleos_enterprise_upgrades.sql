@@ -1,11 +1,11 @@
--- PeopleOS Enterprise HR & ERP Workforce Operations Migration
--- Focuses strictly on HR Confidentiality, ERP Workforce Allocation & Workflow Rules (no duplicate commerce/shop tables).
+-- PeopleOS Enterprise HR & ERP Workforce Operations Migration (0002)
+-- Reconciled FK targets to physical tables "peopleos_organizations" and "peopleos_employees".
 
 CREATE TABLE IF NOT EXISTS "hr_cases" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" text NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
+  "organization_id" text NOT NULL REFERENCES "peopleos_organizations"("id") ON DELETE CASCADE,
   "case_number" text NOT NULL,
-  "subject_employee_id" uuid REFERENCES "employees"("id") ON DELETE SET NULL,
+  "subject_employee_id" uuid REFERENCES "peopleos_employees"("id") ON DELETE SET NULL,
   "submitted_by_user_id" text NOT NULL,
   "category" text NOT NULL,
   "severity" text NOT NULL DEFAULT 'medium',
@@ -22,8 +22,8 @@ CREATE INDEX IF NOT EXISTS "hr_cases_org_status_idx" ON "hr_cases" ("organizatio
 
 CREATE TABLE IF NOT EXISTS "workforce_shifts" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" text NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
-  "employee_id" uuid NOT NULL REFERENCES "employees"("id") ON DELETE CASCADE,
+  "organization_id" text NOT NULL REFERENCES "peopleos_organizations"("id") ON DELETE CASCADE,
+  "employee_id" uuid NOT NULL REFERENCES "peopleos_employees"("id") ON DELETE CASCADE,
   "unit_type" text NOT NULL,
   "work_zone" text NOT NULL,
   "shift_name" text NOT NULL,
@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS "workforce_shifts_org_unit_idx" ON "workforce_shifts"
 
 CREATE TABLE IF NOT EXISTS "workflow_rules" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "organization_id" text NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,
+  "organization_id" text NOT NULL REFERENCES "peopleos_organizations"("id") ON DELETE CASCADE,
   "domain" text NOT NULL,
   "name" text NOT NULL,
   "threshold_amount_kes" integer,
@@ -48,4 +48,3 @@ CREATE TABLE IF NOT EXISTS "workflow_rules" (
   "created_at" timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS "workflow_rules_org_domain_idx" ON "workflow_rules" ("organization_id", "domain");
-

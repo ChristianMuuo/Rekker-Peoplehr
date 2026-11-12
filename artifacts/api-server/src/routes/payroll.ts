@@ -77,16 +77,16 @@ interface DemoSalaryProfile {
 }
 
 const DEMO_COMPENSATION_BY_EMP: Record<string, DemoSalaryProfile> = {
-  "10000000-0000-4000-8000-000000000001": { employeeId: "10000000-0000-4000-8000-000000000001", baseSalary: 320000, allowances: 40000, kraPin: "A001928374K", departmentName: "Formulation & Filling" },
-  "10000000-0000-4000-8000-000000000002": { employeeId: "10000000-0000-4000-8000-000000000002", baseSalary: 195000, allowances: 15000, kraPin: "A004591823M", departmentName: "Formulation & Filling" },
-  "10000000-0000-4000-8000-000000000003": { employeeId: "10000000-0000-4000-8000-000000000003", baseSalary: 245000, allowances: 30000, kraPin: "A009182734L", departmentName: "Logistics & Distribution" },
-  "10000000-0000-4000-8000-000000000004": { employeeId: "10000000-0000-4000-8000-000000000004", baseSalary: 135000, allowances: 10000, kraPin: "A007162534W", departmentName: "Logistics & Distribution" },
-  "10000000-0000-4000-8000-000000000005": { employeeId: "10000000-0000-4000-8000-000000000005", baseSalary: 265000, allowances: 25000, kraPin: "A006253418B", departmentName: "Brand & Commercial Marketing" },
-  "10000000-0000-4000-8000-000000000006": { employeeId: "10000000-0000-4000-8000-000000000006", baseSalary: 115000, allowances: 10000, kraPin: "A008192736P", departmentName: "Brand & Commercial Marketing" },
-  "10000000-0000-4000-8000-000000000007": { employeeId: "10000000-0000-4000-8000-000000000007", baseSalary: 310000, allowances: 35000, kraPin: "A003491827D", departmentName: "People Operations & Culture" },
-  "10000000-0000-4000-8000-000000000008": { employeeId: "10000000-0000-4000-8000-000000000008", baseSalary: 105000, allowances: 8000, kraPin: "A005283941F", departmentName: "People Operations & Culture" },
-  "10000000-0000-4000-8000-000000000009": { employeeId: "10000000-0000-4000-8000-000000000009", baseSalary: 225000, allowances: 20000, kraPin: "A002837465E", departmentName: "Finance & Supply Chain" },
-  "10000000-0000-4000-8000-000000000010": { employeeId: "10000000-0000-4000-8000-000000000010", baseSalary: 88000, allowances: 7000, kraPin: "A009485712S", departmentName: "Formulation & Filling" },
+  "10000000-0000-4000-8000-000000000001": { employeeId: "10000000-0000-4000-8000-000000000001", baseSalary: 320000, allowances: 40000, kraPin: "DEMO-PIN-101", departmentName: "Formulation & Filling" },
+  "10000000-0000-4000-8000-000000000002": { employeeId: "10000000-0000-4000-8000-000000000002", baseSalary: 195000, allowances: 15000, kraPin: "DEMO-PIN-102", departmentName: "Formulation & Filling" },
+  "10000000-0000-4000-8000-000000000003": { employeeId: "10000000-0000-4000-8000-000000000003", baseSalary: 245000, allowances: 30000, kraPin: "DEMO-PIN-103", departmentName: "Logistics & Distribution" },
+  "10000000-0000-4000-8000-000000000004": { employeeId: "10000000-0000-4000-8000-000000000004", baseSalary: 135000, allowances: 10000, kraPin: "DEMO-PIN-104", departmentName: "Logistics & Distribution" },
+  "10000000-0000-4000-8000-000000000005": { employeeId: "10000000-0000-4000-8000-000000000005", baseSalary: 265000, allowances: 25000, kraPin: "DEMO-PIN-105", departmentName: "Brand & Commercial Marketing" },
+  "10000000-0000-4000-8000-000000000006": { employeeId: "10000000-0000-4000-8000-000000000006", baseSalary: 115000, allowances: 10000, kraPin: "DEMO-PIN-106", departmentName: "Brand & Commercial Marketing" },
+  "10000000-0000-4000-8000-000000000007": { employeeId: "10000000-0000-4000-8000-000000000007", baseSalary: 310000, allowances: 35000, kraPin: "DEMO-PIN-107", departmentName: "People Operations & Culture" },
+  "10000000-0000-4000-8000-000000000008": { employeeId: "10000000-0000-4000-8000-000000000008", baseSalary: 105000, allowances: 8000, kraPin: "DEMO-PIN-108", departmentName: "People Operations & Culture" },
+  "10000000-0000-4000-8000-000000000009": { employeeId: "10000000-0000-4000-8000-000000000009", baseSalary: 225000, allowances: 20000, kraPin: "DEMO-PIN-109", departmentName: "Finance & Supply Chain" },
+  "10000000-0000-4000-8000-000000000010": { employeeId: "10000000-0000-4000-8000-000000000010", baseSalary: 88000, allowances: 7000, kraPin: "DEMO-PIN-110", departmentName: "Formulation & Filling" },
 };
 
 interface DemoPayrollRun {
@@ -119,7 +119,7 @@ function buildDemoItemsForRun(
       employeeId: emp.id,
       baseSalary: 110000,
       allowances: 10000,
-      kraPin: "A000000000X",
+      kraPin: "DEMO-PIN-000",
       departmentName: emp.departmentName,
     };
     const calc = calculateKenyaStatutoryWithConfig(
@@ -447,6 +447,8 @@ router.post("/payroll/runs", async (req: Request, res: Response) => {
       targetType: "payroll_run",
       targetId: newRun.id,
       summary: `Generated payroll run for ${cleanPeriod} using "${config.name}"`,
+      correlationId: req.correlationId,
+      critical: true,
     });
 
     res.status(201).json({ run: newRun, items, configUsed: config.name });
@@ -485,6 +487,7 @@ router.post("/payroll/runs", async (req: Request, res: Response) => {
         totalSha: sum((x) => x.calc.sha),
         totalHousingLevy: sum((x) => x.calc.housingLevy),
         status: "reviewed",
+        createdByUserId: membership.userId,
       })
       .returning();
 
@@ -507,17 +510,22 @@ router.post("/payroll/runs", async (req: Request, res: Response) => {
         netPay: row.calc.netPay,
       });
     }
-    return run!;
-  });
 
-  await recordAuditEvent({
-    organizationId: membership.organizationId,
-    actorUserId: membership.userId,
-    actor: membership.role,
-    action: "PAYROLL_RUN_GENERATED",
-    targetType: "payroll_run",
-    targetId: created.id,
-    summary: `Generated payroll run for ${cleanPeriod} (${calculated.length} employees)`,
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "PAYROLL_RUN_GENERATED",
+      targetType: "payroll_run",
+      targetId: run!.id,
+      summary: `Generated payroll run for ${cleanPeriod} (${calculated.length} employees)`,
+      correlationId: req.correlationId,
+      critical: true,
+      isDemo: false,
+      tx,
+    });
+
+    return run!;
   });
 
   res.status(201).json({ run: created, configUsed: config.name });
@@ -595,6 +603,8 @@ router.post("/payroll/approve", async (req: Request, res: Response) => {
       targetType: "payroll_run",
       targetId: run.id,
       summary: `Approved ${run.period} payroll run (Gross KES ${run.totalGross.toLocaleString()})`,
+      correlationId: req.correlationId,
+      critical: true,
       isDemo: true,
     });
 
@@ -614,7 +624,7 @@ router.post("/payroll/approve", async (req: Request, res: Response) => {
     res.status(404).json({ error: "Payroll run not found." });
     return;
   }
-  const creatorUserId = (target as { createdByUserId?: string | null }).createdByUserId;
+  const creatorUserId = target.createdByUserId;
   if (
     creatorUserId &&
     creatorUserId === membership.userId &&
@@ -627,24 +637,37 @@ router.post("/payroll/approve", async (req: Request, res: Response) => {
     return;
   }
 
-  const [updated] = await db
-    .update(payrollRunsTable)
-    .set({
-      status: "approved",
-      approvedByUserId: membership.userId,
-      approvedAt: new Date(),
-    })
-    .where(eq(payrollRunsTable.id, target.id))
-    .returning();
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(payrollRunsTable)
+      .set({
+        status: "approved",
+        approvedByUserId: membership.userId,
+        approvedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(payrollRunsTable.id, target.id),
+          eq(payrollRunsTable.organizationId, membership.organizationId),
+        ),
+      )
+      .returning();
 
-  await recordAuditEvent({
-    organizationId: membership.organizationId,
-    actorUserId: membership.userId,
-    actor: membership.role,
-    action: "PAYROLL_APPROVED",
-    targetType: "payroll_run",
-    targetId: target.id,
-    summary: `Approved ${target.period} payroll run (Gross KES ${target.totalGross.toLocaleString()})`,
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "PAYROLL_APPROVED",
+      targetType: "payroll_run",
+      targetId: target.id,
+      summary: `Approved ${target.period} payroll run (Gross KES ${target.totalGross.toLocaleString()})`,
+      correlationId: req.correlationId,
+      critical: true,
+      isDemo: false,
+      tx,
+    });
+
+    return row!;
   });
 
   res.json({
@@ -707,6 +730,8 @@ router.post(
         targetType: "payroll_run",
         targetId: run.id,
         summary: `Initiated M-Pesa B2C disbursement for ${run.period} (${results.length} payouts, mode: ${results[0]?.providerMode})`,
+        correlationId: req.correlationId,
+        critical: true,
         isDemo: true,
       });
 
@@ -753,7 +778,7 @@ router.post(
       .where(eq(employeesTable.organizationId, membership.organizationId));
     const empMap = new Map(emps.map((e) => [e.id, e]));
 
-    const results = [];
+    const results: Array<{ item: (typeof items)[number]; payout: Awaited<ReturnType<typeof initiateMpesaSalaryPayout>> }> = [];
     for (const item of items) {
       const emp = empMap.get(item.employeeId);
       const payout = await initiateMpesaSalaryPayout({
@@ -763,43 +788,58 @@ router.post(
         amountKes: item.netPay,
         period: run.period,
       });
-      await db.insert(payrollDisbursementsTable).values({
-        organizationId: membership.organizationId,
-        payrollRunId: run.id,
-        employeeId: item.employeeId,
-        channel: payout.channel,
-        recipientMasked: payout.recipientMasked,
-        amountKes: payout.amountKes,
-        providerMode: payout.providerMode,
-        transactionReference: payout.transactionReference,
-        status: payout.status,
-        initiatedByUserId: membership.userId,
-      });
-      results.push(payout);
+      results.push({ item, payout });
     }
 
-    await db
-      .update(payrollRunsTable)
-      .set({ status: "disbursed" })
-      .where(eq(payrollRunsTable.id, run.id));
+    await db.transaction(async (tx) => {
+      for (const { item, payout } of results) {
+        await tx.insert(payrollDisbursementsTable).values({
+          organizationId: membership.organizationId,
+          payrollRunId: run.id,
+          employeeId: item.employeeId,
+          channel: payout.channel,
+          recipientMasked: payout.recipientMasked,
+          amountKes: payout.amountKes,
+          providerMode: payout.providerMode,
+          transactionReference: payout.transactionReference,
+          status: payout.status,
+          initiatedByUserId: membership.userId,
+        });
+      }
 
-    await recordAuditEvent({
-      organizationId: membership.organizationId,
-      actorUserId: membership.userId,
-      actor: membership.role,
-      action: "PAYROLL_MPESA_DISBURSED",
-      targetType: "payroll_run",
-      targetId: run.id,
-      summary: `Disbursed ${run.period} via M-Pesa B2C (${results.length} payouts)`,
+      await tx
+        .update(payrollRunsTable)
+        .set({ status: "disbursed" })
+        .where(
+          and(
+            eq(payrollRunsTable.id, run.id),
+            eq(payrollRunsTable.organizationId, membership.organizationId),
+          ),
+        );
+
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "PAYROLL_MPESA_DISBURSED",
+        targetType: "payroll_run",
+        targetId: run.id,
+        summary: `Disbursed ${run.period} via M-Pesa B2C (${results.length} payouts)`,
+        correlationId: req.correlationId,
+        critical: true,
+        isDemo: false,
+        tx,
+      });
     });
 
+    const payoutSummaries = results.map((r) => r.payout);
     res.json({
       runId: run.id,
       period: run.period,
-      providerMode: results[0]?.providerMode ?? "SANDBOX_SIMULATION",
-      totalEmployeesPaid: results.length,
-      totalDisbursedKes: results.reduce((s, r) => s + r.amountKes, 0),
-      results,
+      providerMode: payoutSummaries[0]?.providerMode ?? "SANDBOX_SIMULATION",
+      totalEmployeesPaid: payoutSummaries.length,
+      totalDisbursedKes: payoutSummaries.reduce((s, r) => s + r.amountKes, 0),
+      results: payoutSummaries,
     });
   },
 );

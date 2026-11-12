@@ -1245,6 +1245,8 @@ router.post(
         targetType: "leave_request",
         targetId: target.id,
         summary: `Leave request for ${target.employeeName} was ${target.status}.`,
+        correlationId: req.correlationId,
+        critical: true,
         isDemo: true,
       });
       res.json(DecideLeaveRequestResponse.parse(target));

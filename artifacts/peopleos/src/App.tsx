@@ -18,7 +18,7 @@ import type { Employee, EmployeeInput, EmployeeUpdate, LeavePolicy, LeaveRequest
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, Bell, BrainCircuit, BriefcaseBusiness,
   CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, FileText,
-  Factory, Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, Search, Settings2, ShieldAlert, ShieldCheck, Sparkles,
+  Factory, Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, RefreshCw, Search, Settings2, ShieldAlert, ShieldCheck, Sparkles,
   Sun, Target, Upload, UserCheck, Users, X,
 } from 'lucide-react';
 import { Link, Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
@@ -257,7 +257,7 @@ function AppFrame() {
   if (isLoading) return <LoadingScreen label="Loading your workspace" />;
   if (isError || !auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
   const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings || auth.canViewAudit ? [{ label: 'Diagnostics', href: '/diagnostics', icon: Activity }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
 
   const pendingApprovals = Array.isArray(approvalsQuery.data) ? approvalsQuery.data : [];
   const pendingAiApprovals = (aiApprovalsQuery.data?.items ?? []).filter(a => a.status === 'pending');
@@ -354,6 +354,7 @@ function AppFrame() {
             <Route path="/ai" component={AgentHubPage} />
             <Route path="/agent-hub" component={AgentHubPage} />
             <Route path="/settings" component={SettingsPage} />
+            <Route path="/diagnostics" component={SettingsPage} />
             <Route path="/recruitment" component={RecruitmentPage} />
             <Route path="/onboarding" component={OnboardingPage} />
             <Route path="/attendance" component={AttendancePage} />
@@ -645,8 +646,8 @@ function Modal({ title, children, onClose, testId }: { title: string; children: 
   </div>;
 }
 const SAMPLE_EMPLOYEE_CSV = `employeeNumber,firstName,lastName,workEmail,jobTitle,departmentCode,location,employmentType,startDate
-REK-204,Faith,Mutuku,faith.mutuku@rekker.co.ke,Filling Line Operator,PROD,Nairobi Production Facility,permanent,2026-04-01
-REK-205,Peter,Njoroge,peter.njoroge@rekker.co.ke,Warehouse Dispatch Clerk,LOG,Nairobi Production Facility,permanent,2026-04-01`;
+REK-204,Faith,Mutuku,faith.mutuku@rekker-demo.invalid,Filling Line Operator,PROD,Nairobi Production Facility,permanent,2026-04-01
+REK-205,Peter,Njoroge,peter.njoroge@rekker-demo.invalid,Warehouse Dispatch Clerk,LOG,Nairobi Production Facility,permanent,2026-04-01`;
 
 function BulkEmployeeImportButton() {
   const qc = useQueryClient();
@@ -1072,19 +1073,193 @@ function AuditPage() {
 
 
 
+interface DiagnosticSubsystem {
+  id: string;
+  name: string;
+  status: string;
+  healthy: boolean;
+  latencyMs?: number | null;
+  detail: string;
+}
+
+interface IntegrationRegistryEntry {
+  id: string;
+  provider: string;
+  purpose: string;
+  owningModule: string;
+  environment: string;
+  credentialConfigured: boolean;
+  connectivityState: string;
+  setupNote: string;
+}
+
+interface AdminDiagnosticsPayload {
+  checkedAt: string;
+  startedAt: string;
+  correlationId?: string;
+  application: {
+    name: string;
+    version: string;
+    nodeVersion: string;
+    uptimeSeconds: number;
+    environment: string;
+    isProduction: boolean;
+  };
+  subsystems: DiagnosticSubsystem[];
+  integrations: IntegrationRegistryEntry[];
+  configWarnings: string[];
+  configErrors: string[];
+}
+
+interface ReadyzPayload {
+  status: string;
+  authMode: string;
+  environment: string;
+  critical: {
+    configuration: string;
+    database: string;
+    encryption: string;
+  };
+  optionalDependencies: {
+    mlService: string;
+    openAiLlm: string;
+    mpesaDaraja: string;
+  };
+  timestamp: string;
+}
+
 function SettingsPage() {
+  const [location] = useLocation();
+  const isDiagnosticsView = location === '/diagnostics';
   const auth = useGetAuthContext();
   const provider = useGetAgentProviderStatus();
+  const canInspectDiagnostics = Boolean(auth.data?.canManageSettings || auth.data?.canViewAudit);
+
   const securityQuery = useQuery({
     queryKey: ['security-status'],
     queryFn: () => apiGet<any>('/api/security/status'),
-    enabled: !!auth.data?.canManageSettings,
+    enabled: canInspectDiagnostics,
   });
-  if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading settings" />;
+  const readyzQuery = useQuery({
+    queryKey: ['system-readyz'],
+    queryFn: () => apiGet<ReadyzPayload>('/api/readyz'),
+    enabled: canInspectDiagnostics,
+  });
+  const diagnosticsQuery = useQuery({
+    queryKey: ['admin-diagnostics'],
+    queryFn: () => apiGet<AdminDiagnosticsPayload>('/api/admin/diagnostics'),
+    enabled: canInspectDiagnostics,
+  });
+
+  if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading configuration and diagnostics" />;
   const sec = securityQuery.data;
-  return <div><PageHeading eyebrow="Workspace / Configuration" title="Settings" description="Role access, security controls, and provider readiness for this PeopleOS workspace." />
-    {!auth.data?.canManageSettings ? <div className="surface"><EmptyState title="Settings access is restricted" message="Only authorized system administrators can manage workspace settings. Your role can still review permitted PeopleOS information." /></div> : <>
-      <section className="surface p-5 md:p-7" data-testid="section-role-access">
+  const diag = diagnosticsQuery.data;
+  const readyz = readyzQuery.data;
+
+  const refreshDiagnostics = () => {
+    void readyzQuery.refetch();
+    void diagnosticsQuery.refetch();
+    void securityQuery.refetch();
+  };
+
+  return <div>
+    <PageHeading
+      eyebrow={isDiagnosticsView ? 'Operations / System health' : 'Workspace / Configuration'}
+      title={isDiagnosticsView ? 'System Diagnostics' : 'Settings & Diagnostics'}
+      description="Role access, runtime readiness, subsystem telemetry, integration registry, and security controls for Rekker PeopleOS."
+      action={canInspectDiagnostics ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
+    />
+    {!canInspectDiagnostics ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect workspace configuration and system diagnostics." /></div> : <>
+      <section className="surface p-5 md:p-7" data-testid="section-system-diagnostics">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#C71D1D]"><Activity size={18} /></div>
+            <div>
+              <h2 className="font-display text-lg font-semibold text-stone-900">System Diagnostics &amp; Readiness</h2>
+              <p className="text-xs text-stone-500">Live dependency probes without secret exposure. Read-only health check via `/api/readyz` and `/api/admin/diagnostics`.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {readyz && <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${readyz.status === 'ready' ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`} data-testid="status-readyz-probe">Readiness: {readyz.status.replaceAll('_', ' ')}</span>}
+            {diag && <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] font-semibold text-stone-600">Runtime: {diag.application.nodeVersion} · Uptime {diag.application.uptimeSeconds}s</span>}
+          </div>
+        </div>
+
+        {(diagnosticsQuery.isError || readyzQuery.isError) && (
+          <div className="mt-4 rounded-xl border border-[#f2c8c8] bg-[#fdf2f2] p-4 text-xs text-[#9b1c1c]" data-testid="error-diagnostics-probe">
+            Diagnostic probe request failed ({diagnosticsQuery.error instanceof Error ? diagnosticsQuery.error.message : 'Unable to reach diagnostics service'}). Failure is surfaced transparently without mock substitution.
+          </div>
+        )}
+
+        {diag && (diag.configErrors.length > 0 || diag.configWarnings.length > 0) && (
+          <div className="mt-4 space-y-2">
+            {diag.configErrors.map((errMsg, idx) => (
+              <div key={`err-${idx}`} className="flex items-start gap-2 rounded-xl border border-[#f2c8c8] bg-[#fdf2f2] px-4 py-3 text-xs text-[#9b1c1c]">
+                <AlertCircle size={15} className="mt-0.5 shrink-0" /><span><strong>Config error:</strong> {errMsg}</span>
+              </div>
+            ))}
+            {diag.configWarnings.map((warnMsg, idx) => (
+              <div key={`warn-${idx}`} className="flex items-start gap-2 rounded-xl border border-[#eed49f] bg-[#fbf0da] px-4 py-3 text-xs text-[#785716]">
+                <AlertCircle size={15} className="mt-0.5 shrink-0" /><span><strong>Advisory:</strong> {warnMsg}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {diag ? (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {diag.subsystems.map((sub) => (
+              <div key={sub.id} className="rounded-xl border border-stone-200 p-4" data-testid={`card-subsystem-${sub.id}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-stone-800">{sub.name}</p>
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${sub.healthy ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`}>
+                    {sub.status}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[11px] leading-5 text-stone-500">{sub.detail}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs text-stone-500">Loading subsystem telemetry...</div>
+        )}
+
+        {diag && (
+          <div className="mt-6">
+            <h3 className="text-xs font-bold uppercase tracking-[.12em] text-stone-500">Integration Registry</h3>
+            <div className="mt-3 overflow-x-auto rounded-xl border border-stone-200" data-testid="table-integration-registry">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-stone-200 bg-[#f7f4ef] text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                  <tr>
+                    <th className="px-4 py-3">Provider</th>
+                    <th className="px-4 py-3">Purpose</th>
+                    <th className="px-4 py-3">Owning module</th>
+                    <th className="px-4 py-3">Connectivity</th>
+                    <th className="px-4 py-3">Guidance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {diag.integrations.map((intg) => (
+                    <tr key={intg.id} className="hover:bg-stone-50/70">
+                      <td className="px-4 py-3 font-semibold text-stone-900">{intg.provider}</td>
+                      <td className="px-4 py-3 text-stone-600">{intg.purpose}</td>
+                      <td className="px-4 py-3 text-stone-600">{intg.owningModule}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${intg.credentialConfigured ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-stone-100 text-stone-700'}`}>
+                          {intg.connectivityState}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-[11px] text-stone-500">{intg.setupNote}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="surface mt-4 p-5 md:p-7" data-testid="section-role-access">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#a91919]"><ShieldCheck size={18} /></div><div><h2 className="font-display text-lg font-semibold text-stone-900">Your access profile</h2><p className="text-xs text-stone-500">Permissions are supplied by the PeopleOS authorization service.</p></div></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
@@ -1098,19 +1273,22 @@ function SettingsPage() {
         </div>
         <p className="mt-4 text-[10px] text-stone-400">UI visibility is not a security boundary. The server enforces access for every request.</p>
       </section>
-      <section className="surface mt-4 p-5 md:p-7" data-testid="section-security-posture">
-        <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Enterprise security posture</h2><p className="mt-1 text-xs text-stone-500">Server-enforced encryption, Kenya ODPC PII protection, rate limiting, and session verification.</p></div><span className="rounded-full bg-[#e8f2eb] px-2.5 py-1 text-[10px] font-bold text-[#34734d]">{sec?.encryptionStandard ?? 'AES-256-GCM'}</span></div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Auth provider</p><p className="mt-1 text-xs font-bold capitalize text-stone-800">{String(sec?.authProvider ?? 'clerk_or_sandbox').replaceAll('_', ' ')}</p></div>
-          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Session MFA</p><p className="mt-1 text-xs font-bold text-stone-800">{sec?.mfaVerified ? 'MFA Verified' : 'Standard / Sandbox'}</p></div>
-          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">ODPC masking</p><p className="mt-1 text-xs font-bold text-[#34734d]">{sec?.odpcCompliantMasking !== false ? 'Enforced' : 'Disabled'}</p></div>
-          <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">API rate limiter</p><p className="mt-1 text-xs font-bold text-[#34734d]">{sec?.rateLimitingActive !== false ? 'Sliding window active' : 'Inactive'}</p></div>
-        </div>
-      </section>
-      <section className="surface mt-4 p-5 md:p-7" data-testid="section-provider-setup">
-        <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">AI provider setup</h2><p className="mt-1 text-xs text-stone-500">Provider credentials are not editable in this interface.</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${provider.data?.configured ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`} data-testid="status-settings-provider">{provider.data?.configured ? 'Configured' : 'Setup required'}</span></div>
-        <div className="mt-4 rounded-xl bg-[#f7f4ef] p-4"><p className="text-sm font-semibold text-stone-700">Provider: {provider.data?.provider || 'Not configured'}</p><p className="mt-1 text-xs text-stone-500">{provider.data?.message || 'No provider key has been supplied. No model calls are made.'}</p><p className="mt-2 text-[10px] text-stone-400">Set up through the approved server environment process. Never paste provider secrets into the browser.</p></div>
-      </section>
+
+      {auth.data?.canManageSettings && <>
+        <section className="surface mt-4 p-5 md:p-7" data-testid="section-security-posture">
+          <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Enterprise security posture</h2><p className="mt-1 text-xs text-stone-500">Server-enforced encryption, Kenya ODPC PII protection, rate limiting, and session verification.</p></div><span className="rounded-full bg-[#e8f2eb] px-2.5 py-1 text-[10px] font-bold text-[#34734d]">{sec?.encryptionStandard ?? 'AES-256-GCM'}</span></div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Auth provider</p><p className="mt-1 text-xs font-bold capitalize text-stone-800">{String(sec?.authProvider ?? 'clerk_or_sandbox').replaceAll('_', ' ')}</p></div>
+            <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Session MFA</p><p className="mt-1 text-xs font-bold text-stone-800">{sec?.mfaVerified ? 'MFA Verified' : 'Standard / Sandbox'}</p></div>
+            <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">ODPC masking</p><p className="mt-1 text-xs font-bold text-[#34734d]">{sec?.odpcCompliantMasking !== false ? 'Enforced' : 'Disabled'}</p></div>
+            <div className="rounded-xl border border-stone-200 p-3.5"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">API rate limiter</p><p className="mt-1 text-xs font-bold text-[#34734d]">{sec?.rateLimitingActive !== false ? 'Sliding window active' : 'Inactive'}</p></div>
+          </div>
+        </section>
+        <section className="surface mt-4 p-5 md:p-7" data-testid="section-provider-setup">
+          <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">AI provider setup</h2><p className="mt-1 text-xs text-stone-500">Provider credentials are not editable in this interface.</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${provider.data?.configured ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`} data-testid="status-settings-provider">{provider.data?.configured ? 'Configured' : 'Setup required'}</span></div>
+          <div className="mt-4 rounded-xl bg-[#f7f4ef] p-4"><p className="text-sm font-semibold text-stone-700">Provider: {provider.data?.provider || 'Not configured'}</p><p className="mt-1 text-xs text-stone-500">{provider.data?.message || 'No provider key has been supplied. No model calls are made.'}</p><p className="mt-2 text-[10px] text-stone-400">Set up through the approved server environment process. Never paste provider secrets into the browser.</p></div>
+        </section>
+      </>}
     </>}
   </div>;
 }

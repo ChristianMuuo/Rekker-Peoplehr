@@ -61,16 +61,16 @@ const DEFAULT_DEPTS: MockDepartment[] = [
 ];
 
 const DEFAULT_EMPS: MockEmployee[] = [
-  { id: '10000000-0000-4000-8000-000000000001', employeeNumber: 'REK-0101', firstName: 'Achieng', lastName: 'Odhiambo', preferredName: 'Achieng', workEmail: 'achieng.odhiambo@rekker.co.ke', phone: '+254 722 100 201', jobTitle: 'Plant Operations Director', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: null, managerName: null, location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2021-03-15', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000002', employeeNumber: 'REK-0102', firstName: 'Mwangi', lastName: 'Kariuki', preferredName: 'Mwangi', workEmail: 'mwangi.kariuki@rekker.co.ke', phone: '+254 733 410 882', jobTitle: 'Lead Formulation & Quality Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2022-06-01', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000003', employeeNumber: 'REK-0103', firstName: 'Juma', lastName: 'Omondi', preferredName: null, workEmail: 'juma.omondi@rekker.co.ke', phone: '+254 711 502 918', jobTitle: 'Logistics Fleet Manager', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: null, managerName: null, location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'active', startDate: '2022-09-10', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000004', employeeNumber: 'REK-0104', firstName: 'Wanjiku', lastName: 'Kimani', preferredName: 'Wawa', workEmail: 'wanjiku.kimani@rekker.co.ke', phone: '+254 700 819 223', jobTitle: 'Distribution Dispatch Specialist', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'on_leave', startDate: '2023-04-12', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000005', employeeNumber: 'REK-0105', firstName: 'Brenda', lastName: 'Mutheu', preferredName: 'Brenda', workEmail: 'brenda.mutheu@rekker.co.ke', phone: '+254 721 349 018', jobTitle: 'Brand Strategy & Trade Lead', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2022-01-10', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000006', employeeNumber: 'REK-0106', firstName: 'Brian', lastName: 'Kiprotich', preferredName: 'Brian', workEmail: 'brian.kiprotich@rekker.co.ke', phone: '+254 725 619 827', jobTitle: 'Digital Growth & Social Media Specialist', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: '10000000-0000-4000-8000-000000000005', managerName: 'Brenda Mutheu', location: 'Westlands Commercial Office', employmentType: 'contract', status: 'active', startDate: '2024-02-01', probationEndDate: null, contractEndDate: '2026-04-30', isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000007', employeeNumber: 'REK-0107', firstName: 'David', lastName: 'Kibet', preferredName: 'David', workEmail: 'david.kibet@rekker.co.ke', phone: '+254 720 182 930', jobTitle: 'Head of People & Organization Culture', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2021-08-01', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000008', employeeNumber: 'REK-0108', firstName: 'Faith', lastName: 'Chebet', preferredName: 'Faith', workEmail: 'faith.chebet@rekker.co.ke', phone: '+254 724 991 823', jobTitle: 'Talent Acquisition & Employee Experience Officer', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', location: 'Westlands Commercial Office', employmentType: 'probation', status: 'probation', startDate: '2026-01-15', probationEndDate: '2026-04-15', contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000009', employeeNumber: 'REK-0109', firstName: 'Dennis', lastName: 'Otieno', preferredName: 'Denno', workEmail: 'dennis.otieno@rekker.co.ke', phone: '+254 731 442 819', jobTitle: 'Financial Accountant & Payroll Controller', departmentId: '20000000-0000-4000-8000-000000000005', departmentName: 'Finance & Supply Chain', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2023-01-09', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000010', employeeNumber: 'REK-0110', firstName: 'Sarah', lastName: 'Njeri', preferredName: 'Sarah', workEmail: 'sarah.njeri@rekker.co.ke', phone: '+254 718 293 847', jobTitle: 'Junior Quality Assurance Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Mwangi Kariuki', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2024-05-02', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000001', employeeNumber: 'REK-0101', firstName: 'Achieng', lastName: 'Odhiambo', preferredName: 'Achieng', workEmail: 'achieng.odhiambo@rekker-demo.invalid', phone: null, jobTitle: 'Plant Operations Director', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: null, managerName: null, location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2021-03-15', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000002', employeeNumber: 'REK-0102', firstName: 'Mwangi', lastName: 'Kariuki', preferredName: 'Mwangi', workEmail: 'mwangi.kariuki@rekker-demo.invalid', phone: null, jobTitle: 'Lead Formulation & Quality Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2022-06-01', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000003', employeeNumber: 'REK-0103', firstName: 'Juma', lastName: 'Omondi', preferredName: null, workEmail: 'juma.omondi@rekker-demo.invalid', phone: null, jobTitle: 'Logistics Fleet Manager', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: null, managerName: null, location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'active', startDate: '2022-09-10', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000004', employeeNumber: 'REK-0104', firstName: 'Wanjiku', lastName: 'Kimani', preferredName: 'Wawa', workEmail: 'wanjiku.kimani@rekker-demo.invalid', phone: null, jobTitle: 'Distribution Dispatch Specialist', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'on_leave', startDate: '2023-04-12', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000005', employeeNumber: 'REK-0105', firstName: 'Brenda', lastName: 'Mutheu', preferredName: 'Brenda', workEmail: 'brenda.mutheu@rekker-demo.invalid', phone: null, jobTitle: 'Brand Strategy & Trade Lead', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2022-01-10', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000006', employeeNumber: 'REK-0106', firstName: 'Brian', lastName: 'Kiprotich', preferredName: 'Brian', workEmail: 'brian.kiprotich@rekker-demo.invalid', phone: null, jobTitle: 'Digital Growth & Social Media Specialist', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: '10000000-0000-4000-8000-000000000005', managerName: 'Brenda Mutheu', location: 'Westlands Commercial Office', employmentType: 'contract', status: 'active', startDate: '2024-02-01', probationEndDate: null, contractEndDate: '2026-04-30', isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000007', employeeNumber: 'REK-0107', firstName: 'David', lastName: 'Kibet', preferredName: 'David', workEmail: 'david.kibet@rekker-demo.invalid', phone: null, jobTitle: 'Head of People & Organization Culture', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2021-08-01', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000008', employeeNumber: 'REK-0108', firstName: 'Faith', lastName: 'Chebet', preferredName: 'Faith', workEmail: 'faith.chebet@rekker-demo.invalid', phone: null, jobTitle: 'Talent Acquisition & Employee Experience Officer', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', location: 'Westlands Commercial Office', employmentType: 'probation', status: 'probation', startDate: '2026-01-15', probationEndDate: '2026-04-15', contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000009', employeeNumber: 'REK-0109', firstName: 'Dennis', lastName: 'Otieno', preferredName: 'Denno', workEmail: 'dennis.otieno@rekker-demo.invalid', phone: null, jobTitle: 'Financial Accountant & Payroll Controller', departmentId: '20000000-0000-4000-8000-000000000005', departmentName: 'Finance & Supply Chain', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2023-01-09', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000010', employeeNumber: 'REK-0110', firstName: 'Sarah', lastName: 'Njeri', preferredName: 'Sarah', workEmail: 'sarah.njeri@rekker-demo.invalid', phone: null, jobTitle: 'Junior Quality Assurance Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Mwangi Kariuki', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2024-05-02', probationEndDate: null, contractEndDate: null, isDemo: true },
 ];
 
 const DEFAULT_LEAVES: MockLeaveRequest[] = [
@@ -132,7 +132,7 @@ const DEFAULT_ASSETS: Array<{
   { id: 'asset-001', assetTag: 'REK-IT-041', name: 'ThinkPad X1 Carbon Gen 12', category: 'Laptop & Workstation', serialNumber: 'PF49KL21', condition: 'good', assignedEmployeeId: '10000000-0000-4000-8000-000000000007', assignedEmployeeName: 'David Kibet', assignedDate: '2024-06-15', returnDueDate: null, status: 'assigned', valueKes: 195000 },
   { id: 'asset-002', assetTag: 'REK-IT-058', name: 'MacBook Pro 14 M3', category: 'Laptop & Workstation', serialNumber: 'C02YW9Q8', condition: 'good', assignedEmployeeId: '10000000-0000-4000-8000-000000000006', assignedEmployeeName: 'Brian Kiprotich', assignedDate: '2024-02-01', returnDueDate: '2026-04-30', status: 'assigned', valueKes: 240000 },
   { id: 'asset-003', assetTag: 'REK-FLT-012', name: 'Isuzu FRR Refrigerated Distribution Truck', category: 'Fleet Vehicle', serialNumber: 'KDM-482L', condition: 'good', assignedEmployeeId: '10000000-0000-4000-8000-000000000003', assignedEmployeeName: 'Juma Omondi', assignedDate: '2023-03-10', returnDueDate: null, status: 'assigned', valueKes: 5400000 },
-  { id: 'asset-004', assetTag: 'REK-PPE-089', name: 'Industrial Brewing Thermal Safety Kit', category: 'Safety PPE', serialNumber: 'PPE-2026-89', condition: 'new', assignedEmployeeId: null, assignedEmployeeName: null, assignedDate: null, returnDueDate: null, status: 'available', valueKes: 18500 },
+  { id: 'asset-004', assetTag: 'REK-PPE-089', name: 'Industrial Formulation Thermal Safety Kit', category: 'Safety PPE', serialNumber: 'PPE-2026-89', condition: 'new', assignedEmployeeId: null, assignedEmployeeName: null, assignedDate: null, returnDueDate: null, status: 'available', valueKes: 18500 },
 ];
 
 const DEFAULT_ONBOARDING_TASKS: Array<{
@@ -191,7 +191,17 @@ const FALLBACK_SHIFT_ROSTER: Array<any> = [
 ];
 
 export function handleFallbackApi(url: string, method: string = 'GET', body?: any): any {
-  const path = url.split('?')[0];
+  const path = (() => {
+    const raw = url.split('?')[0] ?? url;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      try {
+        return new URL(raw).pathname;
+      } catch {
+        return raw;
+      }
+    }
+    return raw;
+  })();
   const parsedBody = body && typeof body === 'string' ? (() => { try { return JSON.parse(body); } catch { return {}; } })() : (body || {});
 
   if (path === '/api/hr-cases') {
@@ -869,7 +879,7 @@ const FALLBACK_PAYROLL_RUNS: Array<any> = [
         employeeId: emp.id,
         employeeName: `${emp.firstName} ${emp.lastName}`,
         departmentName: emp.departmentName,
-        kraPinMasked: 'A00*****2K',
+        kraPinMasked: 'DEM*****01',
         ...calcKenyaFallback(gross),
       };
     });
@@ -894,7 +904,7 @@ const FALLBACK_PAYROLL_RUNS: Array<any> = [
     return {
       formType: 'KRA Form P9A (Employee Tax Deduction Card)',
       employeeName: `${emp.firstName} ${emp.lastName}`,
-      employeePinMasked: 'A00*****7K',
+      employeePinMasked: 'DEM*****07',
       statutoryConfigName: DEFAULT_STATUTORY_CONFIGS[0]!.name,
       months,
       totals: {
@@ -1078,6 +1088,53 @@ const FALLBACK_PAYROLL_RUNS: Array<any> = [
         { id: 'compliance', name: 'Compliance Monitoring Agent' },
         { id: 'executive', name: 'Executive Intelligence Agent' },
       ],
+    };
+  }
+
+  if (path === '/api/readyz') {
+    return {
+      status: 'static_preview',
+      authMode: 'demo',
+      environment: 'browser_static_preview',
+      critical: {
+        configuration: 'static_preview',
+        database: 'unavailable_in_static_preview',
+        encryption: 'unavailable_in_static_preview',
+      },
+      optionalDependencies: {
+        mlService: 'unavailable',
+        openAiLlm: 'awaiting_credentials',
+        mpesaDaraja: 'awaiting_credentials',
+      },
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  if (path === '/api/admin/diagnostics') {
+    return {
+      checkedAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      correlationId: 'static-preview',
+      application: {
+        name: 'Rekker PeopleOS (Static Preview Mode)',
+        version: '0.1.0',
+        nodeVersion: 'browser',
+        uptimeSeconds: 0,
+        environment: 'static_preview',
+        isProduction: false,
+      },
+      subsystems: [
+        { id: 'api_server', name: 'Express 5 Core API & Correlation Layer', status: 'Disconnected (Browser Static Mode)', healthy: false, detail: 'Backend API unreachable; displaying static preview fixtures.' },
+        { id: 'postgresql_db', name: 'PostgreSQL & Drizzle ORM', status: 'Unavailable', healthy: false, latencyMs: null, detail: 'No database connection in browser static preview.' },
+        { id: 'authentication', name: 'Identity & Access Control', status: 'Demo Mode (Browser Preview)', healthy: false, detail: 'Connect backend API and Clerk credentials for verified sessions.' },
+      ],
+      integrations: [
+        { id: 'clerk', provider: 'Clerk Auth', purpose: 'Enterprise SSO & MFA', owningModule: 'Authentication', environment: 'static_preview', credentialConfigured: false, connectivityState: 'Awaiting Credentials', setupNote: 'Deploy Express API with Clerk keys.' },
+        { id: 'mpesa_daraja', provider: 'Safaricom Daraja B2C', purpose: 'Approved Kenya payroll salary disbursement', owningModule: 'Payroll', environment: 'sandbox', credentialConfigured: false, connectivityState: 'Awaiting Credentials', setupNote: 'Configure MPESA_* environment variables on API server.' },
+        { id: 'rekker_external_web', provider: 'rekker.co.ke & shop.rekker.co.ke', purpose: 'Launched corporate website & e-commerce storefront', owningModule: 'External Boundary', environment: 'production', credentialConfigured: false, connectivityState: 'Linked Externally (Not Duplicated)', setupNote: 'Authoritative externally.' },
+      ],
+      configWarnings: ['Running in static browser preview fallback because backend API server is unreachable.'],
+      configErrors: [],
     };
   }
 

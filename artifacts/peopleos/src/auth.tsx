@@ -1,17 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { ClerkProvider as RealClerkProvider, useClerk as useRealClerk, useUser as useRealUser, Show as RealShow, SignIn as RealSignIn, SignUp as RealSignUp } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
-import { ShieldCheck, UserCheck, ArrowRight, Lock, Sparkles } from 'lucide-react';
+import { setDemoAuthHeadersProvider } from '@workspace/api-client-react';
+import { ShieldCheck, ArrowRight, Lock } from 'lucide-react';
 
 export const rawClerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+export const explicitAuthMode = import.meta.env.VITE_PEOPLEOS_AUTH_MODE as 'clerk' | 'demo' | undefined;
 export const hasValidClerkKey = Boolean(
+  explicitAuthMode !== 'demo' &&
   rawClerkKey &&
   rawClerkKey.startsWith('pk_') &&
   !rawClerkKey.includes('localhost')
 );
 
-// Demo User Type
+// Synthetic Demo User Type (explicitly non-production sandbox identities)
 export interface MockUser {
   id: string;
   fullName: string;
@@ -26,33 +27,33 @@ export interface MockUser {
 export const DEMO_USERS: Record<string, MockUser> = {
   admin: {
     id: 'user_demo_admin_01',
-    fullName: 'David Kibet',
-    firstName: 'David',
-    lastName: 'Kibet',
-    primaryEmailAddress: { emailAddress: 'david.kibet@rekker.co.ke' },
-    imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+    fullName: 'Demo Admin 07',
+    firstName: 'Demo',
+    lastName: 'Admin 07',
+    primaryEmailAddress: { emailAddress: 'demo.admin.07@rekker-demo.invalid' },
+    imageUrl: '',
     role: 'hr_admin',
-    department: 'People & Culture',
+    department: 'People & Culture (Sandbox)',
   },
   manager: {
     id: 'user_demo_manager_01',
-    fullName: 'Achieng Odhiambo',
-    firstName: 'Achieng',
-    lastName: 'Odhiambo',
-    primaryEmailAddress: { emailAddress: 'achieng.odhiambo@rekker.co.ke' },
-    imageUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
+    fullName: 'Demo Manager 01',
+    firstName: 'Demo',
+    lastName: 'Manager 01',
+    primaryEmailAddress: { emailAddress: 'demo.manager.01@rekker-demo.invalid' },
+    imageUrl: '',
     role: 'hr_manager',
-    department: 'Manufacturing',
+    department: 'Formulation & Filling (Sandbox)',
   },
   employee: {
     id: 'user_demo_employee_01',
-    fullName: 'Mwangi Kariuki',
-    firstName: 'Mwangi',
-    lastName: 'Kariuki',
-    primaryEmailAddress: { emailAddress: 'mwangi.kariuki@rekker.co.ke' },
-    imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
+    fullName: 'Demo Employee 02',
+    firstName: 'Demo',
+    lastName: 'Employee 02',
+    primaryEmailAddress: { emailAddress: 'demo.employee.02@rekker-demo.invalid' },
+    imageUrl: '',
     role: 'employee',
-    department: 'Distribution',
+    department: 'Formulation & Filling (Sandbox)',
   },
 };
 
@@ -86,6 +87,23 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
   });
 
   const currentUser = activeKey !== 'signed_out' ? (DEMO_USERS[activeKey] || DEMO_USERS.admin) : null;
+
+  useEffect(() => {
+    if (import.meta.env.PROD && import.meta.env.VITE_PEOPLEOS_ALLOW_STATIC_DEMO !== 'true') {
+      setDemoAuthHeadersProvider(null);
+      return;
+    }
+    setDemoAuthHeadersProvider((): Record<string, string> => {
+      if (!isSignedIn || !currentUser) {
+        return { 'x-peopleos-auth': 'signed-out' };
+      }
+      return {
+        'x-peopleos-user-id': currentUser.id,
+        'x-peopleos-role': currentUser.role,
+      };
+    });
+    return () => setDemoAuthHeadersProvider(null);
+  }, [isSignedIn, currentUser]);
 
   const signInAs = (roleKey: keyof typeof DEMO_USERS) => {
     setActiveKey(roleKey);
@@ -171,7 +189,7 @@ export function SignIn({ routing, path, signUpUrl }: { routing?: string; path?: 
           <ShieldCheck size={26} />
         </div>
         <h2 className="font-display text-2xl font-bold text-stone-900">Sign in to Rekker PeopleOS</h2>
-        <p className="mt-1 text-xs text-stone-500">Select an enterprise role to enter your workspace</p>
+        <p className="mt-1 text-xs text-stone-500">Sandbox mode: select a synthetic test role</p>
       </div>
 
       <div className="space-y-3">
@@ -184,11 +202,11 @@ export function SignIn({ routing, path, signUpUrl }: { routing?: string; path?: 
         >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-700 font-bold text-white text-xs">
-              DK
+              DA
             </div>
             <div>
-              <p className="text-sm font-bold text-stone-900">David Kibet <span className="ml-1 text-[10px] rounded bg-red-100 text-red-800 px-1.5 py-0.5">Admin</span></p>
-              <p className="text-xs text-stone-500">david.kibet@rekker.co.ke · Full Privileges</p>
+              <p className="text-sm font-bold text-stone-900">Demo Admin 07 <span className="ml-1 text-[10px] rounded bg-red-100 text-red-800 px-1.5 py-0.5">HR Admin</span></p>
+              <p className="text-xs text-stone-500">demo.admin.07@rekker-demo.invalid · Sandbox Admin</p>
             </div>
           </div>
           <ArrowRight size={17} className="text-red-700" />
@@ -203,11 +221,11 @@ export function SignIn({ routing, path, signUpUrl }: { routing?: string; path?: 
         >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-700 font-bold text-white text-xs">
-              AO
+              DM
             </div>
             <div>
-              <p className="text-sm font-bold text-stone-900">Achieng Odhiambo <span className="ml-1 text-[10px] rounded bg-stone-100 text-stone-700 px-1.5 py-0.5">HR Manager</span></p>
-              <p className="text-xs text-stone-500">Manufacturing Division Manager</p>
+              <p className="text-sm font-bold text-stone-900">Demo Manager 01 <span className="ml-1 text-[10px] rounded bg-stone-100 text-stone-700 px-1.5 py-0.5">HR Manager</span></p>
+              <p className="text-xs text-stone-500">demo.manager.01@rekker-demo.invalid · Operations Lead</p>
             </div>
           </div>
           <ArrowRight size={17} className="text-stone-400" />
@@ -222,11 +240,11 @@ export function SignIn({ routing, path, signUpUrl }: { routing?: string; path?: 
         >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-600 font-bold text-white text-xs">
-              MK
+              DE
             </div>
             <div>
-              <p className="text-sm font-bold text-stone-900">Mwangi Kariuki <span className="ml-1 text-[10px] rounded bg-stone-100 text-stone-700 px-1.5 py-0.5">Employee</span></p>
-              <p className="text-xs text-stone-500">Distribution Logistics Specialist</p>
+              <p className="text-sm font-bold text-stone-900">Demo Employee 02 <span className="ml-1 text-[10px] rounded bg-stone-100 text-stone-700 px-1.5 py-0.5">Employee</span></p>
+              <p className="text-xs text-stone-500">demo.employee.02@rekker-demo.invalid · Self-Service</p>
             </div>
           </div>
           <ArrowRight size={17} className="text-stone-400" />
@@ -235,14 +253,14 @@ export function SignIn({ routing, path, signUpUrl }: { routing?: string; path?: 
 
       <div className="mt-6 border-t border-stone-100 pt-4 text-center">
         <p className="text-[11px] text-stone-400 flex items-center justify-center gap-1.5">
-          <Lock size={12} /> Enterprise SSO & Kenya Data Protection Act 2019 Compliant
+          <Lock size={12} /> Enterprise Identity &amp; Kenya Data Protection Act 2019 Controls
         </p>
       </div>
     </div>
   );
 }
 
-export function SignUp({ routing, path, signInUrl }: { routing?: string; path?: string; signInUrl?: string }) {
+export function SignUp({ routing, path, signInUrl }: { routing?: string; path?: string; signInUrl?: string; signUpUrl?: string }) {
   if (hasValidClerkKey) {
     return <RealSignUp routing={routing as any} path={path} signInUrl={signInUrl} />;
   }
@@ -281,4 +299,3 @@ export function UnifiedAuthProvider({
 
   return <DemoAuthProvider>{children}</DemoAuthProvider>;
 }
-

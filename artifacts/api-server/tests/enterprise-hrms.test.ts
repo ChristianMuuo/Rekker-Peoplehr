@@ -85,13 +85,13 @@ describe("Enterprise HRMS Controls: Payroll, Security, Leave, M-Pesa & 10-Agent 
   });
 
   test("AES-256-GCM encryption round-trips PII fields and ODPC masking obscures sensitive identifiers", () => {
-    const encryptedPin = encryptSensitiveField("A003491827K");
-    assert.ok(encryptedPin && encryptedPin.startsWith("enc:v1:"));
-    assert.notStrictEqual(encryptedPin, "A003491827K");
-    assert.strictEqual(decryptSensitiveField(encryptedPin), "A003491827K");
+    const encryptedPin = encryptSensitiveField("DEMO-PIN-349");
+    assert.ok(encryptedPin && encryptedPin.startsWith("enc:v2:"));
+    assert.notStrictEqual(encryptedPin, "DEMO-PIN-349");
+    assert.strictEqual(decryptSensitiveField(encryptedPin), "DEMO-PIN-349");
 
-    assert.strictEqual(maskKraPin(encryptedPin), "A00*****7K");
-    assert.strictEqual(maskPhoneNumber("+254722889911"), "+254****911");
+    assert.strictEqual(maskKraPin(encryptedPin), "DEM*****49");
+    assert.strictEqual(maskPhoneNumber("+254700000911"), "+254****911");
     assert.strictEqual(maskNationalId("29182736"), "****736");
 
     const sanitized = sanitizeFileName("../../etc/passwd?bad=1");

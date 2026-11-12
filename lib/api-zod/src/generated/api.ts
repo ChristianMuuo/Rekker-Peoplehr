@@ -59,7 +59,7 @@ export const GetPeopleOsOverviewResponse = zod.object({
  * @summary Get the signed-in user's role and application permissions
  */
 export const GetAuthContextResponse = zod.object({
-  "role": zod.enum(['employee', 'department_manager', 'hr_admin', 'hr_manager', 'recruiter', 'payroll_officer', 'system_admin', 'read_only_executive', 'auditor']),
+  "role": zod.enum(['employee', 'department_manager', 'hr_admin', 'hr_director', 'hr_manager', 'hr_officer', 'recruiter', 'payroll_officer', 'finance_manager', 'production_supervisor', 'warehouse_supervisor', 'sales_manager', 'system_admin', 'read_only_executive', 'auditor']),
   "displayName": zod.string(),
   "organizationName": zod.string(),
   "canManagePeople": zod.boolean(),

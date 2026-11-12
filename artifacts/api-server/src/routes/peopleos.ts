@@ -17,13 +17,18 @@ import {
   UpdateEmployeeResponse,
 } from "@workspace/api-zod";
 import {
-  auditEventsTable,
   db,
   departmentsTable,
   employeesTable,
   leaveRequestsTable,
 } from "@workspace/db";
-import { maskKraPin, maskNationalId, maskPhoneNumber, sanitizeText } from "../lib/security";
+import {
+  canReadEmployeeProfile,
+  canViewSensitiveStatutoryIdentifiers,
+  hasModulePermission,
+  MODULE_PERMISSION_MATRIX,
+} from "../lib/authorization";
+import { decryptSensitiveField, maskKraPin, maskNationalId, maskPhoneNumber, sanitizeText } from "../lib/security";
 import { recordAuditEvent } from "../lib/auditService";
 import {
   getAuthSessionMeta,
@@ -35,29 +40,12 @@ import {
 } from "../middlewares/peopleosAccess";
 
 const router: IRouter = Router();
-const peopleManagers = [
-  PEOPLEOS_ROLES.hrAdmin,
-  PEOPLEOS_ROLES.hrManager,
-  PEOPLEOS_ROLES.systemAdmin,
-] as const;
-const overviewRoles: readonly string[] = [
-  PEOPLEOS_ROLES.hrAdmin,
-  PEOPLEOS_ROLES.hrManager,
-  PEOPLEOS_ROLES.systemAdmin,
-  PEOPLEOS_ROLES.departmentManager,
-  PEOPLEOS_ROLES.executive,
+const peopleManagers: readonly string[] = [
+  ...MODULE_PERMISSION_MATRIX.hrAndPeopleCore.writeRoles,
 ];
-const departmentRoles: readonly string[] = [
-  ...overviewRoles,
-  PEOPLEOS_ROLES.employee,
-];
-const directoryRoles: readonly string[] = [
-  PEOPLEOS_ROLES.hrAdmin,
-  PEOPLEOS_ROLES.hrManager,
-  PEOPLEOS_ROLES.systemAdmin,
-  PEOPLEOS_ROLES.departmentManager,
-  PEOPLEOS_ROLES.employee,
-];
+const overviewRoles: readonly string[] = Object.values(PEOPLEOS_ROLES);
+const departmentRoles: readonly string[] = Object.values(PEOPLEOS_ROLES);
+const directoryRoles: readonly string[] = Object.values(PEOPLEOS_ROLES);
 const dayMs = 24 * 60 * 60 * 1000;
 
 export const DEMO_DEPARTMENTS_LIST = [
@@ -91,16 +79,16 @@ export interface DemoEmployeeItem {
 }
 
 export const DEMO_EMPLOYEES_LIST: DemoEmployeeItem[] = [
-  { id: '10000000-0000-4000-8000-000000000001', employeeNumber: 'REK-0101', firstName: 'Achieng', lastName: 'Odhiambo', preferredName: 'Achieng', workEmail: 'achieng.odhiambo@rekker.co.ke', phone: '+254 722 100 201', jobTitle: 'Plant Operations Director', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: null, managerName: null, location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2021-03-15', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000002', employeeNumber: 'REK-0102', firstName: 'Mwangi', lastName: 'Kariuki', preferredName: 'Mwangi', workEmail: 'mwangi.kariuki@rekker.co.ke', phone: '+254 733 410 882', jobTitle: 'Lead Formulation & Quality Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2022-06-01', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000003', employeeNumber: 'REK-0103', firstName: 'Juma', lastName: 'Omondi', preferredName: null, workEmail: 'juma.omondi@rekker.co.ke', phone: '+254 711 502 918', jobTitle: 'Logistics Fleet Manager', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: null, managerName: null, location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'active', startDate: '2022-09-10', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000004', employeeNumber: 'REK-0104', firstName: 'Wanjiku', lastName: 'Kimani', preferredName: 'Wawa', workEmail: 'wanjiku.kimani@rekker.co.ke', phone: '+254 700 819 223', jobTitle: 'Distribution Dispatch Specialist', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'on_leave', startDate: '2023-04-12', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000005', employeeNumber: 'REK-0105', firstName: 'Brenda', lastName: 'Mutheu', preferredName: 'Brenda', workEmail: 'brenda.mutheu@rekker.co.ke', phone: '+254 721 349 018', jobTitle: 'Brand Strategy & Trade Lead', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2022-01-10', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000006', employeeNumber: 'REK-0106', firstName: 'Brian', lastName: 'Kiprotich', preferredName: 'Brian', workEmail: 'brian.kiprotich@rekker.co.ke', phone: '+254 725 619 827', jobTitle: 'Digital Growth & Social Media Specialist', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: '10000000-0000-4000-8000-000000000005', managerName: 'Brenda Mutheu', location: 'Westlands Commercial Office', employmentType: 'fixed_term', status: 'active', startDate: '2024-02-01', probationEndDate: null, contractEndDate: '2026-04-30', isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000007', employeeNumber: 'REK-0107', firstName: 'David', lastName: 'Kibet', preferredName: 'David', workEmail: 'david.kibet@rekker.co.ke', phone: '+254 720 182 930', jobTitle: 'Head of People & Organization Culture', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2021-08-01', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000008', employeeNumber: 'REK-0108', firstName: 'Faith', lastName: 'Chebet', preferredName: 'Faith', workEmail: 'faith.chebet@rekker.co.ke', phone: '+254 724 991 823', jobTitle: 'Talent Acquisition & Employee Experience Officer', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'probation', startDate: '2026-01-15', probationEndDate: '2026-04-15', contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000009', employeeNumber: 'REK-0109', firstName: 'Dennis', lastName: 'Otieno', preferredName: 'Denno', workEmail: 'dennis.otieno@rekker.co.ke', phone: '+254 731 442 819', jobTitle: 'Financial Accountant & Payroll Controller', departmentId: '20000000-0000-4000-8000-000000000005', departmentName: 'Finance & Supply Chain', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2023-01-09', probationEndDate: null, contractEndDate: null, isDemo: true },
-  { id: '10000000-0000-4000-8000-000000000010', employeeNumber: 'REK-0110', firstName: 'Sarah', lastName: 'Njeri', preferredName: 'Sarah', workEmail: 'sarah.njeri@rekker.co.ke', phone: '+254 718 293 847', jobTitle: 'Junior Quality Assurance Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Mwangi Kariuki', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2024-05-02', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000001', employeeNumber: 'REK-0101', firstName: 'Achieng', lastName: 'Odhiambo', preferredName: 'Achieng', workEmail: 'achieng.odhiambo@rekker-demo.invalid', phone: null, jobTitle: 'Plant Operations Director', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: null, managerName: null, location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2021-03-15', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000002', employeeNumber: 'REK-0102', firstName: 'Mwangi', lastName: 'Kariuki', preferredName: 'Mwangi', workEmail: 'mwangi.kariuki@rekker-demo.invalid', phone: null, jobTitle: 'Lead Formulation & Quality Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000001', managerName: 'Achieng Odhiambo', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2022-06-01', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000003', employeeNumber: 'REK-0103', firstName: 'Juma', lastName: 'Omondi', preferredName: null, workEmail: 'juma.omondi@rekker-demo.invalid', phone: null, jobTitle: 'Logistics Fleet Manager', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: null, managerName: null, location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'active', startDate: '2022-09-10', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000004', employeeNumber: 'REK-0104', firstName: 'Wanjiku', lastName: 'Kimani', preferredName: 'Wawa', workEmail: 'wanjiku.kimani@rekker-demo.invalid', phone: null, jobTitle: 'Distribution Dispatch Specialist', departmentId: '20000000-0000-4000-8000-000000000002', departmentName: 'Logistics & Distribution', managerId: '10000000-0000-4000-8000-000000000003', managerName: 'Juma Omondi', location: 'Nairobi Central Logistics Hub', employmentType: 'permanent', status: 'on_leave', startDate: '2023-04-12', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000005', employeeNumber: 'REK-0105', firstName: 'Brenda', lastName: 'Mutheu', preferredName: 'Brenda', workEmail: 'brenda.mutheu@rekker-demo.invalid', phone: null, jobTitle: 'Brand Strategy & Trade Lead', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2022-01-10', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000006', employeeNumber: 'REK-0106', firstName: 'Brian', lastName: 'Kiprotich', preferredName: 'Brian', workEmail: 'brian.kiprotich@rekker-demo.invalid', phone: null, jobTitle: 'Digital Growth & Social Media Specialist', departmentId: '20000000-0000-4000-8000-000000000003', departmentName: 'Brand & Commercial Marketing', managerId: '10000000-0000-4000-8000-000000000005', managerName: 'Brenda Mutheu', location: 'Westlands Commercial Office', employmentType: 'fixed_term', status: 'active', startDate: '2024-02-01', probationEndDate: null, contractEndDate: '2026-04-30', isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000007', employeeNumber: 'REK-0107', firstName: 'David', lastName: 'Kibet', preferredName: 'David', workEmail: 'david.kibet@rekker-demo.invalid', phone: null, jobTitle: 'Head of People & Organization Culture', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2021-08-01', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000008', employeeNumber: 'REK-0108', firstName: 'Faith', lastName: 'Chebet', preferredName: 'Faith', workEmail: 'faith.chebet@rekker-demo.invalid', phone: null, jobTitle: 'Talent Acquisition & Employee Experience Officer', departmentId: '20000000-0000-4000-8000-000000000004', departmentName: 'People Operations & Culture', managerId: '10000000-0000-4000-8000-000000000007', managerName: 'David Kibet', location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'probation', startDate: '2026-01-15', probationEndDate: '2026-04-15', contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000009', employeeNumber: 'REK-0109', firstName: 'Dennis', lastName: 'Otieno', preferredName: 'Denno', workEmail: 'dennis.otieno@rekker-demo.invalid', phone: null, jobTitle: 'Financial Accountant & Payroll Controller', departmentId: '20000000-0000-4000-8000-000000000005', departmentName: 'Finance & Supply Chain', managerId: null, managerName: null, location: 'Westlands Commercial Office', employmentType: 'permanent', status: 'active', startDate: '2023-01-09', probationEndDate: null, contractEndDate: null, isDemo: true },
+  { id: '10000000-0000-4000-8000-000000000010', employeeNumber: 'REK-0110', firstName: 'Sarah', lastName: 'Njeri', preferredName: 'Sarah', workEmail: 'sarah.njeri@rekker-demo.invalid', phone: null, jobTitle: 'Junior Quality Assurance Chemist', departmentId: '20000000-0000-4000-8000-000000000001', departmentName: 'Formulation & Filling', managerId: '10000000-0000-4000-8000-000000000002', managerName: 'Mwangi Kariuki', location: 'Nairobi Production Facility', employmentType: 'permanent', status: 'active', startDate: '2024-05-02', probationEndDate: null, contractEndDate: null, isDemo: true },
 ];
 
 function dateAfter(days: number): string {
@@ -196,27 +184,6 @@ async function serializeEmployees(records: (typeof employeesTable.$inferSelect)[
   }));
 }
 
-async function writeAudit(
-  actorUserId: string,
-  actor: string,
-  action: string,
-  targetType: string,
-  targetId: string,
-  summary: string,
-  isDemo: boolean,
-): Promise<void> {
-  await db.insert(auditEventsTable).values({
-    organizationId: PEOPLEOS_ORGANIZATION_ID,
-    actorUserId,
-    actor,
-    action,
-    targetType,
-    targetId,
-    summary,
-    isDemo,
-  });
-}
-
 router.get("/auth/context", async (req, res): Promise<void> => {
   const organization = await getPeopleOsOrganization();
   if (!organization) {
@@ -226,34 +193,29 @@ router.get("/auth/context", async (req, res): Promise<void> => {
   const membership = await requireRoles(
     req,
     res,
-    [
-      PEOPLEOS_ROLES.employee,
-      PEOPLEOS_ROLES.departmentManager,
-      PEOPLEOS_ROLES.hrAdmin,
-      PEOPLEOS_ROLES.systemAdmin,
-      PEOPLEOS_ROLES.executive,
-      PEOPLEOS_ROLES.auditor,
-      PEOPLEOS_ROLES.hrManager,
-      PEOPLEOS_ROLES.recruiter,
-      PEOPLEOS_ROLES.payrollOfficer,
-    ],
+    Object.values(PEOPLEOS_ROLES),
   );
   if (!membership) return;
   const role = membership.role;
-  const admin: readonly string[] = peopleManagers;
-  const isAdmin = admin.includes(role);
-  const displayName =
-    role === PEOPLEOS_ROLES.hrAdmin
-      ? "David Kibet"
-      : role === PEOPLEOS_ROLES.hrManager
-        ? "Achieng Odhiambo"
-        : role === PEOPLEOS_ROLES.payrollOfficer
-          ? "Dennis Otieno"
-          : role === PEOPLEOS_ROLES.recruiter
-            ? "Faith Chebet"
-            : role === PEOPLEOS_ROLES.employee
-              ? "Mwangi Kariuki"
-              : "Rekker Teammate";
+  const isAdmin = peopleManagers.includes(role);
+  const displayNameMap: Record<string, string> = {
+    [PEOPLEOS_ROLES.hrAdmin]: "David Kibet",
+    [PEOPLEOS_ROLES.hrDirector]: "David Kibet",
+    [PEOPLEOS_ROLES.hrManager]: "Achieng Odhiambo",
+    [PEOPLEOS_ROLES.hrOfficer]: "Faith Chebet",
+    [PEOPLEOS_ROLES.payrollOfficer]: "Dennis Otieno",
+    [PEOPLEOS_ROLES.financeManager]: "Dennis Otieno",
+    [PEOPLEOS_ROLES.departmentManager]: "Achieng Odhiambo",
+    [PEOPLEOS_ROLES.productionSupervisor]: "Achieng Odhiambo",
+    [PEOPLEOS_ROLES.warehouseSupervisor]: "Juma Omondi",
+    [PEOPLEOS_ROLES.salesManager]: "Brenda Mutheu",
+    [PEOPLEOS_ROLES.recruiter]: "Faith Chebet",
+    [PEOPLEOS_ROLES.employee]: "Mwangi Kariuki",
+    [PEOPLEOS_ROLES.executive]: "Executive Observer",
+    [PEOPLEOS_ROLES.auditor]: "Compliance Auditor",
+    [PEOPLEOS_ROLES.systemAdmin]: "System Administrator",
+  };
+  const displayName = displayNameMap[role] ?? "Rekker Teammate";
 
   const response = {
     role,
@@ -261,17 +223,20 @@ router.get("/auth/context", async (req, res): Promise<void> => {
     organizationName: organization.name,
     canManagePeople: isAdmin,
     canApproveLeave:
-      isAdmin || role === PEOPLEOS_ROLES.departmentManager,
-    canViewAudit:
-      isAdmin || role === PEOPLEOS_ROLES.auditor,
+      isAdmin ||
+      role === PEOPLEOS_ROLES.departmentManager ||
+      role === PEOPLEOS_ROLES.productionSupervisor ||
+      role === PEOPLEOS_ROLES.warehouseSupervisor ||
+      role === PEOPLEOS_ROLES.salesManager,
+    canViewAudit: hasModulePermission(role, "auditTrail", "read"),
     canViewPayroll:
-      role === PEOPLEOS_ROLES.systemAdmin ||
-      role === PEOPLEOS_ROLES.payrollOfficer ||
-      role === PEOPLEOS_ROLES.hrAdmin ||
+      hasModulePermission(role, "payrollAndJournal", "read") ||
       role === PEOPLEOS_ROLES.hrManager ||
       role === PEOPLEOS_ROLES.executive,
     canManageSettings:
-      role === PEOPLEOS_ROLES.systemAdmin || role === PEOPLEOS_ROLES.hrAdmin,
+      role === PEOPLEOS_ROLES.systemAdmin ||
+      role === PEOPLEOS_ROLES.hrAdmin ||
+      role === PEOPLEOS_ROLES.hrDirector,
     isDemo: organization.isDemo,
   };
   res.json(GetAuthContextResponse.parse(response));
@@ -594,6 +559,15 @@ router.get("/employees", async (req, res): Promise<void> => {
   }
   if (!process.env.DATABASE_URL) {
     let items = [...DEMO_EMPLOYEES_LIST];
+    if (access.membership) {
+      items = items.filter((e) =>
+        canReadEmployeeProfile(access.membership!, {
+          id: e.id,
+          organizationId: access.organization.id,
+          managerId: e.managerId,
+        }),
+      );
+    }
     const q = parsedQuery.data;
     if (q.departmentId) {
       items = items.filter((e) => e.departmentId === q.departmentId);
@@ -644,7 +618,7 @@ router.get("/employees", async (req, res): Promise<void> => {
       )!,
     );
   }
-  if (!access.organization.isDemo && access.membership) {
+  if (access.membership) {
     if (access.membership.role === PEOPLEOS_ROLES.employee) {
       conditions.push(
         access.membership.employeeId
@@ -652,11 +626,17 @@ router.get("/employees", async (req, res): Promise<void> => {
           : eq(employeesTable.id, "00000000-0000-4000-8000-000000000000"),
       );
     } else if (
-      access.membership.role === PEOPLEOS_ROLES.departmentManager
+      access.membership.role === PEOPLEOS_ROLES.departmentManager ||
+      access.membership.role === PEOPLEOS_ROLES.productionSupervisor ||
+      access.membership.role === PEOPLEOS_ROLES.warehouseSupervisor ||
+      access.membership.role === PEOPLEOS_ROLES.salesManager
     ) {
       conditions.push(
         access.membership.employeeId
-          ? eq(employeesTable.managerId, access.membership.employeeId)
+          ? or(
+              eq(employeesTable.id, access.membership.employeeId),
+              eq(employeesTable.managerId, access.membership.employeeId),
+            )!
           : eq(employeesTable.id, "00000000-0000-4000-8000-000000000000"),
       );
     }
@@ -769,31 +749,43 @@ router.post("/employees", async (req, res): Promise<void> => {
     res.status(409).json({ error: "Employee number or work email already exists." });
     return;
   }
-  const [record] = await db
-    .insert(employeesTable)
-    .values({
-      ...input,
+  const record = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(employeesTable)
+      .values({
+        ...input,
+        organizationId: organization.id,
+        isDemo: organization.isDemo,
+        status: input.status ?? "active",
+        startDate: dateOnly(input.startDate),
+        probationEndDate: nullableDateOnly(input.probationEndDate),
+        contractEndDate: nullableDateOnly(input.contractEndDate),
+      })
+      .returning();
+
+    if (!inserted) return null;
+
+    await recordAuditEvent({
       organizationId: organization.id,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "employee_created",
+      targetType: "employee",
+      targetId: inserted.id,
+      summary: "An employee profile was created.",
+      correlationId: req.correlationId,
+      critical: true,
       isDemo: organization.isDemo,
-      status: input.status ?? "active",
-      startDate: dateOnly(input.startDate),
-      probationEndDate: nullableDateOnly(input.probationEndDate),
-      contractEndDate: nullableDateOnly(input.contractEndDate),
-    })
-    .returning();
+      tx,
+    });
+
+    return inserted;
+  });
+
   if (!record) {
     res.status(500).json({ error: "Employee record could not be created." });
     return;
   }
-  await writeAudit(
-    membership.userId,
-    membership.role,
-    "employee_created",
-    "employee",
-    record.id,
-    "An employee profile was created.",
-    organization.isDemo,
-  );
   const [employee] = await serializeEmployees([record]);
   res.status(201).json(CreateEmployeeResponse.parse(employee));
 });
@@ -807,7 +799,6 @@ router.get("/employees/:employeeId", async (req, res): Promise<void> => {
   const access = await getReadAccess(req, res);
   if (!access) return;
   if (
-    !access.organization.isDemo &&
     access.membership &&
     !directoryRoles.includes(access.membership.role)
   ) {
@@ -820,59 +811,57 @@ router.get("/employees/:employeeId", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Employee not found." });
       return;
     }
+    if (
+      access.membership &&
+      !canReadEmployeeProfile(access.membership, {
+        id: emp.id,
+        organizationId: access.organization.id,
+        managerId: emp.managerId,
+      })
+    ) {
+      res.status(403).json({
+        error: "Access denied to another employee profile.",
+        code: "FORBIDDEN_EMPLOYEE_PROFILE",
+      });
+      return;
+    }
     res.json(GetEmployeeResponse.parse(emp));
     return;
   }
-  const conditions = [
-    eq(employeesTable.id, params.data.employeeId),
-    eq(employeesTable.organizationId, access.organization.id),
-  ];
-  if (
-    !access.organization.isDemo &&
-    access.membership?.role === PEOPLEOS_ROLES.employee
-  ) {
-    if (!access.membership.employeeId || access.membership.employeeId !== params.data.employeeId) {
-      res.status(404).json({ error: "Employee not found." });
-      return;
-    }
-  }
-  if (
-    !access.organization.isDemo &&
-    access.membership?.role === PEOPLEOS_ROLES.departmentManager
-  ) {
-    if (!access.membership.employeeId) {
-      res.status(404).json({ error: "Employee not found." });
-      return;
-    }
-    const [target] = await db
-      .select({ managerId: employeesTable.managerId })
-      .from(employeesTable)
-      .where(and(...conditions))
-      .limit(1);
-    if (!target || target.managerId !== access.membership.employeeId) {
-      res.status(404).json({ error: "Employee not found." });
-      return;
-    }
-  }
+
   const [record] = await db
     .select()
     .from(employeesTable)
-    .where(and(...conditions))
+    .where(
+      and(
+        eq(employeesTable.id, params.data.employeeId),
+        eq(employeesTable.organizationId, access.organization.id),
+      ),
+    )
     .limit(1);
   if (!record) {
     res.status(404).json({ error: "Employee not found." });
     return;
   }
+  if (access.membership && !canReadEmployeeProfile(access.membership, record)) {
+    res.status(403).json({
+      error: "Access denied to another employee profile.",
+      code: "FORBIDDEN_EMPLOYEE_PROFILE",
+    });
+    return;
+  }
   if (access.membership) {
-    await writeAudit(
-      access.membership.userId,
-      access.membership.role,
-      "employee_profile_viewed",
-      "employee",
-      record.id,
-      "An authorized employee profile was viewed.",
-      record.isDemo,
-    );
+    await recordAuditEvent({
+      organizationId: access.organization.id,
+      actorUserId: access.membership.userId,
+      actor: access.membership.role,
+      action: "employee_profile_viewed",
+      targetType: "employee",
+      targetId: record.id,
+      summary: "An authorized employee profile was viewed.",
+      correlationId: req.correlationId,
+      isDemo: record.isDemo,
+    });
   }
   const [employee] = await serializeEmployees([record]);
   res.json(GetEmployeeResponse.parse(employee));
@@ -972,29 +961,41 @@ router.patch("/employees/:employeeId", async (req, res): Promise<void> => {
       ? {}
       : { contractEndDate: nullableDateOnly(input.contractEndDate) }),
   };
-  const [record] = await db
-    .update(employeesTable)
-    .set(updateData)
-    .where(
-      and(
-        eq(employeesTable.id, params.data.employeeId),
-        eq(employeesTable.organizationId, organization.id),
-      ),
-    )
-    .returning();
+  const record = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(employeesTable)
+      .set(updateData)
+      .where(
+        and(
+          eq(employeesTable.id, params.data.employeeId),
+          eq(employeesTable.organizationId, organization.id),
+        ),
+      )
+      .returning();
+
+    if (!updated) return null;
+
+    await recordAuditEvent({
+      organizationId: organization.id,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "employee_profile_updated",
+      targetType: "employee",
+      targetId: updated.id,
+      summary: "Permitted employee profile fields were updated.",
+      correlationId: req.correlationId,
+      critical: true,
+      isDemo: updated.isDemo,
+      tx,
+    });
+
+    return updated;
+  });
+
   if (!record) {
     res.status(404).json({ error: "Employee not found." });
     return;
   }
-  await writeAudit(
-    membership.userId,
-    membership.role,
-    "employee_profile_updated",
-    "employee",
-    record.id,
-    "Permitted employee profile fields were updated.",
-    record.isDemo,
-  );
   const [employee] = await serializeEmployees([record]);
   res.json(UpdateEmployeeResponse.parse(employee));
 });
@@ -1004,59 +1005,190 @@ router.get("/employees/:employeeId/profile-360", async (req, res): Promise<void>
   if (!access || !access.membership) return;
 
   const employeeId = String(req.params.employeeId ?? "");
-  const role = access.membership.role;
-  const isSelf = access.membership.employeeId === employeeId;
-  const isHrAdmin = peopleManagers.includes(role as any);
-  const isPayrollViewer =
-    isHrAdmin ||
-    role === PEOPLEOS_ROLES.payrollOfficer ||
-    role === PEOPLEOS_ROLES.systemAdmin;
+  const membership = access.membership;
+  const sensitivity = canViewSensitiveStatutoryIdentifiers(membership, employeeId);
+  const canSeeCompensation = sensitivity.kraAndSocial;
 
-  if (role === PEOPLEOS_ROLES.employee && !isSelf && !access.organization.isDemo) {
-    res.status(403).json({ error: "Access denied to another employee's 360 profile." });
+  if (!process.env.DATABASE_URL) {
+    const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
+    if (!emp) {
+      res.status(404).json({ error: "Employee not found." });
+      return;
+    }
+    if (
+      !canReadEmployeeProfile(membership, {
+        id: emp.id,
+        organizationId: access.organization.id,
+        managerId: emp.managerId,
+      })
+    ) {
+      res.status(403).json({
+        error: "Access denied to another employee's 360 profile.",
+        code: "FORBIDDEN_EMPLOYEE_PROFILE",
+      });
+      return;
+    }
+
+    const empSuffix = emp.employeeNumber.slice(-3);
+    res.json({
+      employeeId: emp.id,
+      employeeNumber: emp.employeeNumber,
+      fullName: `${emp.firstName} ${emp.lastName}`,
+      jobTitle: emp.jobTitle,
+      departmentName: emp.departmentName,
+      location: emp.location,
+      status: emp.status,
+      employmentType: emp.employmentType,
+      startDate: emp.startDate,
+      probationEndDate: emp.probationEndDate,
+      contractEndDate: emp.contractEndDate,
+      reportingLine: {
+        managerName: emp.managerName,
+        directReports: DEMO_EMPLOYEES_LIST.filter((e) => e.managerId === emp.id).map(
+          (r) => ({ id: r.id, name: `${r.firstName} ${r.lastName}`, jobTitle: r.jobTitle }),
+        ),
+      },
+      statutoryIdentifiers: {
+        kraPin: sensitivity.kraAndSocial ? maskKraPin(`DEMO-PIN-${empSuffix}`) : "RESTRICTED",
+        nationalId: sensitivity.nationalIdAndEmergency ? maskNationalId(`DEMO-ID-${empSuffix}`) : "RESTRICTED",
+        nssfNo: sensitivity.kraAndSocial ? `DEMO-NSSF-${empSuffix}` : "RESTRICTED",
+        shaNo: sensitivity.kraAndSocial ? `DEMO-SHA-${empSuffix}` : "RESTRICTED",
+        encryptionStatus: "AES-256-GCM Field Protection",
+      },
+      emergencyContact: sensitivity.nationalIdAndEmergency
+        ? {
+            name: "Demo Next-of-Kin Contact",
+            relationship: "Designated Emergency Contact",
+            phone: null,
+          }
+        : null,
+      compensationSummary: canSeeCompensation
+        ? {
+            currency: "KES",
+            payFrequency: "Monthly",
+            paymentChannel: "M-Pesa B2C / Bank EFT",
+            authorizedToView: true,
+          }
+        : { authorizedToView: false },
+      skills: ["Kenya Compliance", "Operational Excellence", "Team Leadership"],
+    });
     return;
   }
 
-  const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
-  if (!emp) {
+  const [dbEmp] = await db
+    .select()
+    .from(employeesTable)
+    .where(
+      and(
+        eq(employeesTable.id, employeeId),
+        eq(employeesTable.organizationId, access.organization.id),
+      ),
+    )
+    .limit(1);
+
+  if (!dbEmp) {
     res.status(404).json({ error: "Employee not found." });
     return;
   }
 
-  const canSeeCompensation = isSelf || isPayrollViewer;
-  res.json({
-    employeeId: emp.id,
-    employeeNumber: emp.employeeNumber,
-    fullName: `${emp.firstName} ${emp.lastName}`,
-    jobTitle: emp.jobTitle,
-    departmentName: emp.departmentName,
-    location: emp.location,
-    status: emp.status,
-    employmentType: emp.employmentType,
-    startDate: emp.startDate,
-    probationEndDate: emp.probationEndDate,
-    contractEndDate: emp.contractEndDate,
-    reportingLine: {
-      managerName: emp.managerName,
-      directReports: DEMO_EMPLOYEES_LIST.filter((e) => e.managerId === emp.id).map(
-        (r) => ({ id: r.id, name: `${r.firstName} ${r.lastName}`, jobTitle: r.jobTitle }),
+  if (!canReadEmployeeProfile(membership, dbEmp)) {
+    res.status(403).json({
+      error: "Access denied to another employee's 360 profile.",
+      code: "FORBIDDEN_EMPLOYEE_PROFILE",
+    });
+    return;
+  }
+
+  const [deptRows, reportRows, managerRows] = await Promise.all([
+    db
+      .select({ name: departmentsTable.name })
+      .from(departmentsTable)
+      .where(
+        and(
+          eq(departmentsTable.id, dbEmp.departmentId),
+          eq(departmentsTable.organizationId, access.organization.id),
+        ),
+      )
+      .limit(1),
+    db
+      .select({
+        id: employeesTable.id,
+        firstName: employeesTable.firstName,
+        lastName: employeesTable.lastName,
+        jobTitle: employeesTable.jobTitle,
+      })
+      .from(employeesTable)
+      .where(
+        and(
+          eq(employeesTable.organizationId, access.organization.id),
+          eq(employeesTable.managerId, dbEmp.id),
+        ),
       ),
+    dbEmp.managerId
+      ? db
+          .select({ firstName: employeesTable.firstName, lastName: employeesTable.lastName })
+          .from(employeesTable)
+          .where(eq(employeesTable.id, dbEmp.managerId))
+          .limit(1)
+      : Promise.resolve([]),
+  ]);
+
+  let parsedEmergency: { name?: string; relationship?: string; phone?: string } | null = null;
+  if (sensitivity.nationalIdAndEmergency && dbEmp.emergencyContactJson) {
+    try {
+      const dec = decryptSensitiveField(dbEmp.emergencyContactJson);
+      if (dec && dec !== "[ENCRYPTED_UNAVAILABLE]") {
+        parsedEmergency = JSON.parse(dec) as { name?: string; relationship?: string; phone?: string };
+      }
+    } catch {
+      parsedEmergency = null;
+    }
+  }
+
+  let parsedSkills: string[] = [];
+  if (dbEmp.skillsJson) {
+    try {
+      const maybe = JSON.parse(dbEmp.skillsJson);
+      if (Array.isArray(maybe)) parsedSkills = maybe.map(String);
+    } catch {
+      parsedSkills = [];
+    }
+  }
+
+  res.json({
+    employeeId: dbEmp.id,
+    employeeNumber: dbEmp.employeeNumber,
+    fullName: `${dbEmp.firstName} ${dbEmp.lastName}`,
+    jobTitle: dbEmp.jobTitle,
+    departmentName: deptRows[0]?.name ?? "Assigned Department",
+    location: dbEmp.location,
+    status: dbEmp.status,
+    employmentType: dbEmp.employmentType,
+    startDate: dbEmp.startDate,
+    probationEndDate: dbEmp.probationEndDate,
+    contractEndDate: dbEmp.contractEndDate,
+    reportingLine: {
+      managerName: managerRows[0] ? `${managerRows[0].firstName} ${managerRows[0].lastName}` : null,
+      directReports: reportRows.map((r) => ({
+        id: r.id,
+        name: `${r.firstName} ${r.lastName}`,
+        jobTitle: r.jobTitle,
+      })),
     },
     statutoryIdentifiers: {
-      kraPin: isSelf || isPayrollViewer ? maskKraPin("A003491827K") : "RESTRICTED",
-      nationalId: isSelf || isHrAdmin ? maskNationalId("29182736") : "RESTRICTED",
-      nssfNo: isSelf || isPayrollViewer ? "NS-9012834" : "RESTRICTED",
-      shaNo: isSelf || isPayrollViewer ? "SHA-7712941" : "RESTRICTED",
+      kraPin: sensitivity.kraAndSocial ? (maskKraPin(dbEmp.kraPin) ?? "NOT_RECORDED") : "RESTRICTED",
+      nationalId: sensitivity.nationalIdAndEmergency ? (maskNationalId(dbEmp.nationalId) ?? "NOT_RECORDED") : "RESTRICTED",
+      nssfNo: sensitivity.kraAndSocial ? (dbEmp.nssfNo ? maskNationalId(decryptSensitiveField(dbEmp.nssfNo)) : "NOT_RECORDED") : "RESTRICTED",
+      shaNo: sensitivity.kraAndSocial ? (dbEmp.shaNo ? maskNationalId(decryptSensitiveField(dbEmp.shaNo)) : "NOT_RECORDED") : "RESTRICTED",
       encryptionStatus: "AES-256-GCM Field Protection",
     },
-    emergencyContact:
-      isSelf || isHrAdmin
-        ? {
-            name: "Grace Njoki",
-            relationship: "Spouse / Next of Kin",
-            phone: maskPhoneNumber("+254722889911"),
-          }
-        : null,
+    emergencyContact: sensitivity.nationalIdAndEmergency && parsedEmergency
+      ? {
+          name: parsedEmergency.name ?? "Designated Emergency Contact",
+          relationship: parsedEmergency.relationship ?? "Next of Kin",
+          phone: parsedEmergency.phone ? maskPhoneNumber(parsedEmergency.phone) : null,
+        }
+      : null,
     compensationSummary: canSeeCompensation
       ? {
           currency: "KES",
@@ -1065,7 +1197,7 @@ router.get("/employees/:employeeId/profile-360", async (req, res): Promise<void>
           authorizedToView: true,
         }
       : { authorizedToView: false },
-    skills: ["Kenya Compliance", "Operational Excellence", "Team Leadership"],
+    skills: parsedSkills,
   });
 });
 
@@ -1235,27 +1367,26 @@ router.post("/peopleos/employees/import", async (req, res): Promise<void> => {
   const imported: any[] = [];
   const skippedDuplicates: string[] = [];
 
-  for (const row of parsed) {
-    if (
-      !row.employeeNumber ||
-      !row.firstName ||
-      !row.lastName ||
-      !row.workEmail.includes("@") ||
-      !row.jobTitle
-    ) {
-      continue;
-    }
-    if (existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail)) {
-      skippedDuplicates.push(row.employeeNumber || row.workEmail);
-      continue;
-    }
-    existingNumbers.add(row.employeeNumber);
-    existingEmails.add(row.workEmail);
-    const dept =
-      DEMO_DEPARTMENTS_LIST.find((d) => d.code.toUpperCase() === row.departmentCode) ??
-      DEMO_DEPARTMENTS_LIST[0]!;
-
-    if (!process.env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL) {
+    for (const row of parsed) {
+      if (
+        !row.employeeNumber ||
+        !row.firstName ||
+        !row.lastName ||
+        !row.workEmail.includes("@") ||
+        !row.jobTitle
+      ) {
+        continue;
+      }
+      if (existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail)) {
+        skippedDuplicates.push(row.employeeNumber || row.workEmail);
+        continue;
+      }
+      existingNumbers.add(row.employeeNumber);
+      existingEmails.add(row.workEmail);
+      const dept =
+        DEMO_DEPARTMENTS_LIST.find((d) => d.code.toUpperCase() === row.departmentCode) ??
+        DEMO_DEPARTMENTS_LIST[0]!;
       const rec: DemoEmployeeItem = {
         id: crypto.randomUUID(),
         employeeNumber: row.employeeNumber,
@@ -1281,39 +1412,77 @@ router.post("/peopleos/employees/import", async (req, res): Promise<void> => {
       };
       DEMO_EMPLOYEES_LIST.push(rec);
       imported.push(rec);
-    } else {
-      const [created] = await db
-        .insert(employeesTable)
-        .values({
-          organizationId: membership.organizationId,
-          employeeNumber: row.employeeNumber,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          preferredName: row.firstName,
-          workEmail: row.workEmail,
-          jobTitle: row.jobTitle,
-          departmentId: dept.id,
-          location: row.location,
-          employmentType: row.employmentType || "permanent",
-          status: "active",
-          startDate: row.startDate,
-          isDemo: false,
-        })
-        .returning();
-      if (created) imported.push(created);
     }
-  }
 
-  await recordAuditEvent({
-    organizationId: membership.organizationId,
-    actorUserId: membership.userId,
-    actor: membership.role,
-    action: "EMPLOYEE_BULK_IMPORTED",
-    targetType: "employee_batch",
-    targetId: `batch-${Date.now()}`,
-    summary: `Imported ${imported.length} employees via CSV (${skippedDuplicates.length} duplicate(s) skipped)`,
-    isDemo: !process.env.DATABASE_URL,
-  });
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "EMPLOYEE_BULK_IMPORTED",
+      targetType: "employee_batch",
+      targetId: `batch-${Date.now()}`,
+      summary: `Imported ${imported.length} employees via CSV (${skippedDuplicates.length} duplicate(s) skipped)`,
+      correlationId: req.correlationId,
+      critical: true,
+      isDemo: true,
+    });
+  } else {
+    await db.transaction(async (tx) => {
+      for (const row of parsed) {
+        if (
+          !row.employeeNumber ||
+          !row.firstName ||
+          !row.lastName ||
+          !row.workEmail.includes("@") ||
+          !row.jobTitle
+        ) {
+          continue;
+        }
+        if (existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail)) {
+          skippedDuplicates.push(row.employeeNumber || row.workEmail);
+          continue;
+        }
+        existingNumbers.add(row.employeeNumber);
+        existingEmails.add(row.workEmail);
+        const dept =
+          DEMO_DEPARTMENTS_LIST.find((d) => d.code.toUpperCase() === row.departmentCode) ??
+          DEMO_DEPARTMENTS_LIST[0]!;
+        const [created] = await tx
+          .insert(employeesTable)
+          .values({
+            organizationId: membership.organizationId,
+            employeeNumber: row.employeeNumber,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            preferredName: row.firstName,
+            workEmail: row.workEmail,
+            jobTitle: row.jobTitle,
+            departmentId: dept.id,
+            location: row.location,
+            employmentType: row.employmentType || "permanent",
+            status: "active",
+            startDate: row.startDate,
+            isDemo: false,
+          })
+          .returning();
+        if (created) imported.push(created);
+      }
+
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "EMPLOYEE_BULK_IMPORTED",
+        targetType: "employee_batch",
+        targetId: `batch-${Date.now()}`,
+        summary: `Imported ${imported.length} employees via CSV (${skippedDuplicates.length} duplicate(s) skipped)`,
+        correlationId: req.correlationId,
+        critical: true,
+        isDemo: false,
+        tx,
+      });
+    });
+  }
 
   res.status(201).json({
     importedCount: imported.length,

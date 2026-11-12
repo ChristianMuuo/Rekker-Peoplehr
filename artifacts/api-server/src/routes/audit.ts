@@ -7,17 +7,12 @@ import {
 import { auditEventsTable, db } from "@workspace/db";
 import { listDemoAuditEvents } from "../lib/auditService";
 import {
-  PEOPLEOS_ROLES,
+  MODULE_PERMISSION_MATRIX,
   requireRoles,
 } from "../middlewares/peopleosAccess";
 
 const router: IRouter = Router();
-const auditRoles = [
-  PEOPLEOS_ROLES.hrAdmin,
-  PEOPLEOS_ROLES.hrManager,
-  PEOPLEOS_ROLES.systemAdmin,
-  PEOPLEOS_ROLES.auditor,
-];
+const auditRoles = MODULE_PERMISSION_MATRIX.auditTrail.readRoles;
 
 router.get("/audit-events", async (req, res): Promise<void> => {
   const query = ListAuditEventsQueryParams.safeParse(req.query);

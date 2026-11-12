@@ -1,0 +1,7 @@
+# ADR 004: Fail-Closed Authentication & Controlled Static Preview Fallback
+
+- **Status:** Accepted (Phase 1 Foundation)
+- **Date:** 2026-11-11
+- **Context:** Earlier code suffered from dual fail-open flaws: (1) backend `peopleosAccess.ts` downgraded PostgreSQL organization lookup errors to a fabricated `"Rekker Breweries Kenya Ltd"` demo org and had demo-mode bypasses skipping employee IDOR checks; (2) frontend `custom-fetch.ts` intercepted ANY HTTP error (including `401`, `403`, `404`, `500`) and returned simulated success payloads from `handleFallbackApi`, masking authorization denials and server outages.
+- **Decision:** Enforce explicit `PEOPLEOS_AUTH_MODE=clerk|demo` (`resolveAuthMode`), banning `demo` mode, `PEOPLEOS_DEMO_AUTH`, and simulated `x-peopleos-*` headers in `NODE_ENV=production` or whenever `CLERK_SECRET_KEY` is active; return `null` (`503 ORGANIZATION_UNAVAILABLE`) on PostgreSQL failure instead of fabricating demo tenants; apply `canReadEmployeeProfile` object-level IDOR controls across both DB and demo modes; and restrict `customFetch` offline static fallback exclusively to unreachable network errors when static fallback is enabled — throwing `ApiError` for every HTTP `4xx`/`5xx` response.
+- **Consequences:** Security boundaries hold deterministically across unit tests, Express API integration tests, and browser UI views while preserving transparent Vercel static demo preview resilience when the backend origin is intentionally absent.

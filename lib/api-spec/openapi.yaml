@@ -361,6 +361,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgentProviderStatus"
+  /readyz:
+    get:
+      operationId: readinessCheck
+      tags: [health]
+      summary: Verify dependency, database, and runtime configuration readiness
+      responses:
+        "200":
+          description: Service ready to serve traffic
+        "503":
+          description: Service degraded or missing critical configuration
+  /admin/diagnostics:
+    get:
+      operationId: getAdminDiagnostics
+      tags: [health]
+      summary: Retrieve subsystem health and integration registry for admins/auditors
+      responses:
+        "200":
+          description: Restricted diagnostics payload without secrets
+        "403":
+          description: Administrator or auditor role required
+  /security/status:
+    get:
+      operationId: getSecurityStatus
+      tags: [auth]
+      summary: Inspect active encryption standard, session MFA, and ODPC safeguards
+      responses:
+        "200":
+          description: Session security status
+  /employees/{employeeId}/profile-360:
+    get:
+      operationId: getEmployeeProfile360
+      tags: [employees]
+      summary: Get authorization-filtered 360 intelligence profile for an employee
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 360 profile scoped to caller authorization
+        "403":
+          description: Horizontal IDOR or unauthorized access denied
+        "404":
+          description: Employee not found
+  /hr-cases:
+    get:
+      operationId: listHrCases
+      tags: [governance]
+      summary: List confidential HR cases scoped strictly by confidentiality firewall
+      responses:
+        "200":
+          description: Scoped HR cases
+        "403":
+          description: Non-HR managers/payroll/recruiters are blocked
+  /workforce-erp/executive-summary:
+    get:
+      operationId: getWorkforceErpExecutiveSummary
+      tags: [erp]
+      summary: Consolidated staffing, payroll, and overtime readiness metrics across operational units
+      responses:
+        "200":
+          description: Workforce ERP executive metrics
 components:
   schemas:
     HealthStatus:
@@ -375,7 +438,7 @@ components:
       enum: [active, probation, on_leave, suspended, former]
     OrganizationRole:
       type: string
-      enum: [employee, department_manager, hr_admin, hr_manager, recruiter, payroll_officer, system_admin, read_only_executive, auditor]
+      enum: [employee, department_manager, hr_admin, hr_director, hr_manager, hr_officer, recruiter, payroll_officer, finance_manager, production_supervisor, warehouse_supervisor, sales_manager, system_admin, read_only_executive, auditor]
     AuthContext:
       type: object
       required: [role, displayName, organizationName, canManagePeople, canApproveLeave, canViewAudit, canViewPayroll, canManageSettings, isDemo]

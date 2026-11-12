@@ -22,7 +22,7 @@ describe("Rekker PeopleOS Upgrades: Bulk CSV, Org Chart, Confidential HR Cases, 
     await withServer(async (baseUrl) => {
       const uniqueSuffix = Date.now().toString().slice(-4);
       const empNo = `REK-CSV-${uniqueSuffix}`;
-      const empEmail = `csv.worker.${uniqueSuffix}@rekker.co.ke`;
+      const empEmail = `csv.worker.${uniqueSuffix}@rekker-demo.invalid`;
       const csvText = [
         "employeeNumber,firstName,lastName,workEmail,jobTitle,departmentCode,location,employmentType,startDate",
         `${empNo},Wambui,Kamau,${empEmail},Quality Lab Technician,PROD,Nairobi Production Facility,permanent,2026-04-01`,
