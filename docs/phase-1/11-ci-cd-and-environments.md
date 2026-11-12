@@ -18,3 +18,4 @@ Added automated continuous integration running on `push` (`main`, `phase-1/**`) 
 
 - Added `.env.example` documenting all required and optional environment variables (`NODE_ENV`, `PORT`, `PEOPLEOS_AUTH_MODE`, `PEOPLEOS_ALLOWED_ORIGINS`, `PEOPLEOS_TRUST_PROXY`, `DATABASE_URL`, `CLERK_*`, `PEOPLEOS_ENCRYPTION_KEY*`, `MPESA_*`, `OPENAI_*`, `PEOPLEOS_ML_*`, `VITE_*`).
 - Production startup refuses `PEOPLEOS_AUTH_MODE=demo`, wildcard CORS `*`, missing `DATABASE_URL`, missing Clerk secrets, or missing/weak/reused encryption keys.
+

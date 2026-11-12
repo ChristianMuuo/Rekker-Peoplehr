@@ -33,3 +33,4 @@ Phase 1 transformed the Rekker PeopleOS codebase on branch `phase-1/enterprise-f
 
 - **Live PostgreSQL Migration Execution**: `docker info` failed (Linux Docker daemon not running on Windows host) and `DATABASE_URL` is unset locally. Migrations `0002_peopleos_enterprise_upgrades.sql` and `0003_phase1_enterprise_foundation.sql` must be applied against the provisioned PostgreSQL instance prior to production cutover (`psql "$DATABASE_URL" -f ...`).
 - **Production Secrets Provisioning**: Supply `CLERK_SECRET_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`, `PEOPLEOS_ENCRYPTION_KEY` (>= 32 chars), `PEOPLEOS_ALLOWED_ORIGINS`, `DATABASE_URL`, and optional `OPENAI_API_KEY` / `MPESA_*` credentials in deployment environment variables before switching `NODE_ENV=production`.
+

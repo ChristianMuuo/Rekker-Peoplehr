@@ -15,3 +15,4 @@
 
 - `health.ts` actively inspects `PEOPLEOS_ML_URL` (`/healthz` HTTP probe) or local `services/ml-engine/cli.py` availability cleanly in `/api/readyz` and `/api/admin/diagnostics`.
 - `OPENAI_API_KEY` remains strictly server-side; absence activates transparent tool-grounded deterministic synthesis without failing core HRMS workflows.
+

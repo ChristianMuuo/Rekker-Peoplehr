@@ -76,6 +76,8 @@ export const GetAuthContextResponse = zod.object({
  */
 export const listEmployeesQuerySearchMax = 120;
 
+export const listEmployeesQueryLocationMax = 120;
+
 export const listEmployeesQueryPageDefault = 1;
 
 export const listEmployeesQueryPageSizeDefault = 25;
@@ -87,6 +89,10 @@ export const ListEmployeesQueryParams = zod.object({
   "search": zod.coerce.string().max(listEmployeesQuerySearchMax).optional(),
   "departmentId": zod.coerce.string().optional(),
   "status": zod.enum(['active', 'probation', 'on_leave', 'suspended', 'former']).optional(),
+  "employmentType": zod.enum(['permanent', 'fixed_term', 'casual', 'intern']).optional(),
+  "location": zod.coerce.string().max(listEmployeesQueryLocationMax).optional(),
+  "sortBy": zod.enum(['name', 'employeeNumber', 'startDate', 'status', 'jobTitle']).optional(),
+  "sortDir": zod.enum(['asc', 'desc']).optional(),
   "page": zod.coerce.number().int().min(1).default(listEmployeesQueryPageDefault),
   "pageSize": zod.coerce.number().int().min(1).max(listEmployeesQueryPageSizeMax).default(listEmployeesQueryPageSizeDefault)
 })
@@ -111,6 +117,13 @@ export const ListEmployeesResponse = zod.object({
   "startDate": zod.coerce.date(),
   "probationEndDate": zod.coerce.date().nullish(),
   "contractEndDate": zod.coerce.date().nullish(),
+  "personalEmail": zod.string().nullish(),
+  "positionId": zod.string().nullish(),
+  "hrRepresentativeUserId": zod.string().nullish(),
+  "employeeCategory": zod.string().nullish(),
+  "contractStartDate": zod.coerce.date().nullish(),
+  "timezone": zod.string().nullish(),
+  "completenessScore": zod.number().int().optional(),
   "isDemo": zod.boolean()
 })),
   "page": zod.number().int(),
@@ -139,6 +152,12 @@ export const createEmployeeBodyJobTitleMax = 120;
 
 export const createEmployeeBodyLocationMax = 120;
 
+export const createEmployeeBodyPersonalEmailMax = 254;
+
+export const createEmployeeBodyEmployeeCategoryMax = 40;
+
+export const createEmployeeBodyTimezoneMax = 80;
+
 
 
 export const CreateEmployeeBody = zod.object({
@@ -156,7 +175,13 @@ export const CreateEmployeeBody = zod.object({
   "status": zod.enum(['active', 'probation', 'on_leave', 'suspended', 'former']).optional(),
   "startDate": zod.coerce.date(),
   "probationEndDate": zod.coerce.date().nullish(),
-  "contractEndDate": zod.coerce.date().nullish()
+  "contractEndDate": zod.coerce.date().nullish(),
+  "personalEmail": zod.string().max(createEmployeeBodyPersonalEmailMax).nullish(),
+  "positionId": zod.string().nullish(),
+  "hrRepresentativeUserId": zod.string().nullish(),
+  "employeeCategory": zod.string().max(createEmployeeBodyEmployeeCategoryMax).nullish(),
+  "contractStartDate": zod.coerce.date().nullish(),
+  "timezone": zod.string().max(createEmployeeBodyTimezoneMax).nullish()
 })
 
 export const CreateEmployeeResponse = zod.object({
@@ -178,6 +203,13 @@ export const CreateEmployeeResponse = zod.object({
   "startDate": zod.coerce.date(),
   "probationEndDate": zod.coerce.date().nullish(),
   "contractEndDate": zod.coerce.date().nullish(),
+  "personalEmail": zod.string().nullish(),
+  "positionId": zod.string().nullish(),
+  "hrRepresentativeUserId": zod.string().nullish(),
+  "employeeCategory": zod.string().nullish(),
+  "contractStartDate": zod.coerce.date().nullish(),
+  "timezone": zod.string().nullish(),
+  "completenessScore": zod.number().int().optional(),
   "isDemo": zod.boolean()
 })
 
@@ -208,6 +240,13 @@ export const GetEmployeeResponse = zod.object({
   "startDate": zod.coerce.date(),
   "probationEndDate": zod.coerce.date().nullish(),
   "contractEndDate": zod.coerce.date().nullish(),
+  "personalEmail": zod.string().nullish(),
+  "positionId": zod.string().nullish(),
+  "hrRepresentativeUserId": zod.string().nullish(),
+  "employeeCategory": zod.string().nullish(),
+  "contractStartDate": zod.coerce.date().nullish(),
+  "timezone": zod.string().nullish(),
+  "completenessScore": zod.number().int().optional(),
   "isDemo": zod.boolean()
 })
 
@@ -223,22 +262,36 @@ export const updateEmployeeBodyPreferredNameMax = 80;
 
 export const updateEmployeeBodyPhoneMax = 40;
 
+export const updateEmployeeBodyPersonalEmailMax = 254;
+
 export const updateEmployeeBodyJobTitleMax = 120;
 
 export const updateEmployeeBodyLocationMax = 120;
+
+export const updateEmployeeBodyEmployeeCategoryMax = 40;
+
+export const updateEmployeeBodyTimezoneMax = 80;
 
 
 
 export const UpdateEmployeeBody = zod.object({
   "preferredName": zod.string().max(updateEmployeeBodyPreferredNameMax).nullish(),
   "phone": zod.string().max(updateEmployeeBodyPhoneMax).nullish(),
+  "personalEmail": zod.string().max(updateEmployeeBodyPersonalEmailMax).nullish(),
   "jobTitle": zod.string().min(1).max(updateEmployeeBodyJobTitleMax).optional(),
   "departmentId": zod.string().optional(),
   "managerId": zod.string().nullish(),
+  "positionId": zod.string().nullish(),
+  "hrRepresentativeUserId": zod.string().nullish(),
   "location": zod.string().min(1).max(updateEmployeeBodyLocationMax).optional(),
+  "employeeCategory": zod.string().max(updateEmployeeBodyEmployeeCategoryMax).nullish(),
+  "employmentType": zod.enum(['permanent', 'fixed_term', 'casual', 'intern']).optional(),
   "status": zod.enum(['active', 'probation', 'on_leave', 'suspended', 'former']).optional(),
+  "startDate": zod.coerce.date().optional(),
+  "contractStartDate": zod.coerce.date().nullish(),
   "probationEndDate": zod.coerce.date().nullish(),
-  "contractEndDate": zod.coerce.date().nullish()
+  "contractEndDate": zod.coerce.date().nullish(),
+  "timezone": zod.string().max(updateEmployeeBodyTimezoneMax).nullish()
 })
 
 export const UpdateEmployeeResponse = zod.object({
@@ -260,6 +313,13 @@ export const UpdateEmployeeResponse = zod.object({
   "startDate": zod.coerce.date(),
   "probationEndDate": zod.coerce.date().nullish(),
   "contractEndDate": zod.coerce.date().nullish(),
+  "personalEmail": zod.string().nullish(),
+  "positionId": zod.string().nullish(),
+  "hrRepresentativeUserId": zod.string().nullish(),
+  "employeeCategory": zod.string().nullish(),
+  "contractStartDate": zod.coerce.date().nullish(),
+  "timezone": zod.string().nullish(),
+  "completenessScore": zod.number().int().optional(),
   "isDemo": zod.boolean()
 })
 
@@ -539,5 +599,108 @@ export const GetAgentProviderStatusResponse = zod.object({
   "model": zod.string().nullish(),
   "message": zod.string()
 })
+
+
+/**
+ * @summary Verify dependency, database, and runtime configuration readiness
+ */
+export const ReadinessCheckResponse = zod.unknown()
+
+
+/**
+ * @summary Retrieve subsystem health and integration registry for admins/auditors
+ */
+export const GetAdminDiagnosticsResponse = zod.unknown()
+
+
+/**
+ * @summary Inspect active encryption standard, session MFA, and ODPC safeguards
+ */
+export const GetSecurityStatusResponse = zod.unknown()
+
+
+/**
+ * @summary Get authorization-filtered 360 intelligence profile for an employee
+ */
+export const GetEmployeeProfile360Params = zod.object({
+  "employeeId": zod.coerce.string()
+})
+
+export const GetEmployeeProfile360Response = zod.unknown()
+
+
+/**
+ * @summary List confidential HR cases scoped strictly by confidentiality firewall
+ */
+export const ListHrCasesResponse = zod.unknown()
+
+
+/**
+ * @summary Consolidated staffing, payroll, and overtime readiness metrics across operational units
+ */
+export const GetWorkforceErpExecutiveSummaryResponse = zod.unknown()
+
+
+/**
+ * @summary Self-service workspace strictly scoped to the authenticated user's linked employeeId
+ */
+export const GetSelfServiceMeResponse = zod.unknown()
+
+
+/**
+ * @summary Manager direct-report workspace scoped by server-enforced reporting relationships
+ */
+export const GetManagerWorkspaceResponse = zod.unknown()
+
+
+/**
+ * @summary Position and establishment register with headcount vs vacancy reconciliation
+ */
+export const ListPositionsResponse = zod.unknown()
+
+
+/**
+ * @summary Create a budgeted establishment position
+ */
+export const CreatePositionResponse = zod.void()
+
+
+/**
+ * @summary Multi-view organization chart with cycle detection, span of control, and historical asOf snapshot
+ */
+export const GetPeopleOsOrgChartQueryParams = zod.object({
+  "view": zod.enum(['company', 'department', 'manager', 'employee', 'position']).optional(),
+  "asOf": zod.date().optional(),
+  "departmentId": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "location": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional()
+})
+
+export const GetPeopleOsOrgChartResponse = zod.unknown()
+
+
+/**
+ * @summary People Operations workforce analytics with small-group privacy suppression
+ */
+export const GetWorkforceAnalyticsResponse = zod.unknown()
+
+
+/**
+ * @summary Kenyan Employment Act and ODPC General Regulations readiness report
+ */
+export const GetKenyaComplianceReadinessResponse = zod.unknown()
+
+
+/**
+ * @summary List org and location work calendars (rest days, timezone, public holidays)
+ */
+export const ListWorkCalendarsResponse = zod.unknown()
+
+
+/**
+ * @summary Save or update a work calendar and holiday schedule
+ */
+export const SaveWorkCalendarResponse = zod.void()
 
 

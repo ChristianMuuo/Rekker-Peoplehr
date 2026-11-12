@@ -103,8 +103,24 @@ router.post(
     if (!membership) return;
 
     const courseId = String(req.params.courseId ?? "");
+    const isAdmin =
+      membership.role === PEOPLEOS_ROLES.hrAdmin ||
+      membership.role === PEOPLEOS_ROLES.hrManager ||
+      membership.role === PEOPLEOS_ROLES.systemAdmin;
+    const requestedEmpId =
+      typeof req.body?.employeeId === "string" && req.body.employeeId.trim()
+        ? req.body.employeeId.trim()
+        : null;
+    if (requestedEmpId && requestedEmpId !== membership.employeeId && !isAdmin) {
+      res.status(403).json({ error: "Cannot enroll another employee without HR permission." });
+      return;
+    }
     const targetEmpId =
-      req.body?.employeeId || membership.employeeId || "10000000-0000-4000-8000-000000000007";
+      isAdmin && requestedEmpId ? requestedEmpId : membership.employeeId;
+    if (!targetEmpId) {
+      res.status(403).json({ error: "Account is not linked to an employee record." });
+      return;
+    }
 
     if (!process.env.DATABASE_URL) {
       const course = DEMO_COURSES.find(

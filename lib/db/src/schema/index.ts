@@ -19,3 +19,4 @@
 
 export * from "./peopleos";
 export * from "./hrOperations";
+export * from "./phase2CoreHr";

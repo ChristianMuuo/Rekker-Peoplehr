@@ -18,3 +18,4 @@
   - Live queries to `GET /api/readyz` and `GET /api/admin/diagnostics` with manual **Refresh probes** action (`button-refresh-diagnostics`).
   - Transparent inline error display (`error-diagnostics-probe`) on probe failure (never faked green status).
   - Subsystem Health cards (`api_server`, `postgresql_db`, `authentication`, `encryption`, `audit_sink`, `python_ml`), Configuration Warnings/Errors banners, and Integration Registry table (`Clerk Auth`, `OpenAI API`, `Safaricom Daraja B2C`, `rekker.co.ke & shop.rekker.co.ke`).
+

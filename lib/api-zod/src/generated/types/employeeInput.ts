@@ -56,4 +56,25 @@ export interface EmployeeInput {
   probationEndDate?: Date | null;
   /** @nullable */
   contractEndDate?: Date | null;
+  /**
+     * @maxLength 254
+     * @nullable
+     */
+  personalEmail?: string | null;
+  /** @nullable */
+  positionId?: string | null;
+  /** @nullable */
+  hrRepresentativeUserId?: string | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  employeeCategory?: string | null;
+  /** @nullable */
+  contractStartDate?: Date | null;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  timezone?: string | null;
 }

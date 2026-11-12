@@ -79,6 +79,18 @@ paths:
         - name: status
           in: query
           schema: { $ref: "#/components/schemas/EmployeeStatus" }
+        - name: employmentType
+          in: query
+          schema: { type: string, enum: [permanent, fixed_term, casual, intern] }
+        - name: location
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [name, employeeNumber, startDate, status, jobTitle] }
+        - name: sortDir
+          in: query
+          schema: { type: string, enum: [asc, desc] }
         - name: page
           in: query
           schema: { type: integer, minimum: 1, default: 1 }
@@ -424,6 +436,95 @@ paths:
       responses:
         "200":
           description: Workforce ERP executive metrics
+  /peopleos/me:
+    get:
+      operationId: getSelfServiceMe
+      tags: [overview]
+      summary: Self-service workspace strictly scoped to the authenticated user's linked employeeId
+      responses:
+        "200":
+          description: Self-service profile and linkage status
+  /peopleos/manager/workspace:
+    get:
+      operationId: getManagerWorkspace
+      tags: [overview]
+      summary: Manager direct-report workspace scoped by server-enforced reporting relationships
+      responses:
+        "200":
+          description: Manager direct reports and pending items
+  /peopleos/positions:
+    get:
+      operationId: listPositions
+      tags: [departments]
+      summary: Position and establishment register with headcount vs vacancy reconciliation
+      responses:
+        "200":
+          description: List of positions and establishment summary
+    post:
+      operationId: createPosition
+      tags: [departments]
+      summary: Create a budgeted establishment position
+      responses:
+        "201":
+          description: Position created
+  /peopleos/org-chart:
+    get:
+      operationId: getPeopleOsOrgChart
+      tags: [departments]
+      summary: Multi-view organization chart with cycle detection, span of control, and historical asOf snapshot
+      parameters:
+        - name: view
+          in: query
+          schema: { type: string, enum: [company, department, manager, employee, position] }
+        - name: asOf
+          in: query
+          schema: { type: string, format: date }
+        - name: departmentId
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: location
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Organization chart hierarchy and integrity alerts
+  /peopleos/analytics/workforce:
+    get:
+      operationId: getWorkforceAnalytics
+      tags: [overview]
+      summary: People Operations workforce analytics with small-group privacy suppression
+      responses:
+        "200":
+          description: Workforce metrics and metadata
+  /peopleos/compliance/kenya-readiness:
+    get:
+      operationId: getKenyaComplianceReadiness
+      tags: [overview]
+      summary: Kenyan Employment Act and ODPC General Regulations readiness report
+      responses:
+        "200":
+          description: Compliance readiness report
+  /peopleos/work-calendars:
+    get:
+      operationId: listWorkCalendars
+      tags: [departments]
+      summary: List org and location work calendars (rest days, timezone, public holidays)
+      responses:
+        "200":
+          description: Configured work calendars
+    post:
+      operationId: saveWorkCalendar
+      tags: [departments]
+      summary: Save or update a work calendar and holiday schedule
+      responses:
+        "201":
+          description: Work calendar saved
 components:
   schemas:
     HealthStatus:
@@ -517,6 +618,13 @@ components:
         startDate: { type: string, format: date }
         probationEndDate: { type: ["string", "null"], format: date }
         contractEndDate: { type: ["string", "null"], format: date }
+        personalEmail: { type: ["string", "null"] }
+        positionId: { type: ["string", "null"] }
+        hrRepresentativeUserId: { type: ["string", "null"] }
+        employeeCategory: { type: ["string", "null"] }
+        contractStartDate: { type: ["string", "null"], format: date }
+        timezone: { type: ["string", "null"] }
+        completenessScore: { type: integer }
         isDemo: { type: boolean }
     EmployeePage:
       type: object
@@ -549,18 +657,32 @@ components:
         startDate: { type: string, format: date }
         probationEndDate: { type: ["string", "null"], format: date }
         contractEndDate: { type: ["string", "null"], format: date }
+        personalEmail: { type: ["string", "null"], maxLength: 254 }
+        positionId: { type: ["string", "null"] }
+        hrRepresentativeUserId: { type: ["string", "null"] }
+        employeeCategory: { type: ["string", "null"], maxLength: 40 }
+        contractStartDate: { type: ["string", "null"], format: date }
+        timezone: { type: ["string", "null"], maxLength: 80 }
     EmployeeUpdate:
       type: object
       properties:
         preferredName: { type: ["string", "null"], maxLength: 80 }
         phone: { type: ["string", "null"], maxLength: 40 }
+        personalEmail: { type: ["string", "null"], maxLength: 254 }
         jobTitle: { type: string, minLength: 1, maxLength: 120 }
         departmentId: { type: string }
         managerId: { type: ["string", "null"] }
+        positionId: { type: ["string", "null"] }
+        hrRepresentativeUserId: { type: ["string", "null"] }
         location: { type: string, minLength: 1, maxLength: 120 }
+        employeeCategory: { type: ["string", "null"], maxLength: 40 }
+        employmentType: { type: string, enum: [permanent, fixed_term, casual, intern] }
         status: { $ref: "#/components/schemas/EmployeeStatus" }
+        startDate: { type: string, format: date }
+        contractStartDate: { type: ["string", "null"], format: date }
         probationEndDate: { type: ["string", "null"], format: date }
         contractEndDate: { type: ["string", "null"], format: date }
+        timezone: { type: ["string", "null"], maxLength: 80 }
     Department:
       type: object
       required: [id, name, code, location, headcount, budgetedPositions]

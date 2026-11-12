@@ -15,3 +15,4 @@
 
 - Synchronized `OrganizationRole` across `openapi.yaml`, `lib/api-zod/src/generated/types/organizationRole.ts`, `lib/api-zod/src/generated/api.ts`, and `lib/api-client-react/src/generated/api.schemas.ts` to cover all 15 enterprise roles (`hr_director`, `hr_officer`, `finance_manager`, `production_supervisor`, `warehouse_supervisor`, `sales_manager`, etc.).
 - Added API contract entries for `/readyz`, `/admin/diagnostics`, `/security/status`, `/employees/{employeeId}/profile-360`, `/hr-cases`, and `/workforce-erp/executive-summary` while preserving all existing frontend React Query `operationId` hooks.
+

@@ -40,3 +40,4 @@ BEGIN
       FOREIGN KEY ("organization_id") REFERENCES "peopleos_organizations"("id") ON DELETE CASCADE;
   END IF;
 END $$;
+

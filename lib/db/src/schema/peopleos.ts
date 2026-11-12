@@ -16,6 +16,7 @@ import { z } from "zod/v4";
 export const organizationsTable = pgTable("peopleos_organizations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  defaultTimezone: text("default_timezone").notNull().default("Africa/Nairobi"),
   isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -59,7 +60,9 @@ export const employeesTable = pgTable(
     lastName: text("last_name").notNull(),
     preferredName: text("preferred_name"),
     workEmail: text("work_email").notNull(),
+    personalEmail: text("personal_email"),
     phone: text("phone"),
+    contactPreferencesJson: text("contact_preferences_json"),
     nationalId: text("national_id"),
     kraPin: text("kra_pin"),
     nssfNo: text("nssf_no"),
@@ -68,17 +71,25 @@ export const employeesTable = pgTable(
     departmentId: uuid("department_id")
       .notNull()
       .references(() => departmentsTable.id, { onDelete: "restrict" }),
+    positionId: uuid("position_id"),
     managerId: uuid("manager_id"),
+    hrRepresentativeUserId: text("hr_representative_user_id"),
     location: text("location").notNull(),
+    timezone: text("timezone").notNull().default("Africa/Nairobi"),
     employmentType: text("employment_type").notNull(),
+    employeeCategory: text("employee_category").default("staff"),
     status: text("status").notNull().default("active"),
     baseSalary: integer("base_salary").notNull().default(0),
     allowances: integer("allowances").notNull().default(0),
     startDate: date("start_date", { mode: "string" }).notNull(),
+    contractStartDate: date("contract_start_date", { mode: "string" }),
     probationEndDate: date("probation_end_date", { mode: "string" }),
     contractEndDate: date("contract_end_date", { mode: "string" }),
     emergencyContactJson: text("emergency_contact_json"),
     skillsJson: text("skills_json"),
+    qualificationsJson: text("qualifications_json"),
+    certificationsJson: text("certifications_json"),
+    workExperienceJson: text("work_experience_json"),
     isDemo: boolean("is_demo").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -240,6 +251,7 @@ export const jobRequisitionsTable = pgTable(
     departmentId: uuid("department_id")
       .notNull()
       .references(() => departmentsTable.id, { onDelete: "restrict" }),
+    positionId: uuid("position_id"),
     title: text("title").notNull(),
     location: text("location").notNull(),
     employmentType: text("employment_type").notNull(),
@@ -280,6 +292,9 @@ export const candidatesTable = pgTable(
     skillsSummary: text("skills_summary"),
     resumeUrl: text("resume_url"),
     notes: text("notes"),
+    convertedEmployeeId: uuid("converted_employee_id"),
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
+    offerDetailsJson: text("offer_details_json"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -548,9 +563,12 @@ export const onboardingTasksTable = pgTable(
       .notNull()
       .references(() => employeesTable.id, { onDelete: "cascade" }),
     workflowType: text("workflow_type").notNull().default("onboarding"),
+    templateId: uuid("template_id"),
     title: text("title").notNull(),
     category: text("category").notNull(),
     assigneeRole: text("assignee_role").notNull().default("hr_admin"),
+    ownerUserId: text("owner_user_id"),
+    notes: text("notes"),
     dueDate: date("due_date", { mode: "string" }).notNull(),
     completed: boolean("completed").notNull().default(false),
     completedAt: timestamp("completed_at", { withTimezone: true }),

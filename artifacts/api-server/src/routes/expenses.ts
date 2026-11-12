@@ -124,10 +124,19 @@ router.post("/expenses", async (req: Request, res: Response) => {
     return;
   }
 
+  const isApprover = approverRoles.includes(membership.role as any);
+  const requestedEmpId =
+    typeof employeeId === "string" && employeeId.trim() ? employeeId.trim() : null;
+  if (requestedEmpId && requestedEmpId !== membership.employeeId && !isApprover) {
+    res.status(403).json({ error: "Cannot submit expense claims on behalf of another employee." });
+    return;
+  }
   const targetEmpId =
-    approverRoles.includes(membership.role as any) && employeeId
-      ? String(employeeId)
-      : membership.employeeId || "10000000-0000-4000-8000-000000000007";
+    isApprover && requestedEmpId ? requestedEmpId : membership.employeeId;
+  if (!targetEmpId) {
+    res.status(403).json({ error: "Account is not linked to an employee record." });
+    return;
+  }
 
   const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === targetEmpId);
   const empName = emp ? `${emp.firstName} ${emp.lastName}` : "Teammate";

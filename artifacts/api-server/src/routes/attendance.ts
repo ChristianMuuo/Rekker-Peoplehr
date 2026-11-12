@@ -9,8 +9,16 @@ import {
   ensureMembership,
   PEOPLEOS_ROLES,
   requireRoles,
+  type MembershipRecord,
 } from "../middlewares/peopleosAccess";
 import { DEMO_EMPLOYEES_LIST } from "./peopleos";
+import {
+  createPersistedAttendanceCorrection,
+  decidePersistedAttendanceCorrection,
+  getLocalDateTimeInTimezone,
+  listPersistedAttendanceCorrections,
+  resolveEffectiveWorkCalendar,
+} from "../services/workCalendarService";
 
 const router: IRouter = Router();
 
@@ -109,6 +117,34 @@ const ATTENDANCE_CORRECTIONS: AttendanceCorrectionItem[] = [
   },
 ];
 
+function resolveAttendanceTargetEmployee(
+  membership: MembershipRecord,
+  requestedEmployeeId: unknown,
+): { ok: true; employeeId: string } | { ok: false; statusCode: number; error: string } {
+  const reqId =
+    typeof requestedEmployeeId === "string" && requestedEmployeeId.trim()
+      ? requestedEmployeeId.trim()
+      : null;
+  const isManager = managerRoles.includes(membership.role as any);
+
+  if (reqId && reqId !== membership.employeeId && !isManager) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: "Forbidden: you may only record attendance for your own linked employee profile.",
+    };
+  }
+  const targetId = isManager && reqId ? reqId : membership.employeeId;
+  if (!targetId) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: "Account is not linked to an employee record in this organization.",
+    };
+  }
+  return { ok: true, employeeId: targetId };
+}
+
 // GET /api/attendance & /api/attendance/records
 router.get(["/attendance", "/attendance/records"], async (req: Request, res: Response) => {
   const membership = await ensureMembership(req, res);
@@ -122,8 +158,10 @@ router.get(["/attendance", "/attendance/records"], async (req: Request, res: Res
         r.organizationId === membership.organizationId &&
         (!date || r.date === date),
     );
-    if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId) {
-      items = items.filter((r) => r.employeeId === membership.employeeId);
+    if (membership.role === PEOPLEOS_ROLES.employee) {
+      items = membership.employeeId
+        ? items.filter((r) => r.employeeId === membership.employeeId)
+        : [];
     }
     res.json({ date: date || "2026-03-06", items, total: items.length });
     return;
@@ -136,8 +174,10 @@ router.get(["/attendance", "/attendance/records"], async (req: Request, res: Res
     .orderBy(desc(attendanceRecordsTable.createdAt));
 
   if (date) items = items.filter((r) => r.date === date);
-  if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId) {
-    items = items.filter((r) => r.employeeId === membership.employeeId);
+  if (membership.role === PEOPLEOS_ROLES.employee) {
+    items = membership.employeeId
+      ? items.filter((r) => r.employeeId === membership.employeeId)
+      : [];
   }
   res.json({ date: date || "all", items, total: items.length });
 });
@@ -147,41 +187,63 @@ router.post("/attendance/clock-in", async (req: Request, res: Response) => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
 
-  const {
-    employeeId = membership.employeeId || "10000000-0000-4000-8000-000000000007",
-    shift = "Day (08:30 - 17:00)",
-  } = req.body ?? {};
+  const resolved = resolveAttendanceTargetEmployee(membership, req.body?.employeeId);
+  if (!resolved.ok) {
+    res.status(resolved.statusCode).json({ error: resolved.error });
+    return;
+  }
+  const employeeId = resolved.employeeId;
+  const shift = typeof req.body?.shift === "string" ? req.body.shift : "Day (08:00 - 17:00)";
 
   const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
-  const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(
-    now.getMinutes(),
-  ).padStart(2, "0")}`;
-  const dateStr = now.toISOString().slice(0, 10);
-
-  // Detect duplicate same-day clock-in
-  const existingToday = ATTENDANCE_RECORDS.find(
-    (r) =>
-      r.organizationId === membership.organizationId &&
-      r.employeeId === employeeId &&
-      r.date === dateStr &&
-      !r.clockOut,
+  const calendar = await resolveEffectiveWorkCalendar(
+    membership.organizationId,
+    emp?.location ?? null,
   );
-  const anomalyFlag = existingToday
+  const localNow = getLocalDateTimeInTimezone(calendar.timezone);
+  const timeStr = localNow.timeHm;
+  const dateStr = localNow.dateIso;
+
+  let hasOpenShift = false;
+  if (!process.env.DATABASE_URL) {
+    hasOpenShift = ATTENDANCE_RECORDS.some(
+      (r) =>
+        r.organizationId === membership.organizationId &&
+        r.employeeId === employeeId &&
+        r.date === dateStr &&
+        !r.clockOut,
+    );
+  } else {
+    const existingRows = await db
+      .select({ id: attendanceRecordsTable.id, clockOut: attendanceRecordsTable.clockOut })
+      .from(attendanceRecordsTable)
+      .where(
+        and(
+          eq(attendanceRecordsTable.organizationId, membership.organizationId),
+          eq(attendanceRecordsTable.employeeId, employeeId),
+          eq(attendanceRecordsTable.date, dateStr),
+        ),
+      );
+    hasOpenShift = existingRows.some((r) => !r.clockOut);
+  }
+
+  const anomalyFlag = hasOpenShift
     ? "Duplicate active clock-in detected for same shift date"
     : null;
+
+  const isLate = timeStr > calendar.shiftStartTime;
 
   const newRecord: AttendanceItem = {
     id: `att_${Date.now()}`,
     organizationId: membership.organizationId,
-    employeeId: String(employeeId),
-    employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Teammate",
+    employeeId,
+    employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Employee",
     departmentName: emp?.departmentName || "Operations",
     date: dateStr,
     shift: sanitizeText(shift, 80),
     clockIn: timeStr,
     clockOut: null,
-    status: "on_time",
+    status: isLate ? "late" : "on_time",
     overtimeHours: 0,
     anomalyFlag,
   };
@@ -212,10 +274,10 @@ router.post("/attendance/clock-in", async (req: Request, res: Response) => {
     action: "ATTENDANCE_CLOCK_IN",
     targetType: "attendance",
     targetId: newRecord.id,
-    summary: `${newRecord.employeeName} clocked in at ${timeStr}.`,
+    summary: `${newRecord.employeeName} clocked in at ${timeStr} (${calendar.timezone}).`,
   });
 
-  res.status(201).json(newRecord);
+  res.status(201).json({ ...newRecord, timezone: calendar.timezone });
 });
 
 // POST /api/attendance/clock-out
@@ -223,13 +285,20 @@ router.post("/attendance/clock-out", async (req: Request, res: Response) => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
 
-  const {
-    employeeId = membership.employeeId || "10000000-0000-4000-8000-000000000007",
-  } = req.body ?? {};
-  const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(
-    now.getMinutes(),
-  ).padStart(2, "0")}`;
+  const resolved = resolveAttendanceTargetEmployee(membership, req.body?.employeeId);
+  if (!resolved.ok) {
+    res.status(resolved.statusCode).json({ error: resolved.error });
+    return;
+  }
+  const employeeId = resolved.employeeId;
+
+  const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
+  const calendar = await resolveEffectiveWorkCalendar(
+    membership.organizationId,
+    emp?.location ?? null,
+  );
+  const localNow = getLocalDateTimeInTimezone(calendar.timezone);
+  const timeStr = localNow.timeHm;
 
   if (!process.env.DATABASE_URL) {
     const record = ATTENDANCE_RECORDS.find(
@@ -243,7 +312,7 @@ router.post("/attendance/clock-out", async (req: Request, res: Response) => {
       return;
     }
     record.clockOut = timeStr;
-    res.json(record);
+    res.json({ ...record, timezone: calendar.timezone });
     return;
   }
 
@@ -253,7 +322,7 @@ router.post("/attendance/clock-out", async (req: Request, res: Response) => {
     .where(
       and(
         eq(attendanceRecordsTable.organizationId, membership.organizationId),
-        eq(attendanceRecordsTable.employeeId, String(employeeId)),
+        eq(attendanceRecordsTable.employeeId, employeeId),
       ),
     )
     .orderBy(desc(attendanceRecordsTable.createdAt));
@@ -268,7 +337,7 @@ router.post("/attendance/clock-out", async (req: Request, res: Response) => {
     .set({ clockOut: timeStr })
     .where(eq(attendanceRecordsTable.id, openRec.id))
     .returning();
-  res.json(updated);
+  res.json({ ...updated, timezone: calendar.timezone });
 });
 
 // GET /api/attendance/corrections
@@ -276,13 +345,28 @@ router.get("/attendance/corrections", async (req: Request, res: Response) => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
 
-  let items = ATTENDANCE_CORRECTIONS.filter(
-    (c) => c.organizationId === membership.organizationId,
-  );
-  if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId) {
-    items = items.filter((c) => c.employeeId === membership.employeeId);
+  const isManager = managerRoles.includes(membership.role as any);
+  const filterEmpId = isManager ? null : membership.employeeId;
+  if (!isManager && !membership.employeeId) {
+    res.json({ items: [], total: 0 });
+    return;
   }
-  res.json({ items, total: items.length });
+
+  const persisted = await listPersistedAttendanceCorrections(
+    membership.organizationId,
+    filterEmpId,
+  );
+  const empMap = new Map(
+    DEMO_EMPLOYEES_LIST.map((e) => [e.id, `${e.firstName} ${e.lastName}`]),
+  );
+
+  // Merge legacy seed only in demo mode if no persisted corrections yet match its ID
+  const enriched = persisted.map((c) => ({
+    ...c,
+    employeeName: empMap.get(c.employeeId) ?? c.employeeId,
+  }));
+
+  res.json({ items: enriched, total: enriched.length });
 });
 
 // POST /api/attendance/corrections
@@ -292,43 +376,36 @@ router.post("/attendance/corrections", async (req: Request, res: Response) => {
 
   const { date, requestedClockIn, requestedClockOut, reason, employeeId } =
     req.body ?? {};
-  if (!date || !requestedClockIn || !requestedClockOut || !reason) {
-    res.status(400).json({ error: "date, requestedClockIn, requestedClockOut, and reason are required." });
+  if (!date || !requestedClockIn || !reason) {
+    res.status(400).json({ error: "date, requestedClockIn, and reason are required." });
     return;
   }
-  const targetEmpId =
-    managerRoles.includes(membership.role as any) && employeeId
-      ? String(employeeId)
-      : membership.employeeId || "10000000-0000-4000-8000-000000000007";
-  const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === targetEmpId);
 
-  const item: AttendanceCorrectionItem = {
-    id: `corr_${crypto.randomUUID().slice(0, 8)}`,
-    organizationId: membership.organizationId,
-    employeeId: targetEmpId,
-    employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Teammate",
-    date: String(date).slice(0, 10),
-    requestedClockIn: sanitizeText(requestedClockIn, 10),
-    requestedClockOut: sanitizeText(requestedClockOut, 10),
-    reason: sanitizeText(reason, 400),
-    status: "pending",
-    submittedAt: new Date().toISOString(),
-    decidedByUserId: null,
-  };
-  ATTENDANCE_CORRECTIONS.unshift(item);
+  const resolved = resolveAttendanceTargetEmployee(membership, employeeId);
+  if (!resolved.ok) {
+    res.status(resolved.statusCode).json({ error: resolved.error });
+    return;
+  }
 
-  await recordAuditEvent({
-    organizationId: membership.organizationId,
-    actorUserId: membership.userId,
-    actor: membership.role,
-    action: "ATTENDANCE_CORRECTION_SUBMITTED",
-    targetType: "attendance_correction",
-    targetId: item.id,
-    summary: `Attendance correction requested for ${item.employeeName} (${item.date}).`,
-    isDemo: true,
-  });
-
-  res.status(201).json(item);
+  try {
+    const created = await createPersistedAttendanceCorrection({
+      organizationId: membership.organizationId,
+      employeeId: resolved.employeeId,
+      requestedByUserId: membership.userId,
+      actorName: membership.role,
+      date: String(date).slice(0, 10),
+      requestedClockIn: sanitizeText(requestedClockIn, 10),
+      requestedClockOut: requestedClockOut ? sanitizeText(requestedClockOut, 10) : null,
+      reason: sanitizeText(reason, 400),
+    });
+    const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === resolved.employeeId);
+    res.status(201).json({
+      ...created,
+      employeeName: emp ? `${emp.firstName} ${emp.lastName}` : created.employeeId,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid correction." });
+  }
 });
 
 // POST /api/attendance/corrections/:id/decision
@@ -339,34 +416,35 @@ router.post(
     if (!membership) return;
 
     const id = String(req.params.id ?? "");
-    const { decision } = req.body ?? {};
-    if (decision !== "approve" && decision !== "reject") {
+    const { decision, comment } = req.body ?? {};
+    const normalizedDecision =
+      decision === "approve" || decision === "approved"
+        ? "approved"
+        : decision === "reject" || decision === "rejected"
+          ? "rejected"
+          : null;
+
+    if (!normalizedDecision) {
       res.status(400).json({ error: "Decision must be approve or reject." });
       return;
     }
 
-    const item = ATTENDANCE_CORRECTIONS.find(
-      (c) => c.id === id && c.organizationId === membership.organizationId,
-    );
-    if (!item) {
-      res.status(404).json({ error: "Correction request not found." });
-      return;
-    }
-    item.status = decision === "approve" ? "approved" : "rejected";
-    item.decidedByUserId = membership.userId;
-
-    await recordAuditEvent({
+    const result = await decidePersistedAttendanceCorrection({
       organizationId: membership.organizationId,
-      actorUserId: membership.userId,
-      actor: membership.role,
-      action: `ATTENDANCE_CORRECTION_${item.status.toUpperCase()}`,
-      targetType: "attendance_correction",
-      targetId: item.id,
-      summary: `Attendance correction for ${item.employeeName} ${item.status}.`,
-      isDemo: true,
+      correctionId: id,
+      reviewerUserId: membership.userId,
+      reviewerName: membership.role,
+      decision: normalizedDecision,
+      comment: typeof comment === "string" ? comment : undefined,
+      demoAttendance: ATTENDANCE_RECORDS,
     });
 
-    res.json(item);
+    if (!result.ok) {
+      res.status(result.statusCode).json({ error: result.error });
+      return;
+    }
+
+    res.json(result.correction);
   },
 );
 

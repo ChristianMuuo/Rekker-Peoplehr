@@ -160,6 +160,19 @@ export interface Employee {
   probationEndDate?: string | null;
   /** @nullable */
   contractEndDate?: string | null;
+  /** @nullable */
+  personalEmail?: string | null;
+  /** @nullable */
+  positionId?: string | null;
+  /** @nullable */
+  hrRepresentativeUserId?: string | null;
+  /** @nullable */
+  employeeCategory?: string | null;
+  /** @nullable */
+  contractStartDate?: string | null;
+  /** @nullable */
+  timezone?: string | null;
+  completenessScore?: number;
   isDemo: boolean;
 }
 
@@ -237,7 +250,38 @@ export interface EmployeeInput {
   probationEndDate?: string | null;
   /** @nullable */
   contractEndDate?: string | null;
+  /**
+     * @maxLength 254
+     * @nullable
+     */
+  personalEmail?: string | null;
+  /** @nullable */
+  positionId?: string | null;
+  /** @nullable */
+  hrRepresentativeUserId?: string | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  employeeCategory?: string | null;
+  /** @nullable */
+  contractStartDate?: string | null;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  timezone?: string | null;
 }
+
+export type EmployeeUpdateEmploymentType = typeof EmployeeUpdateEmploymentType[keyof typeof EmployeeUpdateEmploymentType];
+
+
+export const EmployeeUpdateEmploymentType = {
+  permanent: 'permanent',
+  fixed_term: 'fixed_term',
+  casual: 'casual',
+  intern: 'intern',
+} as const;
 
 export interface EmployeeUpdate {
   /**
@@ -251,6 +295,11 @@ export interface EmployeeUpdate {
      */
   phone?: string | null;
   /**
+     * @maxLength 254
+     * @nullable
+     */
+  personalEmail?: string | null;
+  /**
      * @minLength 1
      * @maxLength 120
      */
@@ -258,16 +307,34 @@ export interface EmployeeUpdate {
   departmentId?: string;
   /** @nullable */
   managerId?: string | null;
+  /** @nullable */
+  positionId?: string | null;
+  /** @nullable */
+  hrRepresentativeUserId?: string | null;
   /**
      * @minLength 1
      * @maxLength 120
      */
   location?: string;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  employeeCategory?: string | null;
+  employmentType?: EmployeeUpdateEmploymentType;
   status?: EmployeeStatus;
+  startDate?: string;
+  /** @nullable */
+  contractStartDate?: string | null;
   /** @nullable */
   probationEndDate?: string | null;
   /** @nullable */
   contractEndDate?: string | null;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  timezone?: string | null;
 }
 
 export interface LeaveRequest {
@@ -430,6 +497,13 @@ export type ListEmployeesParams = {
 search?: string;
 departmentId?: string;
 status?: EmployeeStatus;
+employmentType?: ListEmployeesEmploymentType;
+/**
+ * @maxLength 120
+ */
+location?: string;
+sortBy?: ListEmployeesSortBy;
+sortDir?: ListEmployeesSortDir;
 /**
  * @minimum 1
  */
@@ -440,6 +514,35 @@ page?: number;
  */
 pageSize?: number;
 };
+
+export type ListEmployeesEmploymentType = typeof ListEmployeesEmploymentType[keyof typeof ListEmployeesEmploymentType];
+
+
+export const ListEmployeesEmploymentType = {
+  permanent: 'permanent',
+  fixed_term: 'fixed_term',
+  casual: 'casual',
+  intern: 'intern',
+} as const;
+
+export type ListEmployeesSortBy = typeof ListEmployeesSortBy[keyof typeof ListEmployeesSortBy];
+
+
+export const ListEmployeesSortBy = {
+  name: 'name',
+  employeeNumber: 'employeeNumber',
+  startDate: 'startDate',
+  status: 'status',
+  jobTitle: 'jobTitle',
+} as const;
+
+export type ListEmployeesSortDir = typeof ListEmployeesSortDir[keyof typeof ListEmployeesSortDir];
+
+
+export const ListEmployeesSortDir = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListLeaveRequestsParams = {
 status?: LeaveRequestStatus;
@@ -462,4 +565,24 @@ export type ListAuditEventsParams = {
  */
 limit?: number;
 };
+
+export type GetPeopleOsOrgChartParams = {
+view?: GetPeopleOsOrgChartView;
+asOf?: string;
+departmentId?: string;
+status?: string;
+location?: string;
+search?: string;
+};
+
+export type GetPeopleOsOrgChartView = typeof GetPeopleOsOrgChartView[keyof typeof GetPeopleOsOrgChartView];
+
+
+export const GetPeopleOsOrgChartView = {
+  company: 'company',
+  department: 'department',
+  manager: 'manager',
+  employee: 'employee',
+  position: 'position',
+} as const;
 

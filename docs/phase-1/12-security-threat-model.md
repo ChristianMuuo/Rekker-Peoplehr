@@ -12,3 +12,4 @@
 | **Malicious File Upload / Unattributed Record** | No MIME/magic check + defaulted missing `employeeId` to `...0007` | `assertSafeDocumentUpload()` + SHA-256 checksum + explicit `employeeId` lookup (`documents.ts`) | Mitigated & Tested |
 | **Callback Leakage to Public Corporate Site** | M-Pesa B2C callbacks defaulted to `rekker.co.ke` | Removed fallback URLs; `isMpesaLiveConfigured()` requires dedicated PeopleOS URLs + 10s timeouts (`mpesaService.ts`) | Mitigated |
 | **PII & Secret Exposure in Server Logs** | Sensitive headers and Kenya statutory identifiers logged | Pino `redact` filter on headers, statutory IDs, phones, confidential notes, and env secrets (`logger.ts`) | Mitigated |
+

@@ -16,7 +16,12 @@ export function AttendancePage() {
   const [corrIn, setCorrIn] = useState('08:30');
   const [corrOut, setCorrOut] = useState('17:00');
   const [corrReason, setCorrReason] = useState('');
+  const [clockError, setClockError] = useState<string | null>(null);
 
+  const meQuery = useQuery({
+    queryKey: ['peopleos-me-att', auth.data?.role ?? 'anon'],
+    queryFn: () => apiGet<any>('/api/peopleos/me'),
+  });
   const recordsQuery = useQuery({
     queryKey: ['attendance-records'],
     queryFn: () => apiGet('/api/attendance'),
@@ -33,18 +38,27 @@ export function AttendancePage() {
   const records: any[] = recordsQuery.data?.items ?? [];
   const corrections: any[] = correctionsQuery.data?.items ?? [];
   const canApprove = Boolean(auth.data?.canApproveLeave);
+  const orgTimezone: string = recordsQuery.data?.timezone ?? 'Africa/Nairobi';
+  const callerName = meQuery.data?.linked
+    ? `${meQuery.data.employee.firstName} ${meQuery.data.employee.lastName}`
+    : `${auth.data?.role?.replaceAll('_', ' ') || 'Authenticated User'}`;
 
   const handleToggleClock = async () => {
-    if (clockedState === 'out') {
-      const rec = await apiPost('/api/attendance/clock-in', {});
-      setClockedState('in');
-      setClockTime(rec.clockIn);
-    } else {
-      await apiPost('/api/attendance/clock-out', {});
-      setClockedState('out');
+    setClockError(null);
+    try {
+      if (clockedState === 'out') {
+        const rec = await apiPost('/api/attendance/clock-in', {});
+        setClockedState('in');
+        setClockTime(rec.clockIn);
+      } else {
+        await apiPost('/api/attendance/clock-out', {});
+        setClockedState('out');
+      }
+      qc.invalidateQueries({ queryKey: ['attendance-records'] });
+      qc.invalidateQueries({ queryKey: ['attendance-anomalies'] });
+    } catch (err) {
+      setClockError(err instanceof Error ? err.message : 'Unable to record attendance punch.');
     }
-    qc.invalidateQueries({ queryKey: ['attendance-records'] });
-    qc.invalidateQueries({ queryKey: ['attendance-anomalies'] });
   };
 
   const handleSubmitCorrection = async (e: React.FormEvent) => {
@@ -89,8 +103,9 @@ export function AttendancePage() {
               <span className="text-[11px] font-bold uppercase text-stone-400">Self-Service Terminal</span>
               <span className={`h-2.5 w-2.5 rounded-full ${clockedState === 'in' ? 'bg-emerald-500 animate-pulse' : 'bg-stone-300'}`} />
             </div>
-            <h3 className="mt-2 font-display text-lg font-bold text-stone-900">{auth.data?.displayName || 'David Kibet'}</h3>
-            <p className="text-xs text-stone-500">Scheduled: Day Shift (08:30 - 17:00)</p>
+            <h3 className="mt-2 font-display text-lg font-bold text-stone-900">{callerName}</h3>
+            <p className="text-xs text-stone-500">Scheduled: Day Shift (08:30 - 17:00) · TZ: {orgTimezone}</p>
+            {clockError && <p className="mt-2 text-xs text-[#a91919]">{clockError}</p>}
           </div>
           <button
             onClick={handleToggleClock}

@@ -27,7 +27,11 @@ import {
   leaveRequestsTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
-import { DEMO_EMPLOYEES_LIST } from "./peopleos";
+import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "./peopleos";
+import {
+  countCalendarWorkingDays,
+  resolveEffectiveWorkCalendar,
+} from "../services/workCalendarService";
 import {
   ensureMembership,
   getPeopleOsOrganization,
@@ -873,9 +877,20 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     res.status(400).json({ error: "End date must be on or after the start date." });
     return;
   }
-  const days = businessDaysBetween(startDate, endDate);
+  const effectiveCalendar = await resolveEffectiveWorkCalendar(
+    membership.organizationId,
+  );
+  const calendarDaysResult = countCalendarWorkingDays(
+    startDate,
+    endDate,
+    effectiveCalendar,
+  );
+  const days = calendarDaysResult.workingDays;
   if (days < 1) {
-    res.status(400).json({ error: "Choose at least one weekday for the request." });
+    res.status(400).json({
+      error:
+        "Choose at least one working day (excluding configured rest days and public holidays).",
+    });
     return;
   }
   if (!process.env.DATABASE_URL) {
@@ -1327,5 +1342,75 @@ router.post(
     res.json(DecideLeaveRequestResponse.parse(response));
   },
 );
+
+router.get("/leave/department-coverage", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const startDate =
+    typeof req.query.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.startDate)
+      ? req.query.startDate
+      : new Date().toISOString().slice(0, 10);
+  const endDate =
+    typeof req.query.endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.endDate)
+      ? req.query.endDate
+      : new Date(Date.now() + 14 * 86400 * 1000).toISOString().slice(0, 10);
+
+  const employees = process.env.DATABASE_URL
+    ? await db
+        .select()
+        .from(employeesTable)
+        .where(eq(employeesTable.organizationId, membership.organizationId))
+    : DEMO_EMPLOYEES_LIST;
+
+  const leaveRows = process.env.DATABASE_URL
+    ? await db
+        .select()
+        .from(leaveRequestsTable)
+        .where(
+          and(
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
+            eq(leaveRequestsTable.status, "approved"),
+            lte(leaveRequestsTable.startDate, endDate),
+            gte(leaveRequestsTable.endDate, startDate),
+          ),
+        )
+    : DEMO_LEAVE_STORE.filter(
+        (r) =>
+          r.status === "approved" &&
+          dateOnly(r.startDate) <= endDate &&
+          dateOnly(r.endDate) >= startDate,
+      );
+
+  const onLeaveEmpIds = new Set(leaveRows.map((l) => l.employeeId));
+
+  const departments = DEMO_DEPARTMENTS_LIST.map((dept) => {
+    const deptEmps = employees.filter(
+      (e) => e.departmentId === dept.id && e.status !== "former",
+    );
+    const awayEmps = deptEmps.filter(
+      (e) => e.status === "on_leave" || onLeaveEmpIds.has(e.id),
+    );
+    const availableCount = deptEmps.length - awayEmps.length;
+    return {
+      departmentId: dept.id,
+      departmentCode: dept.code,
+      departmentName: dept.name,
+      activeHeadcount: deptEmps.length,
+      onLeaveOrScheduledCount: awayEmps.length,
+      availableCount,
+      coveragePct:
+        deptEmps.length > 0
+          ? Math.round((availableCount / deptEmps.length) * 100)
+          : 100,
+    };
+  });
+
+  res.json({
+    startDate,
+    endDate,
+    departments,
+  });
+});
 
 export default router;

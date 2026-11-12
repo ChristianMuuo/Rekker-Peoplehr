@@ -17,7 +17,7 @@ import {
 import type { Employee, EmployeeInput, EmployeeUpdate, LeavePolicy, LeaveRequestInput } from '@workspace/api-client-react';
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, Bell, BrainCircuit, BriefcaseBusiness,
-  CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, FileText,
+  CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, Download, FileText,
   Factory, Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, RefreshCw, Search, Settings2, ShieldAlert, ShieldCheck, Sparkles,
   Sun, Target, Upload, UserCheck, Users, X,
 } from 'lucide-react';
@@ -41,7 +41,11 @@ const AssetsPage = lazy(() => import('@/pages/AssetsPage').then(m => ({ default:
 const PredictiveMlPage = lazy(() => import('@/pages/PredictiveMlPage').then(m => ({ default: m.PredictiveMlPage })));
 const WorkforceErpPage = lazy(() => import('@/pages/WorkforceErpPage').then(m => ({ default: m.WorkforceErpPage })));
 const HrCasesPage = lazy(() => import('@/pages/HrCasesPage').then(m => ({ default: m.HrCasesPage })));
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPost, triggerCsvDownload } from '@/lib/api';
+import { BulkImportDialog } from '@/components/phase2/BulkImportDialog';
+import { Employee360View } from '@/components/phase2/Employee360View';
+import { OrganizationDesignerView } from '@/components/phase2/OrganizationDesignerView';
+import { LeaveCoverageAndCalendarPanel } from '@/components/phase2/LeaveCoverageAndCalendarPanel';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -561,30 +565,117 @@ function PeoplePage() {
   const [search, setSearch] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [status, setStatus] = useState('');
+  const [employmentType, setEmploymentType] = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'employeeNumber' | 'startDate' | 'status' | 'jobTitle'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const auth = useGetAuthContext();
   const qc = useQueryClient();
-  const params = useMemo(() => ({ search: search || undefined, departmentId: departmentId || undefined, status: status ? status as Employee['status'] : undefined, page, pageSize: 20 }), [search, departmentId, status, page]);
+  const params = useMemo(
+    () => ({
+      search: search || undefined,
+      departmentId: departmentId || undefined,
+      status: status ? (status as Employee['status']) : undefined,
+      employmentType: employmentType ? (employmentType as any) : undefined,
+      location: locationFilter || undefined,
+      sortBy,
+      sortDir,
+      page,
+      pageSize: 20,
+    }),
+    [search, departmentId, status, employmentType, locationFilter, sortBy, sortDir, page],
+  );
   const list = useListEmployees(params);
   const depts = useListDepartments();
   const create = useCreateEmployee();
   const canCreate = !!auth.data?.canManagePeople;
+  const exportQuery = new URLSearchParams({
+    ...(search ? { search } : {}),
+    ...(departmentId ? { departmentId } : {}),
+    ...(status ? { status } : {}),
+    ...(employmentType ? { employmentType } : {}),
+    ...(locationFilter ? { location: locationFilter } : {}),
+  }).toString();
+
   return <div>
-    <PageHeading eyebrow="People operations / Records" title="People directory" description="Find colleagues and review the work details available to your role." action={canCreate ? <div className="flex flex-wrap items-center gap-2"><BulkEmployeeImportButton /><button className="btn btn-primary" onClick={() => setCreateOpen(true)} data-testid="button-create-employee"><Plus size={16} /> Add employee</button></div> : undefined} />
+    <PageHeading
+      eyebrow="People operations / Records"
+      title="People directory"
+      description="Find colleagues, audit Section 10 completeness, export safe rosters, and manage enterprise records."
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreate && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  void triggerCsvDownload(
+                    `/api/employees/export${exportQuery ? `?${exportQuery}` : ''}`,
+                    'rekker-peopleos-employees.csv',
+                  )
+                }
+                className="btn btn-secondary"
+                data-testid="button-export-employees"
+              >
+                <Download size={15} /> Export CSV
+              </button>
+              <BulkImportDialog />
+              <button className="btn btn-primary" onClick={() => setCreateOpen(true)} data-testid="button-create-employee">
+                <Plus size={16} /> Add employee
+              </button>
+            </>
+          )}
+        </div>
+      }
+    />
     <div className="surface p-4">
-      <div className="grid gap-3 md:grid-cols-[1fr_210px_180px_auto]">
-        <label className="relative"><span className="sr-only">Search people</span><Search size={16} className="absolute left-3 top-3 text-stone-400" /><input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="field pl-9" placeholder="Search name, role or employee number" data-testid="input-people-search" /></label>
-        <select value={departmentId} onChange={e => { setDepartmentId(e.target.value); setPage(1); }} className="field" aria-label="Filter by department" data-testid="select-people-department"><option value="">All departments</option>{depts.data?.map(d => <option value={d.id} key={d.id}>{d.name}</option>)}</select>
-        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="field" aria-label="Filter by employment status" data-testid="select-people-status"><option value="">All statuses</option>{['active','probation','on_leave','suspended','former'].map(s => <option key={s} value={s}>{s.replaceAll('_',' ')}</option>)}</select>
-        <button onClick={() => { setSearch(''); setDepartmentId(''); setStatus(''); setPage(1); }} className="btn btn-secondary" data-testid="button-clear-people-filters"><Filter size={14} /> Clear</button>
+      <div className="grid gap-3 md:grid-cols-6">
+        <label className="relative md:col-span-2">
+          <span className="sr-only">Search people</span>
+          <Search size={16} className="absolute left-3 top-3 text-stone-400" />
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="field pl-9" placeholder="Search name, role or employee number" data-testid="input-people-search" />
+        </label>
+        <select value={departmentId} onChange={e => { setDepartmentId(e.target.value); setPage(1); }} className="field" aria-label="Filter by department" data-testid="select-people-department">
+          <option value="">All departments</option>
+          {depts.data?.map(d => <option value={d.id} key={d.id}>{d.name}</option>)}
+        </select>
+        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} className="field" aria-label="Filter by employment status" data-testid="select-people-status">
+          <option value="">All statuses</option>
+          {['active','probation','on_leave','suspended','former'].map(s => <option key={s} value={s}>{s.replaceAll('_',' ')}</option>)}
+        </select>
+        <select value={employmentType} onChange={e => { setEmploymentType(e.target.value); setPage(1); }} className="field" aria-label="Filter by employment type" data-testid="select-people-employment-type">
+          <option value="">All types</option>
+          {['permanent','fixed_term','casual','intern'].map(t => <option key={t} value={t}>{t.replaceAll('_',' ')}</option>)}
+        </select>
+        <div className="flex gap-2">
+          <select value={`${sortBy}:${sortDir}`} onChange={e => { const [sb, sd] = e.target.value.split(':'); setSortBy(sb as any); setSortDir(sd as any); setPage(1); }} className="field text-xs" aria-label="Sort employees">
+            <option value="name:asc">Name (A-Z)</option>
+            <option value="name:desc">Name (Z-A)</option>
+            <option value="startDate:desc">Newest Hire</option>
+            <option value="employeeNumber:asc">Employee #</option>
+            <option value="status:asc">Status</option>
+          </select>
+          <button onClick={() => { setSearch(''); setDepartmentId(''); setStatus(''); setEmploymentType(''); setLocationFilter(''); setPage(1); }} className="btn btn-secondary shrink-0 px-3" data-testid="button-clear-people-filters">
+            <Filter size={14} /> Clear
+          </button>
+        </div>
       </div>
-      <div className="mt-4 flex items-center justify-between text-xs text-stone-500"><span data-testid="text-people-result-count">{list.data ? `${list.data.total} records` : 'Loading records'}</span><span>{list.data?.dataMode ?? '—'} data</span></div>
+      <div className="mt-4 flex items-center justify-between text-xs text-stone-500">
+        <span data-testid="text-people-result-count">{list.data ? `${list.data.total} records` : 'Loading records'}</span>
+        <span>{list.data?.dataMode ?? '—'} data</span>
+      </div>
       {list.isLoading ? <div className="mt-4 space-y-3" data-testid="state-people-loading">{[1,2,3,4].map(i => <div className="skeleton h-[60px]" key={i} />)}</div> : list.isError ? <div className="mt-4"><ErrorState title="People records could not load" onRetry={() => list.refetch()} /></div> : !list.data?.items.length ? <EmptyState title="No people found" message="Try another name or adjust the department and status filters." action={canCreate && <button onClick={() => setCreateOpen(true)} className="btn btn-primary" data-testid="button-empty-create-employee"><Plus size={14} /> Add employee</button>} /> :
-        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-left"><thead><tr className="border-b border-stone-200 text-[10px] uppercase tracking-[.12em] text-stone-400"><th className="px-3 py-3 font-bold">Employee</th><th className="px-3 py-3 font-bold">Role / team</th><th className="px-3 py-3 font-bold">Location</th><th className="px-3 py-3 font-bold">Status</th><th className="px-3 py-3 font-bold">Started</th><th /></tr></thead><tbody>
+        <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[820px] text-left"><thead><tr className="border-b border-stone-200 text-[10px] uppercase tracking-[.12em] text-stone-400"><th className="px-3 py-3 font-bold">Employee</th><th className="px-3 py-3 font-bold">Role / team</th><th className="px-3 py-3 font-bold">Location</th><th className="px-3 py-3 font-bold">§10 Score</th><th className="px-3 py-3 font-bold">Status</th><th className="px-3 py-3 font-bold">Started</th><th /></tr></thead><tbody>
           {list.data.items.map(employee => <tr key={employee.id} className="data-row hover:bg-[#fcfaf7]" data-testid={`row-employee-${employee.id}`}>
             <td className="px-3 py-4"><Link href={`/people/${employee.id}`} className="flex items-center gap-3" data-testid={`link-employee-${employee.id}`}><Avatar employee={employee} /><span><span className="block text-sm font-bold text-stone-800">{employee.preferredName || employee.firstName} {employee.lastName}</span><span className="mt-1 block text-[11px] text-stone-500">{employee.employeeNumber} · {employee.workEmail}</span></span></Link></td>
-            <td className="px-3 py-4"><span className="block text-xs font-semibold text-stone-700">{employee.jobTitle}</span><span className="mt-1 block text-[11px] text-stone-500">{employee.departmentName}</span></td><td className="px-3 py-4 text-xs text-stone-600">{employee.location}</td><td className="px-3 py-4"><StatusPill status={employee.status} /></td><td className="px-3 py-4 text-xs text-stone-500">{formatDate(employee.startDate)}</td><td className="px-3 py-4"><Link href={`/people/${employee.id}`} className="btn btn-ghost min-h-8 px-2" aria-label={`View ${employee.firstName}`} data-testid={`button-view-employee-${employee.id}`}><ChevronRight size={16} /></Link></td>
+            <td className="px-3 py-4"><span className="block text-xs font-semibold text-stone-700">{employee.jobTitle}</span><span className="mt-1 block text-[11px] text-stone-500">{employee.departmentName} · {employee.employmentType.replaceAll('_',' ')}</span></td>
+            <td className="px-3 py-4 text-xs text-stone-600">{employee.location}</td>
+            <td className="px-3 py-4 text-xs font-mono font-bold text-[#34734d]">{employee.completenessScore ?? 85}%</td>
+            <td className="px-3 py-4"><StatusPill status={employee.status} /></td>
+            <td className="px-3 py-4 text-xs text-stone-500">{formatDate(employee.startDate)}</td>
+            <td className="px-3 py-4"><Link href={`/people/${employee.id}`} className="btn btn-ghost min-h-8 px-2" aria-label={`View ${employee.firstName}`} data-testid={`button-view-employee-${employee.id}`}><ChevronRight size={16} /></Link></td>
           </tr>)}
         </tbody></table>
         <div className="flex items-center justify-between border-t border-stone-100 pt-4"><span className="text-xs text-stone-500">Page {list.data.page} of {Math.max(1, Math.ceil(list.data.total / list.data.pageSize))}</span><div className="flex gap-2"><button className="btn btn-secondary min-h-8 px-3" disabled={page <= 1} onClick={() => setPage(v => v - 1)} data-testid="button-people-prev"><ChevronLeft size={14} /> Previous</button><button className="btn btn-secondary min-h-8 px-3" disabled={page * list.data.pageSize >= list.data.total} onClick={() => setPage(v => v + 1)} data-testid="button-people-next">Next <ChevronRight size={14} /></button></div></div></div>}
@@ -606,11 +697,16 @@ function EmployeeForm({ departments, employee, pending, onCancel, onSubmit }: { 
     onSubmit({
       employeeNumber: String(fd.get('employeeNumber') ?? '').trim(), firstName: String(fd.get('firstName') ?? '').trim(), lastName: String(fd.get('lastName') ?? '').trim(),
       preferredName: String(fd.get('preferredName') ?? '').trim() || null, workEmail: String(fd.get('workEmail') ?? '').trim(),
+      personalEmail: String(fd.get('personalEmail') ?? '').trim() || null,
       phone: String(fd.get('phone') ?? '').trim() || null, jobTitle: String(fd.get('jobTitle') ?? '').trim(),
       departmentId: String(fd.get('departmentId') ?? ''), managerId: String(fd.get('managerId') ?? '').trim() || null,
-      location: String(fd.get('location') ?? '').trim(), employmentType: String(fd.get('employmentType') ?? 'permanent') as EmployeeInput['employmentType'],
+      location: String(fd.get('location') ?? '').trim(),
+      employeeCategory: String(fd.get('employeeCategory') ?? 'office').trim() || null,
+      employmentType: String(fd.get('employmentType') ?? 'permanent') as EmployeeInput['employmentType'],
       status: String(fd.get('status') ?? 'active') as EmployeeInput['status'], startDate: String(fd.get('startDate') ?? ''),
+      contractStartDate: String(fd.get('contractStartDate') ?? '') || null,
       probationEndDate: String(fd.get('probationEndDate') ?? '') || null, contractEndDate: String(fd.get('contractEndDate') ?? '') || null,
+      timezone: String(fd.get('timezone') ?? 'Africa/Nairobi').trim() || 'Africa/Nairobi',
     });
   };
   return <form onSubmit={submit} className="space-y-4" data-testid="form-employee">
@@ -618,6 +714,7 @@ function EmployeeForm({ departments, employee, pending, onCancel, onSubmit }: { 
     <div className="grid gap-3 sm:grid-cols-2">
       <Field name="employeeNumber" label="Employee number" defaultValue={employee?.employeeNumber} required disabled={!!employee} />
       <Field name="workEmail" label="Work email" type="email" defaultValue={employee?.workEmail} required disabled={!!employee} />
+      <Field name="personalEmail" label="Personal email (optional)" type="email" defaultValue={employee?.personalEmail ?? ''} />
       <Field name="firstName" label="First name" defaultValue={employee?.firstName} required disabled={!!employee} />
       <Field name="lastName" label="Last name" defaultValue={employee?.lastName} required disabled={!!employee} />
       <Field name="preferredName" label="Preferred name" defaultValue={employee?.preferredName ?? ''} />
@@ -625,12 +722,15 @@ function EmployeeForm({ departments, employee, pending, onCancel, onSubmit }: { 
       <Field name="jobTitle" label="Job title" defaultValue={employee?.jobTitle} required />
       <label><span className="label">Department</span><select className="field" name="departmentId" defaultValue={employee?.departmentId ?? departments[0]?.id} required data-testid="select-employee-department">{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
       <Field name="location" label="Work location" defaultValue={employee?.location} required />
+      <label><span className="label">Category</span><select name="employeeCategory" className="field" defaultValue={employee?.employeeCategory ?? 'office'}><option value="office">Office / HQ</option><option value="factory">Factory / Production</option><option value="warehouse">Warehouse / Logistics</option><option value="field_sales">Field / Distribution</option><option value="executive">Executive</option></select></label>
       <label><span className="label">Employment type</span><select name="employmentType" className="field" defaultValue={employee?.employmentType ?? 'permanent'} disabled={!!employee} data-testid="select-employee-type">{['permanent','fixed_term','casual','intern'].map(v => <option key={v} value={v}>{v.replaceAll('_',' ')}</option>)}</select></label>
       <label><span className="label">Status</span><select name="status" className="field" defaultValue={employee?.status ?? 'active'} data-testid="select-employee-status">{['active','probation','on_leave','suspended','former'].map(v => <option key={v} value={v}>{v.replaceAll('_',' ')}</option>)}</select></label>
       <Field name="startDate" label="Start date" type="date" defaultValue={employee?.startDate?.slice(0,10)} required disabled={!!employee} />
+      <Field name="contractStartDate" label="Contract start date" type="date" defaultValue={employee?.contractStartDate?.slice(0,10) ?? ''} />
       <Field name="managerId" label="Manager employee ID (optional)" defaultValue={employee?.managerId ?? ''} />
       <Field name="probationEndDate" label="Probation end date" type="date" defaultValue={employee?.probationEndDate?.slice(0,10) ?? ''} />
       <Field name="contractEndDate" label="Contract end date" type="date" defaultValue={employee?.contractEndDate?.slice(0,10) ?? ''} />
+      <Field name="timezone" label="Work timezone" defaultValue={employee?.timezone ?? 'Africa/Nairobi'} />
     </div>
     <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><button type="button" className="btn btn-secondary" onClick={onCancel} data-testid="button-cancel-employee">Cancel</button><button className="btn btn-primary" disabled={pending || !departments.length} data-testid="button-save-employee">{pending ? 'Saving…' : employee ? 'Save changes' : 'Create record'}</button></div>
   </form>;
@@ -644,107 +744,6 @@ function Modal({ title, children, onClose, testId }: { title: string; children: 
       <div className="mb-5 flex items-center justify-between"><h2 className="font-display text-xl font-semibold text-stone-900">{title}</h2><button className="btn btn-ghost min-h-8 px-2" onClick={onClose} aria-label="Close dialog" data-testid={`button-close-${testId.replace('dialog-','')}`}><X size={17} /></button></div>{children}
     </div>
   </div>;
-}
-const SAMPLE_EMPLOYEE_CSV = `employeeNumber,firstName,lastName,workEmail,jobTitle,departmentCode,location,employmentType,startDate
-REK-204,Faith,Mutuku,faith.mutuku@rekker-demo.invalid,Filling Line Operator,PROD,Nairobi Production Facility,permanent,2026-04-01
-REK-205,Peter,Njoroge,peter.njoroge@rekker-demo.invalid,Warehouse Dispatch Clerk,LOG,Nairobi Production Facility,permanent,2026-04-01`;
-
-function BulkEmployeeImportButton() {
-  const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [csvText, setCsvText] = useState(SAMPLE_EMPLOYEE_CSV);
-  const [preview, setPreview] = useState<any | null>(null);
-  const [commitResult, setCommitResult] = useState<any | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const runPreview = async () => {
-    setBusy(true);
-    setError(null);
-    setCommitResult(null);
-    try {
-      const data = await apiPost('/api/peopleos/employees/import-preview', { csvText });
-      setPreview(data);
-    } catch (e: any) {
-      setError(e?.message || 'Unable to validate CSV rows.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const runCommit = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const data = await apiPost('/api/peopleos/employees/import', { csvText });
-      setCommitResult(data);
-      setPreview(null);
-      await qc.invalidateQueries();
-    } catch (e: any) {
-      setError(e?.message || 'Bulk employee import failed.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return <>
-    <button type="button" className="btn btn-secondary" onClick={() => { setOpen(true); setPreview(null); setCommitResult(null); setError(null); }} data-testid="button-open-csv-import">
-      <Upload size={15} /> Import CSV
-    </button>
-    {open && <Modal title="Bulk import employees (CSV)" onClose={() => setOpen(false)} testId="dialog-csv-import">
-      <div className="space-y-4 text-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3">
-          <span className="text-stone-600">Upload a <code>.csv</code> file or paste rows below. Duplicates are automatically quarantined before commit.</span>
-          <label className="btn btn-secondary min-h-8 cursor-pointer px-3 text-xs">
-            Choose .csv file
-            <input type="file" accept=".csv,text/csv" className="hidden" onChange={async e => {
-              const file = e.target.files?.[0];
-              if (file) {
-                setCsvText(await file.text());
-                setPreview(null);
-                setCommitResult(null);
-              }
-            }} />
-          </label>
-        </div>
-        <textarea value={csvText} onChange={e => { setCsvText(e.target.value); setPreview(null); }} rows={5} className="field w-full font-mono text-[11px]" placeholder="employeeNumber,firstName,lastName,workEmail,jobTitle,departmentCode,location,employmentType,startDate" data-testid="textarea-csv-import" />
-        {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-semibold text-red-800">{error}</div>}
-        {commitResult && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-900">
-          Imported {commitResult.importedCount ?? 0} employee record(s). Skipped {commitResult.skippedDuplicatesCount ?? 0} duplicate(s).
-        </div>}
-        {preview && <div className="space-y-2">
-          <div className="flex flex-wrap gap-2 text-[11px] font-bold">
-            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-800">Valid: {preview.validCount}</span>
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-800">Duplicates: {preview.duplicateCount}</span>
-            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-red-800">Errors: {preview.errorCount}</span>
-          </div>
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-stone-200">
-            <table className="w-full text-left text-[11px]">
-              <thead className="bg-stone-50 text-stone-500"><tr><th className="px-2 py-1.5">Row</th><th className="px-2 py-1.5">Emp #</th><th className="px-2 py-1.5">Name</th><th className="px-2 py-1.5">Dept</th><th className="px-2 py-1.5">Status</th></tr></thead>
-              <tbody className="divide-y divide-stone-100">
-                {(preview.rows ?? []).map((r: any) => <tr key={r.rowNumber}>
-                  <td className="px-2 py-1">{r.rowNumber}</td>
-                  <td className="px-2 py-1 font-mono">{r.employeeNumber || '—'}</td>
-                  <td className="px-2 py-1">{r.firstName} {r.lastName}</td>
-                  <td className="px-2 py-1">{r.departmentName}</td>
-                  <td className="px-2 py-1"><span className={`font-bold ${r.status === 'valid' ? 'text-emerald-700' : r.status === 'duplicate' ? 'text-amber-700' : 'text-red-700'}`}>{r.status}{r.errors?.length ? `: ${r.errors.join('; ')}` : ''}</span></td>
-                </tr>)}
-              </tbody>
-            </table>
-          </div>
-        </div>}
-        <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
-          <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>Close</button>
-          <button type="button" className="btn btn-secondary" disabled={busy || !csvText.trim()} onClick={runPreview} data-testid="button-preview-csv">
-            {busy ? 'Validating…' : 'Preview & Validate'}
-          </button>
-          <button type="button" className="btn btn-primary" disabled={busy || !preview || preview.validCount === 0} onClick={runCommit} data-testid="button-commit-csv">
-            Import {preview?.validCount ?? 0} Valid Row(s)
-          </button>
-        </div>
-      </div>
-    </Modal>}
-  </>;
 }
 function formatDate(value: string) { if (!value) return '—'; const date = new Date(`${value.slice(0,10)}T00:00:00`); return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }).format(date); }
 function EmployeePage() {
@@ -778,33 +777,17 @@ function EmployeePage() {
         <Info label="Probation end" value={person.probationEndDate ? formatDate(person.probationEndDate) : 'Not recorded'} testId="employee-probation" /><Info label="Contract end" value={person.contractEndDate ? formatDate(person.contractEndDate) : 'Not recorded'} testId="employee-contract-end" />
       </div>
     </section>
-    {p360 && <section className="mt-4 grid gap-4 lg:grid-cols-3" data-testid="section-employee-360">
-      <div className="surface p-5">
-        <div className="flex items-center justify-between"><h2 className="font-display text-base font-semibold text-stone-900">Statutory identifiers</h2><span className="rounded-full bg-[#e8f2eb] px-2 py-0.5 text-[10px] font-bold text-[#34734d]">ODPC Masked</span></div>
-        <div className="mt-4 space-y-2.5 text-xs">
-          <div className="flex justify-between"><span className="text-stone-500">KRA PIN</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.kraPin ?? 'RESTRICTED'}</span></div>
-          <div className="flex justify-between"><span className="text-stone-500">National ID</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.nationalId ?? 'RESTRICTED'}</span></div>
-          <div className="flex justify-between"><span className="text-stone-500">NSSF No.</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.nssfNo ?? 'RESTRICTED'}</span></div>
-          <div className="flex justify-between"><span className="text-stone-500">SHIF / SHA</span><span className="font-mono font-semibold text-stone-800">{p360.statutoryIdentifiers?.shaNo ?? 'RESTRICTED'}</span></div>
-        </div>
-        <p className="mt-3 text-[10px] text-stone-400">{p360.statutoryIdentifiers?.encryptionStatus ?? 'AES-256-GCM Field Protection'}</p>
-      </div>
-      <div className="surface p-5">
-        <h2 className="font-display text-base font-semibold text-stone-900">Reporting line & emergency</h2>
-        <p className="mt-3 text-xs text-stone-500">Reports to: <strong className="text-stone-800">{p360.reportingLine?.managerName || 'Executive Board'}</strong></p>
-        {Array.isArray(p360.reportingLine?.directReports) && p360.reportingLine.directReports.length > 0 && <div className="mt-3"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Direct reports</p><div className="mt-1.5 flex flex-wrap gap-1.5">{p360.reportingLine.directReports.map((r: any) => <Link key={r.id} href={`/people/${r.id}`} className="rounded-lg bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-200">{r.name}</Link>)}</div></div>}
-        {p360.emergencyContact ? <div className="mt-4 border-t border-stone-100 pt-3 text-xs"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">Next of kin</p><p className="mt-1 font-semibold text-stone-800">{p360.emergencyContact.name} · {p360.emergencyContact.relationship}</p><p className="font-mono text-[11px] text-stone-500">{p360.emergencyContact.phone}</p></div> : <p className="mt-4 text-xs text-stone-400">Emergency contact visible to HR or self only.</p>}
-      </div>
-      <div className="surface p-5">
-        <h2 className="font-display text-base font-semibold text-stone-900">Compensation & capabilities</h2>
-        <div className="mt-3 rounded-lg bg-[#f7f4f0] p-3 text-xs">{p360.compensationSummary?.authorizedToView ? <><p className="font-semibold text-stone-800">{p360.compensationSummary.currency} · {p360.compensationSummary.payFrequency}</p><p className="mt-0.5 text-stone-500">Channel: {p360.compensationSummary.paymentChannel}</p></> : <p className="text-stone-500">Compensation visible to payroll officers or employee.</p>}</div>
-        {Array.isArray(p360.skills) && p360.skills.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{p360.skills.map((skill: string) => <span key={skill} className="rounded-full bg-[#f9e9e6] px-2.5 py-1 text-[10px] font-semibold text-[#a91919]">{skill}</span>)}</div>}
-        <div className="mt-4 flex flex-wrap gap-2"><Link href="/documents" className="btn btn-secondary min-h-8 px-3 text-xs">Employment Act §10</Link>{p360.compensationSummary?.authorizedToView && <Link href="/self-service" className="btn btn-secondary min-h-8 px-3 text-xs">View P9A card</Link>}</div>
-      </div>
-    </section>}
+    <Employee360View
+      employeeId={person.id}
+      person={person}
+      p360={p360}
+      departments={departments.data ?? []}
+      canManagePeople={!!auth.data?.canManagePeople}
+      formatDate={formatDate}
+    />
     {editing && <Modal title="Edit employee details" onClose={() => setEditing(false)} testId="dialog-edit-employee">
       <EmployeeForm employee={person} departments={departments.data ?? []} pending={update.isPending} onCancel={() => setEditing(false)} onSubmit={values => {
-        const data: EmployeeUpdate = { preferredName: values.preferredName, phone: values.phone, jobTitle: values.jobTitle, departmentId: values.departmentId, managerId: values.managerId, location: values.location, status: values.status, probationEndDate: values.probationEndDate, contractEndDate: values.contractEndDate };
+        const data: EmployeeUpdate = { preferredName: values.preferredName, personalEmail: values.personalEmail, phone: values.phone, jobTitle: values.jobTitle, departmentId: values.departmentId, managerId: values.managerId, location: values.location, employeeCategory: values.employeeCategory, status: values.status, contractStartDate: values.contractStartDate, probationEndDate: values.probationEndDate, contractEndDate: values.contractEndDate, timezone: values.timezone };
         update.mutate({ employeeId: person.id, data }, { onSuccess: () => { qc.invalidateQueries({ queryKey: getGetEmployeeQueryKey(person.id) }); qc.invalidateQueries({ queryKey: getListEmployeesQueryKey() }); qc.invalidateQueries({ queryKey: getGetPeopleOsOverviewQueryKey() }); setEditing(false); } });
       }} />
       {update.isError && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-edit-employee-error">Changes could not be saved. Check your access and try again.</p>}
@@ -815,69 +798,22 @@ function Info({ label, value, testId }: { label: string; value: string; testId: 
   return <div data-testid={`info-${testId}`}><p className="text-[10px] font-bold uppercase tracking-[.12em] text-stone-400">{label}</p><p className="mt-1.5 text-sm font-semibold capitalize text-stone-700">{value}</p></div>;
 }
 
-function OrgTreeBranch({ node, byManager, depth = 0 }: { node: any; byManager: Map<string, any[]>; depth?: number }) {
-  const children = byManager.get(node.id) ?? [];
-  return <div className={depth > 0 ? 'ml-4 border-l border-stone-200 pl-4 mt-2.5' : 'mt-2.5'}>
-    <Link href={`/people/${node.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-[#faf8f5] px-3.5 py-2.5 text-xs transition-colors hover:border-[#C71D1D]/40 hover:bg-white">
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] font-bold text-[#bd2725]">{node.employeeNumber}</span>
-          <span className="font-semibold text-stone-900">{node.fullName}</span>
-          <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-stone-600 ring-1 ring-stone-200">{node.departmentName}</span>
-        </div>
-        <p className="mt-0.5 text-[11px] text-stone-500">{node.jobTitle}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        {node.directReportsCount > 0 && <span className="rounded-full bg-[#f9e9e6] px-2 py-0.5 text-[10px] font-bold text-[#a91919]">{node.directReportsCount} direct report{node.directReportsCount === 1 ? '' : 's'}</span>}
-        <StatusPill status={node.status} />
-      </div>
-    </Link>
-    {children.length > 0 && <div className="space-y-1">{children.map(child => <OrgTreeBranch key={child.id} node={child} byManager={byManager} depth={depth + 1} />)}</div>}
-  </div>;
-}
-
 function OrganizationPage() {
   const query = useListDepartments();
-  const orgChartQuery = useQuery({
-    queryKey: ['peopleos-org-chart'],
-    queryFn: () => apiGet<{ totalNodes: number; nodes: any[] }>('/api/peopleos/org-chart'),
-  });
+  const auth = useGetAuthContext();
   if (query.isLoading) return <LoadingScreen label="Loading departments" />;
   if (query.isError) return <ErrorState title="Organization view could not load" onRetry={() => query.refetch()} />;
 
-  const orgNodes = orgChartQuery.data?.nodes ?? [];
-  const nodeIds = new Set(orgNodes.map((n: any) => n.id));
-  const byManager = new Map<string, any[]>();
-  const roots: any[] = [];
-  for (const node of orgNodes) {
-    if (!node.managerId || !nodeIds.has(node.managerId)) {
-      roots.push(node);
-    } else {
-      const list = byManager.get(node.managerId) ?? [];
-      list.push(node);
-      byManager.set(node.managerId, list);
-    }
-  }
-
-  return <div><PageHeading eyebrow="Structure / Teams" title="Organization" description="Department structure, visual reporting lines and planned capacity across the operation." />
-    <div className="mb-4 flex flex-wrap gap-2"><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 ring-1 ring-stone-200" data-testid="text-department-count">{query.data?.length ?? 0} departments</span><span className="rounded-full bg-[#e8f2eb] px-3 py-1.5 text-xs font-semibold text-[#34734d]" data-testid="text-organization-headcount">{query.data?.reduce((sum,d) => sum + d.headcount,0) ?? 0} current team members</span><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 ring-1 ring-stone-200" data-testid="text-org-chart-nodes">{orgNodes.length} reporting nodes</span></div>
-    {!query.data?.length ? <div className="surface"><EmptyState title="No department structure available" message="Department data will appear here once it is available to your role." /></div> :
-      <div className="grid gap-4 lg:grid-cols-2">{query.data.map(dept => <section className="surface p-5 md:p-6" key={dept.id} data-testid={`card-department-${dept.id}`}>
-        <div className="flex items-start justify-between"><div><span className="font-mono text-[10px] font-bold tracking-widest text-[#bd2725]">{dept.code}</span><h2 className="mt-2 font-display text-xl font-semibold text-stone-900">{dept.name}</h2></div><span className="rounded-lg bg-[#f5f1ec] p-2 text-stone-500"><GitBranch size={17} /></span></div>
-        <p className="mt-2 text-sm leading-6 text-stone-500">{dept.description || 'Department information is available through the current organization record.'}</p>
-        <div className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-[#faf8f5] p-4"><div><p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Headcount</p><p className="mt-1 font-display text-2xl font-semibold text-stone-900">{dept.headcount}<span className="ml-1 text-xs font-medium text-stone-400">/ {dept.budgetedPositions}</span></p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Department lead</p><p className="mt-2 text-sm font-semibold text-stone-700">{dept.managerName || 'Not assigned'}</p></div></div>
-        <div className="mt-4 flex items-center gap-2 text-xs text-stone-500"><span className="h-2 w-2 rounded-full bg-[#338956]" />{dept.location}</div>
-      </section>)}</div>}
-    {roots.length > 0 && <section className="surface mt-6 p-5 md:p-6" data-testid="section-org-hierarchy">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-4">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#bd2725]">Phase 2 · Visual Reporting Lines</p>
-          <h2 className="mt-1 font-display text-lg font-semibold text-stone-900">Organizational Hierarchy Tree</h2>
-        </div>
-        <span className="rounded-md bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-600">{roots.length} top-level lead{roots.length === 1 ? '' : 's'}</span>
-      </div>
-      <div className="mt-3 space-y-2">{roots.map(root => <OrgTreeBranch key={root.id} node={root} byManager={byManager} />)}</div>
-    </section>}
+  return <div>
+    <PageHeading eyebrow="Structure / Teams" title="Organization" description="Enterprise Org Designer, cycle-safe reporting hierarchy, historical snapshots, and position establishment register." />
+    {!query.data?.length ? (
+      <div className="surface"><EmptyState title="No department structure available" message="Department data will appear here once it is available to your role." /></div>
+    ) : (
+      <OrganizationDesignerView
+        departments={query.data}
+        canManagePeople={!!auth.data?.canManagePeople}
+      />
+    )}
   </div>;
 }
 
@@ -955,6 +891,7 @@ function LeavePage() {
     }, { onSuccess: refresh });
   };
   return <div><PageHeading eyebrow="People operations / Time away" title="Leave management" description="Review requests against team coverage and keep leave decisions moving." action={<button className="btn btn-primary" disabled={!activePolicies.length} onClick={() => setShowForm(true)} data-testid="button-new-leave"><Plus size={15} /> Request leave</button>} />
+    <LeaveCoverageAndCalendarPanel canManageSettings={Boolean(auth.data?.canManageSettings || auth.data?.canManagePeople)} />
     <section className="surface mb-4 p-4 md:p-5" data-testid="section-leave-balances">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div><h2 className="font-display text-lg font-semibold text-stone-900">Leave balances</h2><p className="mt-1 text-xs leading-5 text-stone-500">Remaining days subtract both approved leave and pending requests. Monthly policies accrue as the year progresses.</p></div>

@@ -1,6 +1,22 @@
 import crypto from "node:crypto";
-import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { Router, type IRouter } from "express";
+import {
+  assertValidManagerAssignment,
+  HierarchyValidationError,
+  recordAssignmentHistoryEntry,
+} from "../services/employeeMasterService";
+import {
+  commitImportBatch,
+  previewAndStageImportBatch,
+} from "../services/csvImportService";
+import { serializeSafeCsv } from "../services/rfc4180Csv";
+import {
+  buildOrganizationChart,
+  type OrgChartViewMode,
+} from "../services/orgPositionsService";
+import { phase2MemoryStore } from "../services/phase2MemoryStore";
+import { evaluateEmployeeSection10Completeness } from "../services/kenyaComplianceService";
 import {
   CreateEmployeeBody,
   CreateEmployeeResponse,
@@ -119,7 +135,10 @@ function businessDaysBetween(start: string, end: string): number {
   return days;
 }
 
-async function serializeEmployees(records: (typeof employeesTable.$inferSelect)[]) {
+async function serializeEmployees(
+  records: (typeof employeesTable.$inferSelect)[],
+  organizationId = PEOPLEOS_ORGANIZATION_ID,
+) {
   if (records.length === 0) return [];
   const departmentIds = [...new Set(records.map((record) => record.departmentId))];
   const managerIds = [
@@ -135,7 +154,7 @@ async function serializeEmployees(records: (typeof employeesTable.$inferSelect)[
       .from(departmentsTable)
       .where(
         and(
-          eq(departmentsTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+          eq(departmentsTable.organizationId, organizationId),
           inArray(departmentsTable.id, departmentIds),
         ),
       ),
@@ -149,7 +168,7 @@ async function serializeEmployees(records: (typeof employeesTable.$inferSelect)[
           .from(employeesTable)
           .where(
             and(
-              eq(employeesTable.organizationId, PEOPLEOS_ORGANIZATION_ID),
+              eq(employeesTable.organizationId, organizationId),
               inArray(employeesTable.id, managerIds),
             ),
           )
@@ -166,20 +185,26 @@ async function serializeEmployees(records: (typeof employeesTable.$inferSelect)[
     lastName: employee.lastName,
     preferredName: employee.preferredName,
     workEmail: employee.workEmail,
+    personalEmail: employee.personalEmail ?? null,
     phone: employee.phone,
     jobTitle: employee.jobTitle,
     departmentId: employee.departmentId,
     departmentName: departmentNames.get(employee.departmentId) ?? "Unassigned",
+    positionId: employee.positionId ?? null,
     managerId: employee.managerId,
     managerName: employee.managerId
       ? (managerNames.get(employee.managerId) ?? null)
       : null,
     location: employee.location,
+    timezone: employee.timezone ?? "Africa/Nairobi",
     employmentType: employee.employmentType,
+    employeeCategory: employee.employeeCategory ?? "staff",
     status: employee.status,
     startDate: employee.startDate,
+    contractStartDate: employee.contractStartDate ?? null,
     probationEndDate: employee.probationEndDate,
     contractEndDate: employee.contractEndDate,
+    completenessScore: evaluateEmployeeSection10Completeness(employee).scorePercent,
     isDemo: employee.isDemo,
   }));
 }
@@ -569,11 +594,22 @@ router.get("/employees", async (req, res): Promise<void> => {
       );
     }
     const q = parsedQuery.data;
+    const employmentTypeFilter = typeof req.query.employmentType === "string" ? req.query.employmentType.trim() : "";
+    const locationFilter = typeof req.query.location === "string" ? req.query.location.trim().toLowerCase() : "";
+    const sortBy = typeof req.query.sortBy === "string" ? req.query.sortBy : "name";
+    const sortDir = req.query.sortDir === "desc" ? -1 : 1;
+
     if (q.departmentId) {
       items = items.filter((e) => e.departmentId === q.departmentId);
     }
     if (q.status) {
       items = items.filter((e) => e.status === q.status);
+    }
+    if (employmentTypeFilter) {
+      items = items.filter((e) => e.employmentType === employmentTypeFilter);
+    }
+    if (locationFilter) {
+      items = items.filter((e) => e.location.toLowerCase().includes(locationFilter));
     }
     if (q.search?.trim()) {
       const term = q.search.trim().toLowerCase();
@@ -586,11 +622,37 @@ router.get("/employees", async (req, res): Promise<void> => {
           e.jobTitle.toLowerCase().includes(term),
       );
     }
+
+    items.sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "employeeNumber") cmp = a.employeeNumber.localeCompare(b.employeeNumber);
+      else if (sortBy === "startDate") cmp = String(a.startDate).localeCompare(String(b.startDate));
+      else if (sortBy === "department") cmp = a.departmentName.localeCompare(b.departmentName);
+      else if (sortBy === "status") cmp = a.status.localeCompare(b.status);
+      else cmp = `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`);
+      return cmp * sortDir;
+    });
+
+    const page = q.page ?? 1;
+    const pageSize = q.pageSize ?? 25;
+    const paged = items.slice((page - 1) * pageSize, page * pageSize).map((e) => {
+      const extras = phase2MemoryStore.employeeExtras.get(e.id);
+      return {
+        ...e,
+        positionId: extras?.positionId ?? null,
+        completenessScore: evaluateEmployeeSection10Completeness({
+          ...e,
+          nationalId: extras?.nationalId ?? null,
+          emergencyContactJson: extras?.emergencyContactJson ?? null,
+        } as any).scorePercent,
+      };
+    });
+
     res.json(
       ListEmployeesResponse.parse({
-        items,
-        page: q.page,
-        pageSize: q.pageSize,
+        items: paged,
+        page,
+        pageSize,
         total: items.length,
         dataMode: "DEMO",
       }),
@@ -598,12 +660,23 @@ router.get("/employees", async (req, res): Promise<void> => {
     return;
   }
   const query = parsedQuery.data;
+  const employmentTypeFilter = typeof req.query.employmentType === "string" ? req.query.employmentType.trim() : "";
+  const locationFilter = typeof req.query.location === "string" ? req.query.location.trim() : "";
+  const sortBy = typeof req.query.sortBy === "string" ? req.query.sortBy : "name";
+  const sortDir = req.query.sortDir === "desc" ? "desc" : "asc";
+
   const conditions = [eq(employeesTable.organizationId, access.organization.id)];
   if (query.departmentId) {
     conditions.push(eq(employeesTable.departmentId, query.departmentId));
   }
   if (query.status) {
     conditions.push(eq(employeesTable.status, query.status));
+  }
+  if (employmentTypeFilter) {
+    conditions.push(eq(employeesTable.employmentType, employmentTypeFilter));
+  }
+  if (locationFilter) {
+    conditions.push(ilike(employeesTable.location, `%${escapeLike(locationFilter)}%`));
   }
   if (query.search?.trim()) {
     const term = `%${escapeLike(query.search.trim())}%`;
@@ -645,24 +718,148 @@ router.get("/employees", async (req, res): Promise<void> => {
   const where = and(...conditions);
   const page = query.page ?? 1;
   const pageSize = query.pageSize ?? 25;
+  const orderCol =
+    sortBy === "employeeNumber"
+      ? employeesTable.employeeNumber
+      : sortBy === "startDate"
+        ? employeesTable.startDate
+        : sortBy === "status"
+          ? employeesTable.status
+          : employeesTable.lastName;
+  const orderExpr = sortDir === "desc" ? desc(orderCol) : asc(orderCol);
+
   const [records, [{ value: total }]] = await Promise.all([
     db
       .select()
       .from(employeesTable)
       .where(where)
-      .orderBy(employeesTable.lastName, employeesTable.firstName)
+      .orderBy(orderExpr, employeesTable.firstName)
       .limit(pageSize)
       .offset((page - 1) * pageSize),
     db.select({ value: count() }).from(employeesTable).where(where),
   ]);
   const response = {
-    items: await serializeEmployees(records),
+    items: await serializeEmployees(records, access.organization.id),
     page,
     pageSize,
     total,
     dataMode: access.organization.isDemo ? "DEMO" : "LIVE",
   };
   res.json(ListEmployeesResponse.parse(response));
+});
+
+router.get("/employees/export", async (req, res): Promise<void> => {
+  const membership = await requireRoles(req, res, peopleManagers);
+  if (!membership) return;
+
+  const statusFilter = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const departmentFilter =
+    typeof req.query.departmentId === "string" ? req.query.departmentId.trim() : "";
+  const search = typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
+
+  let exportItems: Array<{
+    employeeNumber: string;
+    firstName: string;
+    lastName: string;
+    workEmail: string;
+    jobTitle: string;
+    departmentName: string;
+    location: string;
+    employmentType: string;
+    status: string;
+    startDate: string;
+  }> = [];
+
+  if (!process.env.DATABASE_URL) {
+    exportItems = DEMO_EMPLOYEES_LIST.filter((e) => {
+      if (statusFilter && e.status !== statusFilter) return false;
+      if (departmentFilter && e.departmentId !== departmentFilter) return false;
+      if (
+        search &&
+        !`${e.firstName} ${e.lastName} ${e.employeeNumber} ${e.workEmail}`
+          .toLowerCase()
+          .includes(search)
+      ) {
+        return false;
+      }
+      return true;
+    }).map((e) => ({
+      employeeNumber: e.employeeNumber,
+      firstName: e.firstName,
+      lastName: e.lastName,
+      workEmail: e.workEmail,
+      jobTitle: e.jobTitle,
+      departmentName: e.departmentName,
+      location: e.location,
+      employmentType: e.employmentType,
+      status: e.status,
+      startDate: String(e.startDate).slice(0, 10),
+    }));
+  } else {
+    const conds = [eq(employeesTable.organizationId, membership.organizationId)];
+    if (statusFilter) conds.push(eq(employeesTable.status, statusFilter));
+    if (departmentFilter) conds.push(eq(employeesTable.departmentId, departmentFilter));
+    const records = await db
+      .select()
+      .from(employeesTable)
+      .where(and(...conds))
+      .orderBy(employeesTable.employeeNumber);
+    const serialized = await serializeEmployees(records, membership.organizationId);
+    exportItems = serialized
+      .filter((e) =>
+        search
+          ? `${e.firstName} ${e.lastName} ${e.employeeNumber} ${e.workEmail}`
+              .toLowerCase()
+              .includes(search)
+          : true,
+      )
+      .map((e) => ({
+        employeeNumber: e.employeeNumber,
+        firstName: e.firstName,
+        lastName: e.lastName,
+        workEmail: e.workEmail,
+        jobTitle: e.jobTitle,
+        departmentName: e.departmentName,
+        location: e.location,
+        employmentType: e.employmentType,
+        status: e.status,
+        startDate: String(e.startDate).slice(0, 10),
+      }));
+  }
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "employees.csv_exported",
+    targetType: "employee_directory",
+    targetId: membership.organizationId,
+    summary: `Exported ${exportItems.length} directory records (statutory & salary columns excluded).`,
+    critical: true,
+    isDemo: !process.env.DATABASE_URL,
+  });
+
+  const csv = serializeSafeCsv(
+    [
+      "employeeNumber",
+      "firstName",
+      "lastName",
+      "workEmail",
+      "jobTitle",
+      "departmentName",
+      "location",
+      "employmentType",
+      "status",
+      "startDate",
+    ],
+    exportItems,
+  );
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="rekker-employees-${new Date().toISOString().slice(0, 10)}.csv"`,
+  );
+  res.send(csv);
 });
 
 router.post("/employees", async (req, res): Promise<void> => {
@@ -679,8 +876,60 @@ router.post("/employees", async (req, res): Promise<void> => {
     return;
   }
   const input = body.data;
+  const positionId =
+    typeof req.body?.positionId === "string" && req.body.positionId.trim()
+      ? req.body.positionId.trim()
+      : null;
+  const personalEmail =
+    typeof req.body?.personalEmail === "string" && req.body.personalEmail.trim()
+      ? req.body.personalEmail.trim().toLowerCase()
+      : null;
+  const employeeCategory =
+    typeof req.body?.employeeCategory === "string" && req.body.employeeCategory.trim()
+      ? req.body.employeeCategory.trim()
+      : "staff";
+  const timezone =
+    typeof req.body?.timezone === "string" && req.body.timezone.trim()
+      ? req.body.timezone.trim()
+      : "Africa/Nairobi";
+
   if (!process.env.DATABASE_URL) {
     const dept = DEMO_DEPARTMENTS_LIST.find((d) => d.id === input.departmentId);
+    if (!dept) {
+      res.status(400).json({ error: "Choose a valid department in this organization." });
+      return;
+    }
+    if (
+      DEMO_EMPLOYEES_LIST.some(
+        (e) =>
+          e.employeeNumber.toUpperCase() === input.employeeNumber.toUpperCase() ||
+          e.workEmail.toLowerCase() === input.workEmail.toLowerCase(),
+      )
+    ) {
+      res.status(409).json({ error: "Employee number or work email already exists." });
+      return;
+    }
+    try {
+      const empMap = new Map(
+        DEMO_EMPLOYEES_LIST.map((e) => [
+          e.id,
+          { id: e.id, organizationId: organization.id, managerId: e.managerId, status: e.status },
+        ]),
+      );
+      assertValidManagerAssignment({
+        organizationId: organization.id,
+        employeeId: null,
+        managerId: input.managerId ?? null,
+        employeesById: empMap,
+      });
+    } catch (err) {
+      const status = err instanceof HierarchyValidationError ? err.statusCode : 400;
+      res.status(status).json({ error: err instanceof Error ? err.message : "Invalid manager assignment." });
+      return;
+    }
+    const mgr = input.managerId
+      ? DEMO_EMPLOYEES_LIST.find((e) => e.id === input.managerId)
+      : null;
     const newEmp = {
       id: `10000000-0000-4000-8000-${String(DEMO_EMPLOYEES_LIST.length + 1).padStart(12, "0")}`,
       employeeNumber: input.employeeNumber,
@@ -691,9 +940,9 @@ router.post("/employees", async (req, res): Promise<void> => {
       phone: input.phone ?? null,
       jobTitle: input.jobTitle,
       departmentId: input.departmentId,
-      departmentName: dept?.name ?? "General",
+      departmentName: dept.name,
       managerId: input.managerId ?? null,
-      managerName: null,
+      managerName: mgr ? `${mgr.firstName} ${mgr.lastName}` : null,
       location: input.location,
       employmentType: input.employmentType,
       status: input.status ?? ("active" as const),
@@ -703,6 +952,28 @@ router.post("/employees", async (req, res): Promise<void> => {
       isDemo: true,
     };
     DEMO_EMPLOYEES_LIST.push(newEmp as any);
+    phase2MemoryStore.employeeExtras.set(newEmp.id, {
+      personalEmail,
+      positionId,
+      employeeCategory,
+      timezone,
+    });
+    await recordAssignmentHistoryEntry({
+      organizationId: organization.id,
+      employeeId: newEmp.id,
+      effectiveDate: dateOnly(input.startDate),
+      changeType: "hire",
+      departmentId: newEmp.departmentId,
+      positionId,
+      managerId: newEmp.managerId,
+      jobTitle: newEmp.jobTitle,
+      location: newEmp.location,
+      employmentType: newEmp.employmentType,
+      status: newEmp.status,
+      reason: "Initial employee creation",
+      approvedByUserId: membership.userId,
+      changedByUserId: membership.userId,
+    });
     res.status(201).json(CreateEmployeeResponse.parse(newEmp));
     return;
   }
@@ -749,21 +1020,68 @@ router.post("/employees", async (req, res): Promise<void> => {
     res.status(409).json({ error: "Employee number or work email already exists." });
     return;
   }
+  if (input.managerId) {
+    const dbEmps = await db
+      .select({
+        id: employeesTable.id,
+        organizationId: employeesTable.organizationId,
+        managerId: employeesTable.managerId,
+        status: employeesTable.status,
+      })
+      .from(employeesTable)
+      .where(eq(employeesTable.organizationId, organization.id));
+    const empMap = new Map(dbEmps.map((e) => [e.id, e]));
+    try {
+      assertValidManagerAssignment({
+        organizationId: organization.id,
+        employeeId: null,
+        managerId: input.managerId,
+        employeesById: empMap,
+      });
+    } catch (err) {
+      const status = err instanceof HierarchyValidationError ? err.statusCode : 400;
+      res.status(status).json({ error: err instanceof Error ? err.message : "Invalid manager assignment." });
+      return;
+    }
+  }
   const record = await db.transaction(async (tx) => {
     const [inserted] = await tx
       .insert(employeesTable)
       .values({
         ...input,
         organizationId: organization.id,
+        personalEmail,
+        positionId,
+        employeeCategory,
+        timezone,
         isDemo: organization.isDemo,
         status: input.status ?? "active",
         startDate: dateOnly(input.startDate),
+        contractStartDate: nullableDateOnly((input as any).contractStartDate),
         probationEndDate: nullableDateOnly(input.probationEndDate),
         contractEndDate: nullableDateOnly(input.contractEndDate),
       })
       .returning();
 
     if (!inserted) return null;
+
+    await recordAssignmentHistoryEntry({
+      organizationId: organization.id,
+      employeeId: inserted.id,
+      effectiveDate: inserted.startDate,
+      changeType: "hire",
+      departmentId: inserted.departmentId,
+      positionId: inserted.positionId,
+      managerId: inserted.managerId,
+      jobTitle: inserted.jobTitle,
+      location: inserted.location,
+      employmentType: inserted.employmentType,
+      status: inserted.status,
+      reason: "Initial employee creation",
+      approvedByUserId: membership.userId,
+      changedByUserId: membership.userId,
+      tx: tx as any,
+    });
 
     await recordAuditEvent({
       organizationId: organization.id,
@@ -890,13 +1208,40 @@ router.patch("/employees/:employeeId", async (req, res): Promise<void> => {
     return;
   }
   const input = body.data;
+  const reqManagerId =
+    req.body && "managerId" in req.body ? (req.body.managerId as string | null) : input.managerId;
+
   if (!process.env.DATABASE_URL) {
     const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === params.data.employeeId);
     if (!emp) {
       res.status(404).json({ error: "Employee not found." });
       return;
     }
+    if (reqManagerId !== undefined) {
+      try {
+        const empMap = new Map(
+          DEMO_EMPLOYEES_LIST.map((e) => [
+            e.id,
+            { id: e.id, organizationId: organization.id, managerId: e.managerId, status: e.status },
+          ]),
+        );
+        assertValidManagerAssignment({
+          organizationId: organization.id,
+          employeeId: emp.id,
+          managerId: reqManagerId,
+          employeesById: empMap,
+        });
+      } catch (err) {
+        const status = err instanceof HierarchyValidationError ? err.statusCode : 400;
+        res.status(status).json({ error: err instanceof Error ? err.message : "Invalid manager cycle." });
+        return;
+      }
+      emp.managerId = reqManagerId;
+      const mgr = reqManagerId ? DEMO_EMPLOYEES_LIST.find((e) => e.id === reqManagerId) : null;
+      emp.managerName = mgr ? `${mgr.firstName} ${mgr.lastName}` : null;
+    }
     if (input.preferredName !== undefined) emp.preferredName = input.preferredName;
+    if (input.phone !== undefined) emp.phone = input.phone;
     if (input.jobTitle !== undefined) emp.jobTitle = input.jobTitle;
     if (input.location !== undefined) emp.location = input.location;
     if (input.status !== undefined) emp.status = input.status;
@@ -904,6 +1249,29 @@ router.patch("/employees/:employeeId", async (req, res): Promise<void> => {
       emp.departmentId = input.departmentId;
       const dept = DEMO_DEPARTMENTS_LIST.find((d) => d.id === input.departmentId);
       if (dept) emp.departmentName = dept.name;
+    }
+    if (
+      input.jobTitle !== undefined ||
+      input.location !== undefined ||
+      input.status !== undefined ||
+      input.departmentId !== undefined ||
+      reqManagerId !== undefined
+    ) {
+      await recordAssignmentHistoryEntry({
+        organizationId: organization.id,
+        employeeId: emp.id,
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        changeType: "profile_update",
+        departmentId: emp.departmentId,
+        managerId: emp.managerId,
+        jobTitle: emp.jobTitle,
+        location: emp.location,
+        employmentType: emp.employmentType,
+        status: emp.status,
+        reason: typeof req.body?.changeReason === "string" ? req.body.changeReason : "Master profile update",
+        approvedByUserId: membership.userId,
+        changedByUserId: membership.userId,
+      });
     }
     res.json(UpdateEmployeeResponse.parse(emp));
     return;
@@ -930,19 +1298,27 @@ router.patch("/employees/:employeeId", async (req, res): Promise<void> => {
       return;
     }
   }
-  if (input.managerId) {
-    const [manager] = await db
-      .select({ id: employeesTable.id })
+  if (reqManagerId !== undefined && reqManagerId !== null) {
+    const allOrgEmployees = await db
+      .select({
+        id: employeesTable.id,
+        organizationId: employeesTable.organizationId,
+        managerId: employeesTable.managerId,
+        status: employeesTable.status,
+      })
       .from(employeesTable)
-      .where(
-        and(
-          eq(employeesTable.id, input.managerId),
-          eq(employeesTable.organizationId, organization.id),
-        ),
-      )
-      .limit(1);
-    if (!manager) {
-      res.status(400).json({ error: "Choose a manager in this organization." });
+      .where(eq(employeesTable.organizationId, organization.id));
+    const empMap = new Map(allOrgEmployees.map((e) => [e.id, e]));
+    try {
+      assertValidManagerAssignment({
+        organizationId: organization.id,
+        employeeId: params.data.employeeId,
+        managerId: reqManagerId,
+        employeesById: empMap,
+      });
+    } catch (err) {
+      const status = err instanceof HierarchyValidationError ? err.statusCode : 400;
+      res.status(status).json({ error: err instanceof Error ? err.message : "Invalid manager assignment." });
       return;
     }
   }
@@ -951,7 +1327,7 @@ router.patch("/employees/:employeeId", async (req, res): Promise<void> => {
     phone: input.phone,
     jobTitle: input.jobTitle,
     departmentId: input.departmentId,
-    managerId: input.managerId,
+    ...(reqManagerId === undefined ? {} : { managerId: reqManagerId }),
     location: input.location,
     status: input.status,
     ...(input.probationEndDate === undefined
@@ -974,6 +1350,32 @@ router.patch("/employees/:employeeId", async (req, res): Promise<void> => {
       .returning();
 
     if (!updated) return null;
+
+    if (
+      input.jobTitle !== undefined ||
+      input.location !== undefined ||
+      input.status !== undefined ||
+      input.departmentId !== undefined ||
+      input.managerId !== undefined
+    ) {
+      await recordAssignmentHistoryEntry({
+        organizationId: organization.id,
+        employeeId: updated.id,
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        changeType: "profile_update",
+        departmentId: updated.departmentId,
+        positionId: updated.positionId,
+        managerId: updated.managerId,
+        jobTitle: updated.jobTitle,
+        location: updated.location,
+        employmentType: updated.employmentType,
+        status: updated.status,
+        reason: typeof req.body?.changeReason === "string" ? req.body.changeReason : "Master profile update",
+        approvedByUserId: membership.userId,
+        changedByUserId: membership.userId,
+        tx: tx as any,
+      });
+    }
 
     await recordAuditEvent({
       organizationId: organization.id,
@@ -1236,320 +1638,93 @@ router.get(["/agents/status", "/agent-provider/status"], (_req, res): void => {
   );
 });
 
-function parseEmployeeCsv(csvText: string) {
-  const lines = csvText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  if (lines.length === 0) return [];
-  const rawHeaders = lines[0]!.split(",").map((h) => h.trim().toLowerCase());
-  const hasHeader = rawHeaders.includes("firstname") || rawHeaders.includes("first_name") || rawHeaders.includes("employeenumber") || rawHeaders.includes("employee_number");
-  const startIdx = hasHeader ? 1 : 0;
-
-  return lines.slice(startIdx).map((line, i) => {
-    const cols = line.split(",").map((c) => c.trim());
-    const idxMap = (aliases: string[], fallbackIdx: number) => {
-      if (!hasHeader) return cols[fallbackIdx] ?? "";
-      for (const a of aliases) {
-        const pos = rawHeaders.indexOf(a);
-        if (pos >= 0) return cols[pos] ?? "";
-      }
-      return cols[fallbackIdx] ?? "";
-    };
-    return {
-      rowNumber: startIdx + i + 1,
-      employeeNumber: sanitizeText(idxMap(["employeenumber", "employee_number", "emp_no"], 0), 40).toUpperCase(),
-      firstName: sanitizeText(idxMap(["firstname", "first_name"], 1), 80),
-      lastName: sanitizeText(idxMap(["lastname", "last_name"], 2), 80),
-      workEmail: sanitizeText(idxMap(["workemail", "work_email", "email"], 3), 160).toLowerCase(),
-      jobTitle: sanitizeText(idxMap(["jobtitle", "job_title", "role"], 4), 120),
-      departmentCode: sanitizeText(idxMap(["departmentcode", "department_code", "dept"], 5) || "PEOPLE", 24).toUpperCase(),
-      location: sanitizeText(idxMap(["location"], 6) || "Nairobi Production Facility", 120),
-      employmentType: sanitizeText(idxMap(["employmenttype", "employment_type"], 7) || "permanent", 30) as DemoEmployeeItem["employmentType"],
-      startDate: sanitizeText(idxMap(["startdate", "start_date"], 8) || new Date().toISOString().slice(0, 10), 20),
-    };
-  });
-}
-
-// POST /api/peopleos/employees/import-preview — Validate & Detect Duplicates Before Bulk Import
+// POST /api/peopleos/employees/import-preview — RFC-4180 Parse, Map, Validate & Issue Signed Batch Token
 router.post("/peopleos/employees/import-preview", async (req, res): Promise<void> => {
   const membership = await requireRoles(req, res, peopleManagers);
   if (!membership) return;
 
   const csvText = String(req.body?.csvText ?? "");
-  const parsed = parseEmployeeCsv(csvText);
-  if (!parsed.length) {
-    res.status(400).json({ error: "No employee CSV rows supplied." });
+  const fileName = typeof req.body?.fileName === "string" ? req.body.fileName : "bulk-import.csv";
+  const columnMapping =
+    req.body?.columnMapping && typeof req.body.columnMapping === "object"
+      ? (req.body.columnMapping as Record<string, string>)
+      : undefined;
+
+  const preview = await previewAndStageImportBatch({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actorName: membership.role,
+    csvText,
+    fileName,
+    columnMapping,
+    demoDepartments: DEMO_DEPARTMENTS_LIST,
+    demoEmployees: DEMO_EMPLOYEES_LIST,
+  });
+
+  if (!preview.ok) {
+    res.status(400).json({ error: preview.error, diagnostics: preview.diagnostics });
     return;
   }
 
-  let existingNumbers = new Set<string>();
-  let existingEmails = new Set<string>();
-  let depts = DEMO_DEPARTMENTS_LIST;
-
-  if (!process.env.DATABASE_URL) {
-    existingNumbers = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.employeeNumber.toUpperCase()));
-    existingEmails = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.workEmail.toLowerCase()));
-  } else {
-    const dbEmps = await db
-      .select({ empNo: employeesTable.employeeNumber, email: employeesTable.workEmail })
-      .from(employeesTable)
-      .where(eq(employeesTable.organizationId, membership.organizationId));
-    existingNumbers = new Set(dbEmps.map((e) => e.empNo.toUpperCase()));
-    existingEmails = new Set(dbEmps.map((e) => e.email.toLowerCase()));
-  }
-
-  const seenNumbers = new Set<string>();
-  const seenEmails = new Set<string>();
-  const validTypes = new Set(["permanent", "fixed_term", "casual", "intern"]);
-
-  const evaluated = parsed.map((row) => {
-    const errors: string[] = [];
-    if (!row.employeeNumber) errors.push("Missing employeeNumber");
-    if (!row.firstName || !row.lastName) errors.push("Missing first/last name");
-    if (!row.workEmail || !row.workEmail.includes("@")) errors.push("Invalid workEmail");
-    if (!row.jobTitle) errors.push("Missing jobTitle");
-    const dept = depts.find((d) => d.code.toUpperCase() === row.departmentCode) ?? depts[0]!;
-    const empType = validTypes.has(row.employmentType) ? row.employmentType : "permanent";
-
-    const isDuplicateExisting =
-      existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail);
-    const isDuplicateInBatch =
-      seenNumbers.has(row.employeeNumber) || seenEmails.has(row.workEmail);
-    if (isDuplicateExisting) errors.push("Duplicate existing employeeNumber or workEmail");
-    if (isDuplicateInBatch) errors.push("Duplicate within CSV batch");
-
-    if (row.employeeNumber) seenNumbers.add(row.employeeNumber);
-    if (row.workEmail) seenEmails.add(row.workEmail);
-
-    return {
-      ...row,
-      departmentId: dept.id,
-      departmentName: dept.name,
-      employmentType: empType,
-      status: isDuplicateExisting || isDuplicateInBatch ? "duplicate" : errors.length ? "error" : "valid",
-      errors,
-    };
-  });
-
-  res.json({
-    totalRows: evaluated.length,
-    validCount: evaluated.filter((r) => r.status === "valid").length,
-    duplicateCount: evaluated.filter((r) => r.status === "duplicate").length,
-    errorCount: evaluated.filter((r) => r.status === "error").length,
-    rows: evaluated,
-  });
+  res.json(preview);
 });
 
-// POST /api/peopleos/employees/import — Commit Validated Non-Duplicate CSV Employees
+// POST /api/peopleos/employees/import — Transactional Commit Verified by Server Batch + Cryptographic Token
 router.post("/peopleos/employees/import", async (req, res): Promise<void> => {
   const membership = await requireRoles(req, res, peopleManagers);
   if (!membership) return;
 
-  const csvText = String(req.body?.csvText ?? "");
-  const parsed = parseEmployeeCsv(csvText);
-  if (!parsed.length) {
-    res.status(400).json({ error: "No employee CSV rows supplied." });
+  const batchId = typeof req.body?.batchId === "string" ? req.body.batchId.trim() : "";
+  const importToken = typeof req.body?.importToken === "string" ? req.body.importToken.trim() : "";
+
+  if (!batchId || !importToken) {
+    res.status(400).json({
+      error:
+        "Verified batchId and importToken from import-preview are required. Direct unverified CSV commits are not allowed.",
+    });
     return;
   }
 
-  let existingNumbers = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.employeeNumber.toUpperCase()));
-  let existingEmails = new Set(DEMO_EMPLOYEES_LIST.map((e) => e.workEmail.toLowerCase()));
-  if (process.env.DATABASE_URL) {
-    const dbEmps = await db
-      .select({ empNo: employeesTable.employeeNumber, email: employeesTable.workEmail })
-      .from(employeesTable)
-      .where(eq(employeesTable.organizationId, membership.organizationId));
-    existingNumbers = new Set(dbEmps.map((e) => e.empNo.toUpperCase()));
-    existingEmails = new Set(dbEmps.map((e) => e.email.toLowerCase()));
-  }
-
-  const imported: any[] = [];
-  const skippedDuplicates: string[] = [];
-
-  if (!process.env.DATABASE_URL) {
-    for (const row of parsed) {
-      if (
-        !row.employeeNumber ||
-        !row.firstName ||
-        !row.lastName ||
-        !row.workEmail.includes("@") ||
-        !row.jobTitle
-      ) {
-        continue;
-      }
-      if (existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail)) {
-        skippedDuplicates.push(row.employeeNumber || row.workEmail);
-        continue;
-      }
-      existingNumbers.add(row.employeeNumber);
-      existingEmails.add(row.workEmail);
-      const dept =
-        DEMO_DEPARTMENTS_LIST.find((d) => d.code.toUpperCase() === row.departmentCode) ??
-        DEMO_DEPARTMENTS_LIST[0]!;
-      const rec: DemoEmployeeItem = {
-        id: crypto.randomUUID(),
-        employeeNumber: row.employeeNumber,
-        firstName: row.firstName,
-        lastName: row.lastName,
-        preferredName: row.firstName,
-        workEmail: row.workEmail,
-        phone: null,
-        jobTitle: row.jobTitle,
-        departmentId: dept.id,
-        departmentName: dept.name,
-        managerId: dept.managerEmployeeId ?? null,
-        managerName: dept.managerName ?? null,
-        location: row.location,
-        employmentType: (["permanent", "fixed_term", "casual", "intern"].includes(row.employmentType)
-          ? row.employmentType
-          : "permanent") as DemoEmployeeItem["employmentType"],
-        status: "active",
-        startDate: row.startDate,
-        probationEndDate: null,
-        contractEndDate: null,
-        isDemo: true,
-      };
-      DEMO_EMPLOYEES_LIST.push(rec);
-      imported.push(rec);
-    }
-
-    await recordAuditEvent({
-      organizationId: membership.organizationId,
-      actorUserId: membership.userId,
-      actor: membership.role,
-      action: "EMPLOYEE_BULK_IMPORTED",
-      targetType: "employee_batch",
-      targetId: `batch-${Date.now()}`,
-      summary: `Imported ${imported.length} employees via CSV (${skippedDuplicates.length} duplicate(s) skipped)`,
-      correlationId: req.correlationId,
-      critical: true,
-      isDemo: true,
-    });
-  } else {
-    await db.transaction(async (tx) => {
-      for (const row of parsed) {
-        if (
-          !row.employeeNumber ||
-          !row.firstName ||
-          !row.lastName ||
-          !row.workEmail.includes("@") ||
-          !row.jobTitle
-        ) {
-          continue;
-        }
-        if (existingNumbers.has(row.employeeNumber) || existingEmails.has(row.workEmail)) {
-          skippedDuplicates.push(row.employeeNumber || row.workEmail);
-          continue;
-        }
-        existingNumbers.add(row.employeeNumber);
-        existingEmails.add(row.workEmail);
-        const dept =
-          DEMO_DEPARTMENTS_LIST.find((d) => d.code.toUpperCase() === row.departmentCode) ??
-          DEMO_DEPARTMENTS_LIST[0]!;
-        const [created] = await tx
-          .insert(employeesTable)
-          .values({
-            organizationId: membership.organizationId,
-            employeeNumber: row.employeeNumber,
-            firstName: row.firstName,
-            lastName: row.lastName,
-            preferredName: row.firstName,
-            workEmail: row.workEmail,
-            jobTitle: row.jobTitle,
-            departmentId: dept.id,
-            location: row.location,
-            employmentType: row.employmentType || "permanent",
-            status: "active",
-            startDate: row.startDate,
-            isDemo: false,
-          })
-          .returning();
-        if (created) imported.push(created);
-      }
-
-      await recordAuditEvent({
-        organizationId: membership.organizationId,
-        actorUserId: membership.userId,
-        actor: membership.role,
-        action: "EMPLOYEE_BULK_IMPORTED",
-        targetType: "employee_batch",
-        targetId: `batch-${Date.now()}`,
-        summary: `Imported ${imported.length} employees via CSV (${skippedDuplicates.length} duplicate(s) skipped)`,
-        correlationId: req.correlationId,
-        critical: true,
-        isDemo: false,
-        tx,
-      });
-    });
-  }
-
-  res.status(201).json({
-    importedCount: imported.length,
-    skippedDuplicatesCount: skippedDuplicates.length,
-    skippedDuplicates,
-    imported,
+  const result = await commitImportBatch({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actorName: membership.role,
+    batchId,
+    importToken,
+    demoEmployees: DEMO_EMPLOYEES_LIST,
+    demoDepartments: DEMO_DEPARTMENTS_LIST,
   });
+
+  if (!result.ok) {
+    res.status(result.statusCode).json({ error: result.error });
+    return;
+  }
+
+  res.status(201).json(result);
 });
 
-// GET /api/peopleos/org-chart — Hierarchical Reporting Lines (DB + Demo Parity)
+// GET /api/peopleos/org-chart — Enterprise Hierarchy, Integrity Diagnostics, Position & Historical View
 router.get("/peopleos/org-chart", async (req, res): Promise<void> => {
   const access = await getReadAccess(req, res);
   if (!access || !access.membership) return;
 
-  let sourceEmployees: Array<{
-    id: string;
-    employeeNumber: string;
-    firstName: string;
-    lastName: string;
-    jobTitle: string;
-    departmentName: string;
-    managerId: string | null;
-    managerName: string | null;
-    status: string;
-  }> = [];
+  const viewParam = typeof req.query.view === "string" ? req.query.view : "company";
+  const view = (["company", "department", "manager", "employee", "position"].includes(viewParam)
+    ? viewParam
+    : "company") as OrgChartViewMode;
 
-  if (!process.env.DATABASE_URL) {
-    sourceEmployees = DEMO_EMPLOYEES_LIST;
-  } else {
-    const [dbEmps, dbDepts] = await Promise.all([
-      db
-        .select()
-        .from(employeesTable)
-        .where(eq(employeesTable.organizationId, access.membership.organizationId)),
-      db
-        .select()
-        .from(departmentsTable)
-        .where(eq(departmentsTable.organizationId, access.membership.organizationId)),
-    ]);
-    const deptNameMap = new Map(dbDepts.map((d) => [d.id, d.name]));
-    const empNameMap = new Map(dbEmps.map((e) => [e.id, `${e.firstName} ${e.lastName}`]));
-    sourceEmployees = dbEmps.map((e) => ({
-      id: e.id,
-      employeeNumber: e.employeeNumber,
-      firstName: e.firstName,
-      lastName: e.lastName,
-      jobTitle: e.jobTitle,
-      departmentName: deptNameMap.get(e.departmentId) ?? "General Operations",
-      managerId: e.managerId,
-      managerName: e.managerId ? empNameMap.get(e.managerId) ?? null : null,
-      status: e.status,
-    }));
-  }
+  const chart = await buildOrganizationChart({
+    organizationId: access.membership.organizationId,
+    view,
+    departmentId: typeof req.query.departmentId === "string" ? req.query.departmentId : undefined,
+    status: typeof req.query.status === "string" ? req.query.status : undefined,
+    location: typeof req.query.location === "string" ? req.query.location : undefined,
+    asOf: typeof req.query.asOf === "string" ? req.query.asOf : undefined,
+    demoEmployees: DEMO_EMPLOYEES_LIST,
+    demoDepartments: DEMO_DEPARTMENTS_LIST,
+  });
 
-  const nodes = sourceEmployees.map((e) => ({
-    id: e.id,
-    employeeNumber: e.employeeNumber,
-    fullName: `${e.firstName} ${e.lastName}`,
-    jobTitle: e.jobTitle,
-    departmentName: e.departmentName,
-    managerId: e.managerId,
-    managerName: e.managerName,
-    status: e.status,
-    directReportsCount: sourceEmployees.filter((c) => c.managerId === e.id).length,
-  }));
-
-  res.json({ totalNodes: nodes.length, nodes });
+  res.json(chart);
 });
 
 export default router;

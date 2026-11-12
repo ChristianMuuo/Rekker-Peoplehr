@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { EmployeeStatus } from './employeeStatus';
+import type { ListEmployeesEmploymentType } from './listEmployeesEmploymentType';
+import type { ListEmployeesSortBy } from './listEmployeesSortBy';
+import type { ListEmployeesSortDir } from './listEmployeesSortDir';
 
 export type ListEmployeesParams = {
 /**
@@ -14,6 +17,13 @@ export type ListEmployeesParams = {
 search?: string;
 departmentId?: string;
 status?: EmployeeStatus;
+employmentType?: ListEmployeesEmploymentType;
+/**
+ * @maxLength 120
+ */
+location?: string;
+sortBy?: ListEmployeesSortBy;
+sortDir?: ListEmployeesSortDir;
 /**
  * @minimum 1
  */

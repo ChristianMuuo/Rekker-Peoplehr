@@ -16,6 +16,7 @@ import {
 import { logger } from "../lib/logger";
 
 export { MODULE_PERMISSION_MATRIX, PEOPLEOS_ROLES };
+export type { MembershipRecord };
 
 export const PEOPLEOS_ORGANIZATION_ID =
   process.env.PEOPLEOS_ORGANIZATION_ID ?? "rekker-demo";

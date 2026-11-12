@@ -39,3 +39,4 @@ Rekker PeopleOS separates presentation, transport security, domain authorization
 ## 3. Stale Domain Terminology Cleanup
 
 Removed legacy `"Rekker Breweries Kenya Ltd"` fallback org naming, `"Brewmaster"` / `"Industrial Brewing Thermal Safety Kit"` fixture drift, and `rekker.co.ke` M-Pesa callback URLs across backend middleware, payment adapter, mock stores, and test fixtures.
+

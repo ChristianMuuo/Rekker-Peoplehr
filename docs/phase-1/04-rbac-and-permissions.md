@@ -21,3 +21,4 @@ All 15 enterprise roles and module rules are anchored in `artifacts/api-server/s
 - **`GET /api/employees/:employeeId/profile-360`**: Now queries PostgreSQL `employeesTable` when `DATABASE_URL` is configured, applies `canViewSensitiveStatutoryIdentifiers` masking rules, and eliminates hardcoded realistic test strings.
 - **`GET /api/auth/context`**: Now permits all 15 valid roles rather than rejecting `hr_director`, `hr_officer`, `finance_manager`, `production_supervisor`, `warehouse_supervisor`, and `sales_manager` with `403`.
 - **`GET /api/documents` & `/api/documents/expiring`**: Scopes document queries cleanly so non-privileged users never inspect colleagues' files.
+

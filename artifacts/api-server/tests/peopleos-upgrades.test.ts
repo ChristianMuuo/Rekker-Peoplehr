@@ -25,9 +25,9 @@ describe("Rekker PeopleOS Upgrades: Bulk CSV, Org Chart, Confidential HR Cases, 
       const empEmail = `csv.worker.${uniqueSuffix}@rekker-demo.invalid`;
       const csvText = [
         "employeeNumber,firstName,lastName,workEmail,jobTitle,departmentCode,location,employmentType,startDate",
-        `${empNo},Wambui,Kamau,${empEmail},Quality Lab Technician,PROD,Nairobi Production Facility,permanent,2026-04-01`,
-        `${empNo},Wambui,Kamau,${empEmail},Quality Lab Technician,PROD,Nairobi Production Facility,permanent,2026-04-01`,
-        `REK-BAD-${uniqueSuffix},Missing,Email,invalid-email,Packaging Operator,PROD,Nairobi Production Facility,permanent,2026-04-01`,
+        `${empNo},Wambui,Kamau,${empEmail},Quality Lab Technician,MFG,Nairobi Production Facility,permanent,2026-04-01`,
+        `${empNo},Wambui,Kamau,${empEmail},Quality Lab Technician,MFG,Nairobi Production Facility,permanent,2026-04-01`,
+        `REK-BAD-${uniqueSuffix},Missing,Email,invalid-email,Packaging Operator,MFG,Nairobi Production Facility,permanent,2026-04-01`,
       ].join("\n");
 
       const previewRes = await fetch(`${baseUrl}/api/peopleos/employees/import-preview`, {
@@ -51,7 +51,10 @@ describe("Rekker PeopleOS Upgrades: Bulk CSV, Org Chart, Confidential HR Cases, 
           "content-type": "application/json",
           "x-peopleos-role": "hr_admin",
         },
-        body: JSON.stringify({ csvText }),
+        body: JSON.stringify({
+          batchId: preview.batchId,
+          importToken: preview.importToken,
+        }),
       });
       assert.strictEqual(commitRes.status, 201);
       const committed = (await commitRes.json()) as any;

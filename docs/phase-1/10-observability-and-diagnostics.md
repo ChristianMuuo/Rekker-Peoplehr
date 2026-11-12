@@ -11,3 +11,4 @@
 - `logger.ts`: Pino structured JSON logger with automatic redaction on auth headers, cookies, session/demo headers, PII keys, and environment secret names.
 - `pino-http` binds every HTTP log entry to `req.correlationId`.
 - Security telemetry logs structured warning event `SECURITY_DECRYPT_FAILURE` on enc:v1/enc:v2 envelope corruption or key mismatch, and `AUDIT_PERSISTENCE_FAILED` on critical audit sink failures.
+

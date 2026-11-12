@@ -29,6 +29,7 @@ import type {
   EmployeeInput,
   EmployeePage,
   EmployeeUpdate,
+  GetPeopleOsOrgChartParams,
   HealthStatus,
   LeaveBalance,
   LeaveDecisionInput,
@@ -1554,4 +1555,1160 @@ export function useGetAgentProviderStatus<TData = Awaited<ReturnType<typeof getA
 
 
 
+
+export const getReadinessCheckUrl = () => {
+
+
+
+
+  return `/api/readyz`
+}
+
+/**
+ * @summary Verify dependency, database, and runtime configuration readiness
+ */
+export const readinessCheck = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getReadinessCheckUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getReadinessCheckQueryKey = () => {
+    return [
+    `/api/readyz`
+    ] as const;
+    }
+
+
+export const getReadinessCheckQueryOptions = <TData = Awaited<ReturnType<typeof readinessCheck>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof readinessCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getReadinessCheckQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof readinessCheck>>> = ({ signal }) => readinessCheck({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof readinessCheck>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ReadinessCheckQueryResult = NonNullable<Awaited<ReturnType<typeof readinessCheck>>>
+export type ReadinessCheckQueryError = ErrorType<void>
+
+
+/**
+ * @summary Verify dependency, database, and runtime configuration readiness
+ */
+
+export function useReadinessCheck<TData = Awaited<ReturnType<typeof readinessCheck>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof readinessCheck>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getReadinessCheckQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminDiagnosticsUrl = () => {
+
+
+
+
+  return `/api/admin/diagnostics`
+}
+
+/**
+ * @summary Retrieve subsystem health and integration registry for admins/auditors
+ */
+export const getAdminDiagnostics = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetAdminDiagnosticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminDiagnosticsQueryKey = () => {
+    return [
+    `/api/admin/diagnostics`
+    ] as const;
+    }
+
+
+export const getGetAdminDiagnosticsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminDiagnostics>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDiagnostics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminDiagnosticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminDiagnostics>>> = ({ signal }) => getAdminDiagnostics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminDiagnostics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminDiagnosticsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminDiagnostics>>>
+export type GetAdminDiagnosticsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Retrieve subsystem health and integration registry for admins/auditors
+ */
+
+export function useGetAdminDiagnostics<TData = Awaited<ReturnType<typeof getAdminDiagnostics>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDiagnostics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminDiagnosticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSecurityStatusUrl = () => {
+
+
+
+
+  return `/api/security/status`
+}
+
+/**
+ * @summary Inspect active encryption standard, session MFA, and ODPC safeguards
+ */
+export const getSecurityStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetSecurityStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSecurityStatusQueryKey = () => {
+    return [
+    `/api/security/status`
+    ] as const;
+    }
+
+
+export const getGetSecurityStatusQueryOptions = <TData = Awaited<ReturnType<typeof getSecurityStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSecurityStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSecurityStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSecurityStatus>>> = ({ signal }) => getSecurityStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSecurityStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSecurityStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getSecurityStatus>>>
+export type GetSecurityStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Inspect active encryption standard, session MFA, and ODPC safeguards
+ */
+
+export function useGetSecurityStatus<TData = Awaited<ReturnType<typeof getSecurityStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSecurityStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSecurityStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetEmployeeProfile360Url = (employeeId: string,) => {
+
+
+
+
+  return `/api/employees/${employeeId}/profile-360`
+}
+
+/**
+ * @summary Get authorization-filtered 360 intelligence profile for an employee
+ */
+export const getEmployeeProfile360 = async (employeeId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetEmployeeProfile360Url(employeeId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEmployeeProfile360QueryKey = (employeeId: string,) => {
+    return [
+    `/api/employees/${employeeId}/profile-360`
+    ] as const;
+    }
+
+
+export const getGetEmployeeProfile360QueryOptions = <TData = Awaited<ReturnType<typeof getEmployeeProfile360>>, TError = ErrorType<void>>(employeeId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEmployeeProfile360>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEmployeeProfile360QueryKey(employeeId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEmployeeProfile360>>> = ({ signal }) => getEmployeeProfile360(employeeId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: employeeId !== null && employeeId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEmployeeProfile360>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEmployeeProfile360QueryResult = NonNullable<Awaited<ReturnType<typeof getEmployeeProfile360>>>
+export type GetEmployeeProfile360QueryError = ErrorType<void>
+
+
+/**
+ * @summary Get authorization-filtered 360 intelligence profile for an employee
+ */
+
+export function useGetEmployeeProfile360<TData = Awaited<ReturnType<typeof getEmployeeProfile360>>, TError = ErrorType<void>>(
+ employeeId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEmployeeProfile360>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEmployeeProfile360QueryOptions(employeeId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListHrCasesUrl = () => {
+
+
+
+
+  return `/api/hr-cases`
+}
+
+/**
+ * @summary List confidential HR cases scoped strictly by confidentiality firewall
+ */
+export const listHrCases = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getListHrCasesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListHrCasesQueryKey = () => {
+    return [
+    `/api/hr-cases`
+    ] as const;
+    }
+
+
+export const getListHrCasesQueryOptions = <TData = Awaited<ReturnType<typeof listHrCases>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHrCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListHrCasesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHrCases>>> = ({ signal }) => listHrCases({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listHrCases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListHrCasesQueryResult = NonNullable<Awaited<ReturnType<typeof listHrCases>>>
+export type ListHrCasesQueryError = ErrorType<void>
+
+
+/**
+ * @summary List confidential HR cases scoped strictly by confidentiality firewall
+ */
+
+export function useListHrCases<TData = Awaited<ReturnType<typeof listHrCases>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHrCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListHrCasesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWorkforceErpExecutiveSummaryUrl = () => {
+
+
+
+
+  return `/api/workforce-erp/executive-summary`
+}
+
+/**
+ * @summary Consolidated staffing, payroll, and overtime readiness metrics across operational units
+ */
+export const getWorkforceErpExecutiveSummary = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetWorkforceErpExecutiveSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkforceErpExecutiveSummaryQueryKey = () => {
+    return [
+    `/api/workforce-erp/executive-summary`
+    ] as const;
+    }
+
+
+export const getGetWorkforceErpExecutiveSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getWorkforceErpExecutiveSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceErpExecutiveSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkforceErpExecutiveSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkforceErpExecutiveSummary>>> = ({ signal }) => getWorkforceErpExecutiveSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkforceErpExecutiveSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkforceErpExecutiveSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkforceErpExecutiveSummary>>>
+export type GetWorkforceErpExecutiveSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Consolidated staffing, payroll, and overtime readiness metrics across operational units
+ */
+
+export function useGetWorkforceErpExecutiveSummary<TData = Awaited<ReturnType<typeof getWorkforceErpExecutiveSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceErpExecutiveSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkforceErpExecutiveSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSelfServiceMeUrl = () => {
+
+
+
+
+  return `/api/peopleos/me`
+}
+
+/**
+ * @summary Self-service workspace strictly scoped to the authenticated user's linked employeeId
+ */
+export const getSelfServiceMe = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetSelfServiceMeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSelfServiceMeQueryKey = () => {
+    return [
+    `/api/peopleos/me`
+    ] as const;
+    }
+
+
+export const getGetSelfServiceMeQueryOptions = <TData = Awaited<ReturnType<typeof getSelfServiceMe>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSelfServiceMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSelfServiceMeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSelfServiceMe>>> = ({ signal }) => getSelfServiceMe({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSelfServiceMe>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSelfServiceMeQueryResult = NonNullable<Awaited<ReturnType<typeof getSelfServiceMe>>>
+export type GetSelfServiceMeQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Self-service workspace strictly scoped to the authenticated user's linked employeeId
+ */
+
+export function useGetSelfServiceMe<TData = Awaited<ReturnType<typeof getSelfServiceMe>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSelfServiceMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSelfServiceMeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetManagerWorkspaceUrl = () => {
+
+
+
+
+  return `/api/peopleos/manager/workspace`
+}
+
+/**
+ * @summary Manager direct-report workspace scoped by server-enforced reporting relationships
+ */
+export const getManagerWorkspace = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetManagerWorkspaceUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetManagerWorkspaceQueryKey = () => {
+    return [
+    `/api/peopleos/manager/workspace`
+    ] as const;
+    }
+
+
+export const getGetManagerWorkspaceQueryOptions = <TData = Awaited<ReturnType<typeof getManagerWorkspace>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getManagerWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetManagerWorkspaceQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getManagerWorkspace>>> = ({ signal }) => getManagerWorkspace({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getManagerWorkspace>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetManagerWorkspaceQueryResult = NonNullable<Awaited<ReturnType<typeof getManagerWorkspace>>>
+export type GetManagerWorkspaceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Manager direct-report workspace scoped by server-enforced reporting relationships
+ */
+
+export function useGetManagerWorkspace<TData = Awaited<ReturnType<typeof getManagerWorkspace>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getManagerWorkspace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetManagerWorkspaceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListPositionsUrl = () => {
+
+
+
+
+  return `/api/peopleos/positions`
+}
+
+/**
+ * @summary Position and establishment register with headcount vs vacancy reconciliation
+ */
+export const listPositions = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getListPositionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPositionsQueryKey = () => {
+    return [
+    `/api/peopleos/positions`
+    ] as const;
+    }
+
+
+export const getListPositionsQueryOptions = <TData = Awaited<ReturnType<typeof listPositions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPositionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPositions>>> = ({ signal }) => listPositions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPositions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPositionsQueryResult = NonNullable<Awaited<ReturnType<typeof listPositions>>>
+export type ListPositionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Position and establishment register with headcount vs vacancy reconciliation
+ */
+
+export function useListPositions<TData = Awaited<ReturnType<typeof listPositions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPositions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPositionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePositionUrl = () => {
+
+
+
+
+  return `/api/peopleos/positions`
+}
+
+/**
+ * @summary Create a budgeted establishment position
+ */
+export const createPosition = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCreatePositionUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCreatePositionMutationKey = () => ['createPosition'] as const;
+
+export const getCreatePositionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPosition>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPosition>>, TError,void, TContext> => {
+
+const mutationKey = getCreatePositionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPosition>>, void> = () => {
+
+
+          return  createPosition(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePositionMutationResult = NonNullable<Awaited<ReturnType<typeof createPosition>>>
+
+    export type CreatePositionMutationError = ErrorType<unknown>
+
+
+    /**
+ * @summary Create a budgeted establishment position
+ */
+export const useCreatePosition = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPosition>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPosition>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getCreatePositionMutationOptions(options));
+    }
+
+export const getGetPeopleOsOrgChartUrl = (params?: GetPeopleOsOrgChartParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/peopleos/org-chart?${stringifiedParams}` : `/api/peopleos/org-chart`
+}
+
+/**
+ * @summary Multi-view organization chart with cycle detection, span of control, and historical asOf snapshot
+ */
+export const getPeopleOsOrgChart = async (params?: GetPeopleOsOrgChartParams, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetPeopleOsOrgChartUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPeopleOsOrgChartQueryKey = (params?: GetPeopleOsOrgChartParams,) => {
+    return [
+    `/api/peopleos/org-chart`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPeopleOsOrgChartQueryOptions = <TData = Awaited<ReturnType<typeof getPeopleOsOrgChart>>, TError = ErrorType<unknown>>(params?: GetPeopleOsOrgChartParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPeopleOsOrgChart>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPeopleOsOrgChartQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPeopleOsOrgChart>>> = ({ signal }) => getPeopleOsOrgChart(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPeopleOsOrgChart>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPeopleOsOrgChartQueryResult = NonNullable<Awaited<ReturnType<typeof getPeopleOsOrgChart>>>
+export type GetPeopleOsOrgChartQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Multi-view organization chart with cycle detection, span of control, and historical asOf snapshot
+ */
+
+export function useGetPeopleOsOrgChart<TData = Awaited<ReturnType<typeof getPeopleOsOrgChart>>, TError = ErrorType<unknown>>(
+ params?: GetPeopleOsOrgChartParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPeopleOsOrgChart>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPeopleOsOrgChartQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWorkforceAnalyticsUrl = () => {
+
+
+
+
+  return `/api/peopleos/analytics/workforce`
+}
+
+/**
+ * @summary People Operations workforce analytics with small-group privacy suppression
+ */
+export const getWorkforceAnalytics = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetWorkforceAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkforceAnalyticsQueryKey = () => {
+    return [
+    `/api/peopleos/analytics/workforce`
+    ] as const;
+    }
+
+
+export const getGetWorkforceAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getWorkforceAnalytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkforceAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkforceAnalytics>>> = ({ signal }) => getWorkforceAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkforceAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkforceAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkforceAnalytics>>>
+export type GetWorkforceAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary People Operations workforce analytics with small-group privacy suppression
+ */
+
+export function useGetWorkforceAnalytics<TData = Awaited<ReturnType<typeof getWorkforceAnalytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkforceAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkforceAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetKenyaComplianceReadinessUrl = () => {
+
+
+
+
+  return `/api/peopleos/compliance/kenya-readiness`
+}
+
+/**
+ * @summary Kenyan Employment Act and ODPC General Regulations readiness report
+ */
+export const getKenyaComplianceReadiness = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getGetKenyaComplianceReadinessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetKenyaComplianceReadinessQueryKey = () => {
+    return [
+    `/api/peopleos/compliance/kenya-readiness`
+    ] as const;
+    }
+
+
+export const getGetKenyaComplianceReadinessQueryOptions = <TData = Awaited<ReturnType<typeof getKenyaComplianceReadiness>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKenyaComplianceReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetKenyaComplianceReadinessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getKenyaComplianceReadiness>>> = ({ signal }) => getKenyaComplianceReadiness({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getKenyaComplianceReadiness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetKenyaComplianceReadinessQueryResult = NonNullable<Awaited<ReturnType<typeof getKenyaComplianceReadiness>>>
+export type GetKenyaComplianceReadinessQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Kenyan Employment Act and ODPC General Regulations readiness report
+ */
+
+export function useGetKenyaComplianceReadiness<TData = Awaited<ReturnType<typeof getKenyaComplianceReadiness>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getKenyaComplianceReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetKenyaComplianceReadinessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListWorkCalendarsUrl = () => {
+
+
+
+
+  return `/api/peopleos/work-calendars`
+}
+
+/**
+ * @summary List org and location work calendars (rest days, timezone, public holidays)
+ */
+export const listWorkCalendars = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getListWorkCalendarsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWorkCalendarsQueryKey = () => {
+    return [
+    `/api/peopleos/work-calendars`
+    ] as const;
+    }
+
+
+export const getListWorkCalendarsQueryOptions = <TData = Awaited<ReturnType<typeof listWorkCalendars>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkCalendars>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWorkCalendarsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWorkCalendars>>> = ({ signal }) => listWorkCalendars({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWorkCalendars>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWorkCalendarsQueryResult = NonNullable<Awaited<ReturnType<typeof listWorkCalendars>>>
+export type ListWorkCalendarsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List org and location work calendars (rest days, timezone, public holidays)
+ */
+
+export function useListWorkCalendars<TData = Awaited<ReturnType<typeof listWorkCalendars>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkCalendars>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWorkCalendarsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveWorkCalendarUrl = () => {
+
+
+
+
+  return `/api/peopleos/work-calendars`
+}
+
+/**
+ * @summary Save or update a work calendar and holiday schedule
+ */
+export const saveWorkCalendar = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getSaveWorkCalendarUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSaveWorkCalendarMutationKey = () => ['saveWorkCalendar'] as const;
+
+export const getSaveWorkCalendarMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveWorkCalendar>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveWorkCalendar>>, TError,void, TContext> => {
+
+const mutationKey = getSaveWorkCalendarMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveWorkCalendar>>, void> = () => {
+
+
+          return  saveWorkCalendar(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveWorkCalendarMutationResult = NonNullable<Awaited<ReturnType<typeof saveWorkCalendar>>>
+
+    export type SaveWorkCalendarMutationError = ErrorType<unknown>
+
+
+    /**
+ * @summary Save or update a work calendar and holiday schedule
+ */
+export const useSaveWorkCalendar = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveWorkCalendar>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveWorkCalendar>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSaveWorkCalendarMutationOptions(options));
+    }
 

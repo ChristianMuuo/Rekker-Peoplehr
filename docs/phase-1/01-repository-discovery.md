@@ -33,3 +33,4 @@ Direct HTTP checks confirmed the two launched Rekker digital properties are oper
   8. `mpesaService.ts` fell back B2C `QueueTimeOutURL`/`ResultURL` to `rekker.co.ke` and lacked fetch timeouts.
   9. Missing `.env.example`, `.github/workflows/ci.yml`, startup config validator, Pino PII log redaction, and `/api/readyz` / `/api/admin/diagnostics`.
   10. `docker info` showed Linux Docker daemon unavailable on the Windows host, so PostgreSQL SQL migrations require manual execution in an active Postgres target environment.
+

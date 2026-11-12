@@ -23,3 +23,4 @@
   - `POST /api/payroll/runs`, `POST /api/payroll/approve`, `POST /api/payroll/runs/:runId/disburse-mpesa`
   - `POST /api/documents`
   - (`POST /api/leave-requests/:requestId/decision` already executed transactionally)
+

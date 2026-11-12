@@ -17,3 +17,4 @@ Executed `pnpm audit --audit-level=moderate` on Windows workspace:
 - **Single Package Manager Guard:** Root `package.json` `preinstall` hook removes accidental `package-lock.json` / `yarn.lock` files and enforces `pnpm`.
 - **Deferral Rationale:** Upgrading Zod 3 -> 4 impacts all generated schemas (`lib/api-zod`, `orval.config.ts`) and Express/Vite transitive pins without security patches in `pnpm-lock.yaml` would risk destabilizing Phase 1 API stability; tracked cleanly for controlled patch-window lockfile updates (`pnpm up` + full CI verification).
 - **Secrets & Credential Hygiene:** `.gitignore` excludes `.env*` files; `.env.example` contains placeholder templates only; Pino redaction protects runtime logs from secret emission.
+

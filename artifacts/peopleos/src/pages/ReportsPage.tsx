@@ -4,6 +4,7 @@ import { Download, Printer } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useGetPeopleOsOverview, useListDepartments, useListEmployees } from '@workspace/api-client-react';
 import { apiGet } from '../lib/api';
+import { PeopleAnalyticsAndComplianceSection } from '@/components/phase2/PeopleAnalyticsAndComplianceSection';
 
 export function ReportsPage() {
   const overview = useGetPeopleOsOverview();
@@ -90,6 +91,8 @@ export function ReportsPage() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      <PeopleAnalyticsAndComplianceSection />
     </div>
   );
 }

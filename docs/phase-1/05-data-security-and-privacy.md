@@ -21,3 +21,4 @@
 - Strict extension allowlist (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.csv`, `.docx`, `.xlsx`) matched against verified MIME types (`DOCUMENT_MIME_BY_EXT`).
 - Size bounds (`1 byte` to `10 MB`).
 - Header magic-byte validation (`%PDF-`, PNG header, JPEG SOI `FF D8 FF`, OOXML `PK`) when file sample bytes are supplied, plus SHA-256 content checksum computation (`checksumSha256`) stored alongside uploader attribution (`uploadedByUserId`).
+

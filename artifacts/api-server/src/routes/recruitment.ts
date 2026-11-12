@@ -15,6 +15,9 @@ import {
   PEOPLEOS_ROLES,
   requireRoles,
 } from "../middlewares/peopleosAccess";
+import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "./peopleos";
+import { DEMO_LIFECYCLE_TASKS } from "./onboarding";
+import { convertCandidateToEmployee } from "../services/lifecycleService";
 
 const router: IRouter = Router();
 
@@ -25,7 +28,7 @@ const recruiterRoles = [
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
-let REQUISITIONS = [
+export let REQUISITIONS = [
   {
     id: "req_01",
     organizationId: "rekker-demo",
@@ -96,7 +99,7 @@ export async function getPublicJobPostings() {
   }));
 }
 
-let CANDIDATES = [
+export let CANDIDATES = [
   {
     id: "cand_01",
     organizationId: "rekker-demo",
@@ -196,7 +199,7 @@ router.post("/recruitment/requisitions", async (req: Request, res: Response) => 
   const membership = await requireRoles(req, res, recruiterRoles);
   if (!membership) return;
 
-  const { title, departmentId, location, minSalary, maxSalary, openings, description } =
+  const { title, departmentId, positionId, location, minSalary, maxSalary, openings, description } =
     req.body ?? {};
   const cleanTitle = sanitizeText(title, 160);
   if (!cleanTitle) {
@@ -204,11 +207,15 @@ router.post("/recruitment/requisitions", async (req: Request, res: Response) => 
     return;
   }
 
+  const cleanPositionId =
+    typeof positionId === "string" && positionId.trim() ? positionId.trim() : null;
+
   const newReq = {
     id: `req_${Date.now()}`,
     organizationId: membership.organizationId,
     title: cleanTitle,
     departmentId: departmentId || "20000000-0000-4000-8000-000000000001",
+    positionId: cleanPositionId,
     departmentName: "Operations",
     location: sanitizeText(location || "Nairobi Industrial Area Plant", 120),
     employmentType: "Full-time Permanent",
@@ -229,6 +236,7 @@ router.post("/recruitment/requisitions", async (req: Request, res: Response) => 
       .values({
         organizationId: membership.organizationId,
         departmentId: newReq.departmentId,
+        positionId: cleanPositionId,
         title: newReq.title,
         location: newReq.location,
         employmentType: newReq.employmentType,
@@ -595,7 +603,15 @@ router.post("/recruitment/match", async (req: Request, res: Response) => {
       minExperienceYears: 4,
       candidates: scopedCands,
     });
-    res.json(mlResult);
+    res.json({
+      ...mlResult,
+      nonDiscriminationPolicy: {
+        statute: "Kenya Employment Act Cap 226 Section 5 (Equality of Opportunity)",
+        explanationRequired: true,
+        humanReviewRequired: true,
+        note: "Scores are strictly derived from job criteria (skills overlap, stated experience years, and scorecard ratings). Protected demographic attributes are excluded and final hiring decisions require human signoff.",
+      },
+    });
   } catch (err) {
     res.status(503).json({
       error: "Candidate matching ML engine unavailable.",
@@ -603,5 +619,65 @@ router.post("/recruitment/match", async (req: Request, res: Response) => {
     });
   }
 });
+
+// POST /api/recruitment/candidates/:candidateId/convert-to-employee — Idempotent Transactional Hire
+router.post(
+  "/recruitment/candidates/:candidateId/convert-to-employee",
+  async (req: Request, res: Response) => {
+    const membership = await requireRoles(req, res, recruiterRoles);
+    if (!membership) return;
+
+    const candidateId = String(req.params.candidateId ?? "");
+    const {
+      startDate,
+      employeeNumber,
+      workEmail,
+      employmentType,
+      positionId,
+      managerId,
+      onboardingTemplateId,
+      probationMonths,
+      contractEndDate,
+      offerNotes,
+    } = req.body ?? {};
+
+    if (!startDate || typeof startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      res.status(400).json({ error: "Valid startDate (YYYY-MM-DD) is required." });
+      return;
+    }
+
+    const result = await convertCandidateToEmployee({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actorName: membership.role,
+      candidateId,
+      startDate,
+      employeeNumber,
+      workEmail,
+      employmentType,
+      positionId,
+      managerId,
+      onboardingTemplateId,
+      probationMonths: probationMonths !== undefined ? Number(probationMonths) : 3,
+      contractEndDate: contractEndDate ?? null,
+      offerNotes: offerNotes ?? null,
+      demoCandidates: CANDIDATES,
+      demoRequisitions: REQUISITIONS,
+      demoEmployees: DEMO_EMPLOYEES_LIST,
+      demoDepartments: DEMO_DEPARTMENTS_LIST,
+      demoOnboardingTasks: DEMO_LIFECYCLE_TASKS,
+    });
+
+    if (!result.ok) {
+      res.status(result.statusCode).json({
+        error: result.error,
+        ...(result.existingEmployeeId ? { existingEmployeeId: result.existingEmployeeId } : {}),
+      });
+      return;
+    }
+
+    res.status(201).json(result);
+  },
+);
 
 export default router;

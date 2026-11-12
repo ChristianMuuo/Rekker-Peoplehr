@@ -21,3 +21,4 @@ In `getPeopleOsOrganization()`:
 ## 3. Frontend Authentication Sync (`artifacts/peopleos/src/auth.tsx`)
 
 - `DemoAuthProvider` supplies synthetic `@rekker-demo.invalid` persona headers exclusively via `setDemoAuthHeadersProvider`, synchronizes `x-peopleos-role` / `x-peopleos-user-id` cleanly with `customFetch`, and supports full client-side sign-out state propagation (`x-peopleos-auth: signed-out`) for verifiable UI access-control testing.
+

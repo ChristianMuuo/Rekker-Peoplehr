@@ -58,8 +58,12 @@ export function DocumentsPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setContractTemplateEmpId(employees.data?.items?.[0]?.id ?? '10000000-0000-4000-8000-000000000001')}
-            className="btn btn-secondary text-xs"
+            disabled={!employees.data?.items?.[0]?.id}
+            onClick={() => {
+              const firstId = employees.data?.items?.[0]?.id;
+              if (firstId) setContractTemplateEmpId(firstId);
+            }}
+            className="btn btn-secondary text-xs disabled:opacity-50"
           >
             <Eye size={14} /> Employment Act §10 Template
           </button>

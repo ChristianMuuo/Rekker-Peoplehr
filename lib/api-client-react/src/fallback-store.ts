@@ -1138,6 +1138,158 @@ const FALLBACK_PAYROLL_RUNS: Array<any> = [
     };
   }
 
+  if (path === '/api/peopleos/me') {
+    const me = DEFAULT_EMPS[0]!;
+    return {
+      linked: true,
+      userId: 'static-preview-user',
+      organizationId: 'rekker-demo',
+      role: 'employee',
+      notice: null,
+      employee: me,
+      manager: DEFAULT_EMPS[1] ?? null,
+      department: DEFAULT_DEPTS.find(d => d.id === me.departmentId) ?? null,
+      completeness: { score: 85, missingRequired: [], section10Ready: true },
+      onboardingTasks: [],
+      assets: [],
+      correctionRequests: [],
+      privacyRequests: [],
+      leaveBalances: [],
+      recentAttendance: [],
+    };
+  }
+
+  if (path === '/api/peopleos/manager/workspace') {
+    return {
+      managerEmployee: DEFAULT_EMPS[1] ?? DEFAULT_EMPS[0]!,
+      directReports: DEFAULT_EMPS.slice(2, 6),
+      pendingLeaveRequests: [],
+      pendingCorrections: [],
+      pendingOnboardingTasks: [],
+    };
+  }
+
+  if (path.startsWith('/api/peopleos/org-chart')) {
+    return {
+      view: 'company',
+      asOf: null,
+      historicalGapNotice: null,
+      integrityAlerts: [],
+      departments: DEFAULT_DEPTS,
+      nodes: DEFAULT_EMPS.map(e => ({
+        id: e.id,
+        employeeNumber: e.employeeNumber,
+        name: `${e.firstName} ${e.lastName}`,
+        jobTitle: e.jobTitle,
+        departmentId: e.departmentId,
+        departmentName: e.departmentName,
+        managerId: e.managerId ?? null,
+        location: e.location,
+        status: e.status,
+        employmentType: e.employmentType,
+        directReportCount: DEFAULT_EMPS.filter(r => r.managerId === e.id).length,
+      })),
+    };
+  }
+
+  if (path === '/api/peopleos/positions') {
+    return {
+      summary: {
+        totalApprovedPositions: DEFAULT_DEPTS.reduce((a, d) => a + d.budgetedPositions, 0),
+        occupiedPositions: DEFAULT_EMPS.length,
+        openVacancies: Math.max(0, DEFAULT_DEPTS.reduce((a, d) => a + d.budgetedPositions, 0) - DEFAULT_EMPS.length),
+        activeHeadcount: DEFAULT_EMPS.filter(e => e.status === 'active').length,
+      },
+      items: DEFAULT_EMPS.map((e, idx) => ({
+        id: `pos-${idx + 1}`,
+        positionCode: `POS-${100 + idx}`,
+        title: e.jobTitle,
+        departmentId: e.departmentId,
+        departmentName: e.departmentName,
+        location: e.location,
+        employmentType: e.employmentType,
+        status: 'occupied',
+        headcountBudget: 1,
+        incumbentEmployeeId: e.id,
+        incumbentName: `${e.firstName} ${e.lastName}`,
+      })),
+    };
+  }
+
+  if (path === '/api/peopleos/analytics/workforce' || path === '/api/peopleos/analytics/lifecycle' || path === '/api/peopleos/analytics/data-quality') {
+    return {
+      generatedAt: new Date().toISOString(),
+      privacySuppressionApplied: false,
+      smallGroupThreshold: 3,
+      historicalGapNotice: 'Static preview mode summarizes live fixtures without historical assignment snapshots.',
+      definitions: {
+        activeHeadcount: 'Employees in active, on_leave, or probation statuses.',
+        section10Completeness: 'Percentage of Kenyan Employment Act §10 required particulars populated.',
+      },
+      totals: {
+        activeHeadcount: DEFAULT_EMPS.filter(e => e.status === 'active').length,
+        totalEmployees: DEFAULT_EMPS.length,
+        departments: DEFAULT_DEPTS.length,
+        avgCompletenessScore: 86,
+        section10ReadyCount: DEFAULT_EMPS.length,
+      },
+      byDepartment: DEFAULT_DEPTS.map(d => ({
+        departmentId: d.id,
+        departmentName: d.name,
+        headcount: DEFAULT_EMPS.filter(e => e.departmentId === d.id).length,
+        budgetedPositions: d.budgetedPositions,
+      })),
+    };
+  }
+
+  if (path === '/api/peopleos/compliance/kenya-readiness') {
+    return {
+      dateResearched: '2026-11-12',
+      requiresHrLegalReview: true,
+      disclaimer: 'Informational readiness tracking only. Does not constitute legal advice; consult qualified Kenyan legal counsel.',
+      section10Summary: { totalEmployees: DEFAULT_EMPS.length, compliantCount: DEFAULT_EMPS.length, approachingDeadlineCount: 0 },
+      privacyQueueCount: 0,
+      legalMetadata: [
+        { code: 'EMPLOYMENT_ACT_S10', title: 'Written Particulars of Employment', statute: 'Employment Act Cap 226 §10', dateResearched: '2026-11-12', summary: 'Issue written employment particulars within 2 months of start.', requiresHrLegalReview: true },
+        { code: 'EMPLOYMENT_ACT_S28', title: 'Annual Leave Statutory Reference', statute: 'Employment Act Cap 226 §28', dateResearched: '2026-11-12', summary: '21 working days reference; organization policies are never pre-seeded.', requiresHrLegalReview: true },
+        { code: 'EMPLOYMENT_ACT_S42', title: 'Probationary Contracts & Extensions', statute: 'Employment Act Cap 226 §42', dateResearched: '2026-11-12', summary: 'Max 1 extension with employee agreement; human review required.', requiresHrLegalReview: true },
+        { code: 'DPA_2019', title: 'ODPC Data Subject Rights SLA', statute: 'Data Protection Act 2019 & Regs 2021', dateResearched: '2026-11-12', summary: '7-day access & 14-day rectification/erasure SLAs with retention checks.', requiresHrLegalReview: true },
+      ],
+    };
+  }
+
+  if (path === '/api/peopleos/work-calendars') {
+    return {
+      orgTimezone: 'Africa/Nairobi',
+      items: [
+        {
+          id: 'cal-default',
+          name: 'Nairobi HQ Standard (Mon-Fri)',
+          timezone: 'Africa/Nairobi',
+          workdays: [1, 2, 3, 4, 5],
+          holidays: [
+            { date: '2026-01-01', name: "New Year's Day" },
+            { date: '2026-05-01', name: 'Labour Day' },
+            { date: '2026-06-01', name: 'Madaraka Day' },
+            { date: '2026-10-20', name: 'Mashujaa Day' },
+            { date: '2026-12-12', name: 'Jamhuri Day' },
+            { date: '2026-12-25', name: 'Christmas Day' },
+            { date: '2026-12-26', name: 'Utamaduni / Boxing Day' },
+          ],
+          isDefault: true,
+        },
+      ],
+    };
+  }
+
+  if (path === '/api/onboarding/templates' || path === '/api/onboarding/probation-and-contracts') {
+    return { items: [], templates: [], probationReviews: [], contractReminders: [] };
+  }
+
+  if (path === '/api/leave/department-coverage') {
+    return { items: [] };
+  }
+
   if (path.startsWith('/api/ml/')) {
     return {
       engine: 'Static Browser Fallback (Connect API Server + Python ML Engine for live XGBoost / Scikit-learn inference)',

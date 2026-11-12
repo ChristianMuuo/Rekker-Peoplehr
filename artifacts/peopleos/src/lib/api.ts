@@ -18,3 +18,23 @@ export async function apiPatch<T = any>(path: string, body: unknown = {}): Promi
   });
 }
 
+export async function apiGetText(path: string): Promise<string> {
+  return customFetch<string>(path, {
+    method: "GET",
+    responseType: "text",
+  });
+}
+
+export async function triggerCsvDownload(path: string, filename: string): Promise<void> {
+  const csv = await apiGetText(path);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { EmployeeStatus } from './employeeStatus';
+import type { EmployeeUpdateEmploymentType } from './employeeUpdateEmploymentType';
 
 export interface EmployeeUpdate {
   /**
@@ -19,6 +20,11 @@ export interface EmployeeUpdate {
      */
   phone?: string | null;
   /**
+     * @maxLength 254
+     * @nullable
+     */
+  personalEmail?: string | null;
+  /**
      * @minLength 1
      * @maxLength 120
      */
@@ -26,14 +32,32 @@ export interface EmployeeUpdate {
   departmentId?: string;
   /** @nullable */
   managerId?: string | null;
+  /** @nullable */
+  positionId?: string | null;
+  /** @nullable */
+  hrRepresentativeUserId?: string | null;
   /**
      * @minLength 1
      * @maxLength 120
      */
   location?: string;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  employeeCategory?: string | null;
+  employmentType?: EmployeeUpdateEmploymentType;
   status?: EmployeeStatus;
+  startDate?: Date;
+  /** @nullable */
+  contractStartDate?: Date | null;
   /** @nullable */
   probationEndDate?: Date | null;
   /** @nullable */
   contractEndDate?: Date | null;
+  /**
+     * @maxLength 80
+     * @nullable
+     */
+  timezone?: string | null;
 }

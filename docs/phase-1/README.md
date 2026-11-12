@@ -26,3 +26,4 @@ Branch: `phase-1/enterprise-foundation` (branched safely from `main` at `e1f8baa
 - [ADR 002: Database Access and Connection Pool Standardization](./adr/002-database-access-standardization.md)
 - [ADR 003: Dual-Mode Encryption Versioning & Key Ring Migration Strategy](./adr/003-dual-mode-encryption-and-migration.md)
 - [ADR 004: Fail-Closed Authentication & Controlled Static Preview Fallback](./adr/004-fail-closed-auth-and-fallback.md)
+

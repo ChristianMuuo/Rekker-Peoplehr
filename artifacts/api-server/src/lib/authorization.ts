@@ -212,3 +212,4 @@ export function canViewSensitiveStatutoryIdentifiers(
     nationalIdAndEmergency: isSelf || isHrAdmin,
   };
 }
+

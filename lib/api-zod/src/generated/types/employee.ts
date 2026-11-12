@@ -33,5 +33,18 @@ export interface Employee {
   probationEndDate?: Date | null;
   /** @nullable */
   contractEndDate?: Date | null;
+  /** @nullable */
+  personalEmail?: string | null;
+  /** @nullable */
+  positionId?: string | null;
+  /** @nullable */
+  hrRepresentativeUserId?: string | null;
+  /** @nullable */
+  employeeCategory?: string | null;
+  /** @nullable */
+  contractStartDate?: Date | null;
+  /** @nullable */
+  timezone?: string | null;
+  completenessScore?: number;
   isDemo: boolean;
 }

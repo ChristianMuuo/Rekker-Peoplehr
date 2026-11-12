@@ -9,7 +9,17 @@ import {
   PEOPLEOS_ROLES,
   requireRoles,
 } from "../middlewares/peopleosAccess";
-import { DEMO_EMPLOYEES_LIST } from "./peopleos";
+import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "./peopleos";
+import { DEMO_ASSETS } from "./assets";
+import {
+  createOnboardingTemplate,
+  decideProbationReview,
+  initiateStructuredOffboarding,
+  listOnboardingTemplates,
+  listProbationAndContracts,
+} from "../services/lifecycleService";
+import { phase2MemoryStore } from "../services/phase2MemoryStore";
+import { contractRemindersTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -34,7 +44,7 @@ interface DemoLifecycleTask {
   completedAt: string | null;
 }
 
-const DEMO_LIFECYCLE_TASKS: DemoLifecycleTask[] = [
+export const DEMO_LIFECYCLE_TASKS: DemoLifecycleTask[] = [
   { id: "task-01", organizationId: "rekker-demo", employeeId: "10000000-0000-4000-8000-000000000008", employeeName: "Faith Chebet", workflowType: "onboarding", title: "Collect & Verify KRA PIN, NSSF & SHIF Numbers", category: "Compliance", assigneeRole: "hr_admin", dueDate: "2026-01-20", completed: true, completedAt: "2026-01-20T10:00:00Z" },
   { id: "task-02", organizationId: "rekker-demo", employeeId: "10000000-0000-4000-8000-000000000008", employeeName: "Faith Chebet", workflowType: "onboarding", title: "Sign Employment Act §10 Contract & ODPC Privacy Notice", category: "Compliance", assigneeRole: "hr_admin", dueDate: "2026-01-22", completed: true, completedAt: "2026-01-22T14:00:00Z" },
   { id: "task-03", organizationId: "rekker-demo", employeeId: "10000000-0000-4000-8000-000000000008", employeeName: "Faith Chebet", workflowType: "onboarding", title: "Provision Corporate Laptop, Email & ERP Access", category: "IT & Assets", assigneeRole: "system_admin", dueDate: "2026-01-25", completed: true, completedAt: "2026-01-25T11:30:00Z" },
@@ -224,6 +234,180 @@ router.patch(
     res.json(updated);
   },
 );
+
+// ─── Workstream E: Onboarding Templates, Probation Reviews, Contract Reminders & Offboarding ──
+
+router.get("/onboarding/templates", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const items = await listOnboardingTemplates(membership.organizationId);
+  res.json({ items });
+});
+
+router.post("/onboarding/templates", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, lifecycleRoles);
+  if (!membership) return;
+
+  const { name, workflowType = "onboarding", departmentCode, employmentType, tasks } =
+    req.body ?? {};
+  if (!name || !Array.isArray(tasks) || tasks.length === 0) {
+    res.status(400).json({ error: "Template name and non-empty tasks array are required." });
+    return;
+  }
+
+  const created = await createOnboardingTemplate({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    name: sanitizeText(name, 140),
+    workflowType: workflowType === "offboarding" ? "offboarding" : "onboarding",
+    departmentCode: departmentCode ? sanitizeText(departmentCode, 30) : null,
+    employmentType: employmentType ? sanitizeText(employmentType, 30) : null,
+    tasks: tasks.map((t: any) => ({
+      title: sanitizeText(t.title, 180),
+      category: sanitizeText(t.category || "Compliance", 60),
+      assigneeRole: sanitizeText(t.assigneeRole || "hr_admin", 40),
+      dueOffsetDays: Math.max(1, Number(t.dueOffsetDays) || 5),
+    })),
+  });
+  res.status(201).json(created);
+});
+
+router.get("/onboarding/probation-and-contracts", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const data = await listProbationAndContracts(
+    membership.organizationId,
+    DEMO_EMPLOYEES_LIST,
+  );
+  res.json(data);
+});
+
+router.post(
+  "/onboarding/probation-reviews/:reviewId/decide",
+  async (req: Request, res: Response) => {
+    const membership = await requireRoles(req, res, lifecycleRoles);
+    if (!membership) return;
+
+    const { decision, extendedUntilDate, notes } = req.body ?? {};
+    if (!["confirm", "extend", "do_not_confirm"].includes(decision) || !notes) {
+      res.status(400).json({
+        error: "decision ('confirm' | 'extend' | 'do_not_confirm') and notes are required.",
+      });
+      return;
+    }
+
+    const result = await decideProbationReview({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actorName: membership.role,
+      reviewId: String(req.params.reviewId ?? ""),
+      decision,
+      extendedUntilDate,
+      notes: sanitizeText(notes, 400),
+      demoEmployees: DEMO_EMPLOYEES_LIST,
+      demoDepartments: DEMO_DEPARTMENTS_LIST,
+    });
+    if (!result.ok) {
+      res.status(result.statusCode).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  },
+);
+
+router.post(
+  "/onboarding/contract-reminders/:reminderId/action",
+  async (req: Request, res: Response) => {
+    const membership = await requireRoles(req, res, lifecycleRoles);
+    if (!membership) return;
+
+    const reminderId = String(req.params.reminderId ?? "");
+    const { actionTaken, notes } = req.body ?? {};
+    if (!actionTaken || typeof actionTaken !== "string") {
+      res.status(400).json({ error: "actionTaken is required." });
+      return;
+    }
+
+    if (process.env.DATABASE_URL) {
+      const [updated] = await db
+        .update(contractRemindersTable)
+        .set({
+          status: "reviewed",
+          actionTaken: sanitizeText(actionTaken, 80),
+          notes: sanitizeText(notes || "", 400),
+          handledByUserId: membership.userId,
+          handledAt: new Date(),
+        })
+        .where(
+          and(
+            eq(contractRemindersTable.id, reminderId),
+            eq(contractRemindersTable.organizationId, membership.organizationId),
+          ),
+        )
+        .returning();
+      if (!updated) {
+        res.status(404).json({ error: "Contract reminder not found." });
+        return;
+      }
+      res.json(updated);
+      return;
+    }
+
+    const item = phase2MemoryStore.contractReminders.find(
+      (c) => c.id === reminderId && c.organizationId === membership.organizationId,
+    );
+    if (!item) {
+      res.status(404).json({ error: "Contract reminder not found." });
+      return;
+    }
+    item.status = "reviewed";
+    item.actionTaken = sanitizeText(actionTaken, 80);
+    item.notes = sanitizeText(notes || "", 400);
+    item.handledByUserId = membership.userId;
+    item.handledAt = new Date();
+    res.json(item);
+  },
+);
+
+router.post("/onboarding/offboard", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, [
+    PEOPLEOS_ROLES.hrAdmin,
+    PEOPLEOS_ROLES.hrManager,
+    PEOPLEOS_ROLES.systemAdmin,
+  ]);
+  if (!membership) return;
+
+  const { employeeId, effectiveDate, reason, onboardingTemplateId } = req.body ?? {};
+  if (!employeeId || !effectiveDate || !reason) {
+    res.status(400).json({
+      error: "employeeId, effectiveDate (YYYY-MM-DD), and reason are required.",
+    });
+    return;
+  }
+
+  try {
+    const result = await initiateStructuredOffboarding({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actorName: membership.role,
+      employeeId: String(employeeId),
+      effectiveDate: String(effectiveDate).slice(0, 10),
+      reason: sanitizeText(reason, 400),
+      onboardingTemplateId: onboardingTemplateId ?? null,
+      demoEmployees: DEMO_EMPLOYEES_LIST,
+      demoDepartments: DEMO_DEPARTMENTS_LIST,
+      demoOnboardingTasks: DEMO_LIFECYCLE_TASKS,
+      demoAssets: DEMO_ASSETS,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({
+      error: err instanceof Error ? err.message : "Offboarding failed.",
+    });
+  }
+});
 
 export default router;
 

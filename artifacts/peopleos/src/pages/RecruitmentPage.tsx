@@ -4,6 +4,7 @@ import {
   Plus, Sparkles, Filter, ChevronRight, X, Calendar, Award, ShieldCheck
 } from 'lucide-react';
 import { apiGet, apiPatch, apiPost } from '../lib/api';
+import { ConvertCandidateModal } from '@/components/phase2/ConvertCandidateModal';
 
 const STAGES = ['applied', 'screening', 'interview', 'offer', 'hired'] as const;
 const STAGE_LABELS: Record<string, string> = {
@@ -31,6 +32,13 @@ export function RecruitmentPage() {
   const [newMaxSalary, setNewMaxSalary] = useState(210000);
   const [newOpenings, setNewOpenings] = useState(1);
   const [newDesc, setNewDesc] = useState('');
+  const [newPositionId, setNewPositionId] = useState('');
+  const [convertingCandidate, setConvertingCandidate] = useState<any | null>(null);
+
+  const positionsQuery = useQuery({
+    queryKey: ['peopleos-positions-rec'],
+    queryFn: () => apiGet<{ positions?: any[]; items?: any[] }>('/api/peopleos/positions'),
+  });
 
   // Schedule interview form
   const [intCandidateId, setIntCandidateId] = useState('cand_01');
@@ -77,9 +85,11 @@ export function RecruitmentPage() {
       maxSalary: Number(newMaxSalary),
       openings: Number(newOpenings),
       description: newDesc,
+      positionId: newPositionId || null,
     });
     setNewTitle('');
     setNewDesc('');
+    setNewPositionId('');
     setShowNewReqModal(false);
     qc.invalidateQueries({ queryKey: ['recruitment-requisitions'] });
   };
@@ -187,13 +197,30 @@ export function RecruitmentPage() {
                       </div>
                       <p className="mt-1 text-[11px] text-stone-500 line-clamp-1">{cand.jobTitle}</p>
                       <p className="mt-2 text-[10px] text-stone-600 line-clamp-2">{cand.skillsSummary}</p>
-                      <div className="mt-3 flex items-center justify-between border-t border-stone-100 pt-2">
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-1.5 border-t border-stone-100 pt-2">
                         <span className="text-[10px] text-stone-400">{cand.experienceYears}y exp</span>
-                        {stage !== 'hired' && (
-                          <button onClick={() => handleAdvanceStage(cand.id, stage)} className="flex items-center gap-1 text-[10px] font-bold text-red-700 hover:text-red-900">
-                            Advance <ChevronRight size={12} />
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {(stage === 'offer' || stage === 'hired') && !cand.convertedEmployeeId && (
+                            <button
+                              type="button"
+                              onClick={() => setConvertingCandidate(cand)}
+                              className="rounded bg-[#e8f2eb] px-1.5 py-0.5 text-[10px] font-bold text-[#34734d] hover:bg-[#d5eadb]"
+                              data-testid={`button-convert-candidate-${cand.id}`}
+                            >
+                              Convert to Employee
+                            </button>
+                          )}
+                          {cand.convertedEmployeeId && (
+                            <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-600">
+                              Converted
+                            </span>
+                          )}
+                          {stage !== 'hired' && (
+                            <button onClick={() => handleAdvanceStage(cand.id, stage)} className="flex items-center gap-1 text-[10px] font-bold text-red-700 hover:text-red-900">
+                              Advance <ChevronRight size={12} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -262,6 +289,15 @@ export function RecruitmentPage() {
             </div>
             <form onSubmit={handleCreateRequisition} className="mt-4 space-y-3 text-xs">
               <div><label className="label">Job Title</label><input required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="field" /></div>
+              <div>
+                <label className="label">Link Approved Position (Optional)</label>
+                <select value={newPositionId} onChange={e => setNewPositionId(e.target.value)} className="field">
+                  <option value="">Standalone requisition</option>
+                  {(positionsQuery.data?.positions ?? positionsQuery.data?.items ?? []).map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.positionCode} — {p.title}</option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 <div><label className="label">Min KES</label><input type="number" value={newMinSalary} onChange={e => setNewMinSalary(Number(e.target.value))} className="field" /></div>
                 <div><label className="label">Max KES</label><input type="number" value={newMaxSalary} onChange={e => setNewMaxSalary(Number(e.target.value))} className="field" /></div>
@@ -312,6 +348,12 @@ export function RecruitmentPage() {
             </div>
           </div>
         </div>
+      )}
+      {convertingCandidate && (
+        <ConvertCandidateModal
+          candidate={convertingCandidate}
+          onClose={() => setConvertingCandidate(null)}
+        />
       )}
     </div>
   );

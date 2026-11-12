@@ -35,7 +35,7 @@ interface DemoAsset {
   valueKes: number;
 }
 
-const DEMO_ASSETS: DemoAsset[] = [
+export const DEMO_ASSETS: DemoAsset[] = [
   {
     id: "asset-001",
     organizationId: "rekker-demo",
