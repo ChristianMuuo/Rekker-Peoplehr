@@ -89,7 +89,7 @@ export function DemoAuthProvider({ children }: { children: ReactNode }) {
   const currentUser = activeKey !== 'signed_out' ? (DEMO_USERS[activeKey] || DEMO_USERS.admin) : null;
 
   useEffect(() => {
-    if (import.meta.env.PROD && import.meta.env.VITE_PEOPLEOS_ALLOW_STATIC_DEMO !== 'true') {
+    if (hasValidClerkKey && import.meta.env.PROD && import.meta.env.VITE_PEOPLEOS_ALLOW_STATIC_DEMO !== 'true') {
       setDemoAuthHeadersProvider(null);
       return;
     }

@@ -424,8 +424,16 @@ export async function customFetch<T = unknown>(
       return (await parseSuccessBody(response, responseType, requestInfo)) as T;
     }
 
-    // Static SPA host (e.g. Vite/Vercel rewrite returning index.html for /api/*) when explicitly in preview fallback
-    if (isHtmlResponse && allowFallback) {
+    // Static SPA host (e.g. Vite/Vercel rewrite returning index.html for /api/*, or Vercel edge 404 NOT_FOUND when backend is unhosted)
+    const isVercelMissingBackend =
+      response.status === 404 &&
+      !_baseUrl &&
+      !getEnvVar("VITE_API_BASE_URL") &&
+      (response.headers.get("x-vercel-error") === "NOT_FOUND" ||
+        response.headers.get("server")?.toLowerCase().includes("vercel") ||
+        (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")));
+
+    if ((isHtmlResponse || isVercelMissingBackend) && allowFallback) {
       return handleFallbackApi(requestInfo.url, method, init.body) as T;
     }
 
