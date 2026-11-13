@@ -177,3 +177,4 @@ To invalidate all sessions for a compromised account:
    ```sql
    SELECT * FROM peopleos_audit_log WHERE user_id = '<compromised_user_id>' ORDER BY created_at DESC;
    ```
+

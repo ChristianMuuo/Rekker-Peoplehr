@@ -162,3 +162,4 @@ If smoke tests fail or critical P1 alarms fire:
    - Rolling back code to Phase 5 binary requires **zero database schema rollbacks**. The indexes remain valid and accelerate existing queries.
 3. **Post-Mortem Log Capture:**
    - Export container stdout logs and `peopleos_audit_log` records from the failed deployment window for forensic triage.
+

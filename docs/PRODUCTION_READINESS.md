@@ -137,3 +137,4 @@ OK (6 passed, 0 failures, 0 errors)
    - The multi-agent orchestrator functions with deterministic rule-based tool dispatch. Set `OPENAI_API_KEY` to enable neural agent reasoning and generative policy explanation.
 3. **KRA eTIMS & Biometric Timeclocks**:
    - Ready via standard webhook adapters at `/api/integrations/status`. Live hardware registration occurs through tenant integration keys.
+

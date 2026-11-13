@@ -121,3 +121,4 @@ All text supplied to the RAG policy retrieval engine and LLM prompts passes thro
 - **SQL Injection Defense:** Strips `DROP TABLE`, `DELETE FROM`, `UPDATE ... SET`, `SELECT * FROM`.
 - **Script & XML Neutralization:** Strips `<script>`, `<iframe>`, and malicious prompt boundary delimiters (`"""`, `###`).
 - **Audit Logging:** Any detected adversarial payload is logged with tenant ID and user ID for security investigation.
+

@@ -157,3 +157,4 @@ REINDEX TABLE CONCURRENTLY peopleos_payroll_items;
 REINDEX TABLE CONCURRENTLY workforce_shifts;
 REINDEX TABLE CONCURRENTLY peopleos_audit_log;
 ```
+
