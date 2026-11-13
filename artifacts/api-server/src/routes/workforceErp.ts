@@ -1,9 +1,8 @@
 import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, employeesTable, workflowRulesTable, workforceShiftsTable } from "@workspace/db";
+import { db, workflowRulesTable } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
-import { isMpesaLiveConfigured } from "../lib/mpesaService";
 import { sanitizeText } from "../lib/security";
 import {
   ensureMembership,
@@ -11,12 +10,45 @@ import {
   PEOPLEOS_ROLES,
   requireRoles,
 } from "../middlewares/peopleosAccess";
-import { DEMO_EMPLOYEES_LIST } from "./peopleos";
-import { DEMO_LEAVE_STORE } from "./leave";
+import {
+  createProductionLine,
+  createShiftAssignment,
+  createShiftTemplate,
+  decideShiftSwap,
+  listProductionLines,
+  listShiftAssignments,
+  listShiftTemplates,
+  requestShiftSwap,
+} from "../services/workforceErp/workforceSchedulingService";
+import {
+  deployReliefAssignment,
+  findMissingCoverageAndReplacements,
+} from "../services/workforceErp/replacementMatcherService";
+import {
+  createCertification,
+  listCertifications,
+  verifyCertification,
+} from "../services/workforceErp/competencyCertificationService";
+import {
+  createOrUpdateDriverProfile,
+  listDrivers,
+  validateVehicleDispatch,
+} from "../services/workforceErp/driverComplianceService";
+import {
+  assignSalesRep,
+  createTerritory,
+  listSalesForce,
+  listTerritories,
+} from "../services/workforceErp/salesTerritoryService";
+import { getWorkforceOverview } from "../services/workforceErp/workforceHeatmapService";
+import {
+  getIntegrationsStatus,
+  pingIntegrationAdapter,
+} from "../services/workforceErp/integrationHealthService";
 
 const router: IRouter = Router();
 
-const erpOpsReaders = [
+export const erpOpsReaders: readonly string[] = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrDirector,
   PEOPLEOS_ROLES.hrManager,
@@ -30,60 +62,7 @@ const erpOpsReaders = [
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
-const DEMO_WORKFORCE_ROSTER = [
-  { employeeId: "10000000-0000-4000-8000-000000000001", employeeName: "Achieng Odhiambo", unitType: "production", workZone: "Formulation Line A", shiftName: "Morning (06:00-14:00)", roleSkill: "Lead Formulation Chemist", certificationValidUntil: "2027-01-15", costCentreCode: "CC-MFG-01" },
-  { employeeId: "10000000-0000-4000-8000-000000000002", employeeName: "Mwangi Kariuki", unitType: "production", workZone: "Automated Filling Line B", shiftName: "Morning (06:00-14:00)", roleSkill: "High-Speed Filler Operator", certificationValidUntil: "2026-08-20", costCentreCode: "CC-MFG-01" },
-  { employeeId: "10000000-0000-4000-8000-000000000004", employeeName: "Wanjiku Kimani", unitType: "warehouse", workZone: "Nairobi Central Dispatch Warehouse", shiftName: "Day (08:00-17:00)", roleSkill: "Forklift & Pallet Control Operator", certificationValidUntil: "2026-04-05", costCentreCode: "CC-WHS-01" },
-  { employeeId: "10000000-0000-4000-8000-000000000003", employeeName: "Juma Omondi", unitType: "distribution", workZone: "Nairobi - Rift Corridor", shiftName: "Route Dispatch (06:30-16:30)", roleSkill: "Fleet Logistics Supervisor", certificationValidUntil: "2026-11-30", costCentreCode: "CC-LOG-01" },
-  { employeeId: "10000000-0000-4000-8000-000000000005", employeeName: "Brenda Mutheu", unitType: "sales", workZone: "Nairobi & Mt. Kenya Trade", shiftName: "Field Commercial", roleSkill: "Key Trade Account Manager", certificationValidUntil: "2027-03-01", costCentreCode: "CC-SLS-01" },
-  { employeeId: "10000000-0000-4000-8000-000000000006", employeeName: "Brian Kiprotich", unitType: "sales", workZone: "Rift Valley Territory", shiftName: "Field Commercial", roleSkill: "Trade Territory Representative", certificationValidUntil: "2026-04-30", costCentreCode: "CC-SLS-01" },
-];
-
-const DEMO_DRIVER_CREDENTIALS = [
-  {
-    employeeId: "10000000-0000-4000-8000-000000000003",
-    driverName: "Juma Omondi",
-    licenseNumber: "DL-KE-881204",
-    licenseClass: "BCE Commercial Heavy",
-    licenseExpiry: "2026-03-29",
-    psvOrSafetyCertExpiry: "2026-04-12",
-    assignedVehicle: "KDM 482L · Box Distribution Truck",
-    routeCorridor: "Nairobi -> Nakuru -> Eldoret",
-  },
-  {
-    employeeId: "10000000-0000-4000-8000-000000000004",
-    driverName: "Wanjiku Kimani",
-    licenseNumber: "DL-KE-550192",
-    licenseClass: "BCE + Forklift Endorsement",
-    licenseExpiry: "2026-12-15",
-    psvOrSafetyCertExpiry: "2026-10-01",
-    assignedVehicle: "KDG 910M · Urban Van",
-    routeCorridor: "Nairobi Metro & Thika Road",
-  },
-];
-
-const DEMO_SALES_WORKFORCE = [
-  {
-    employeeId: "10000000-0000-4000-8000-000000000005",
-    repName: "Brenda Mutheu",
-    territory: "Nairobi Metro & Modern Trade",
-    costCentreCode: "CC-SLS-01",
-    monthlyTargetKes: 2500000,
-    actualAttributedKes: 2310000,
-    commissionRatePct: 2.5,
-  },
-  {
-    employeeId: "10000000-0000-4000-8000-000000000006",
-    repName: "Brian Kiprotich",
-    territory: "Nakuru & South Rift",
-    costCentreCode: "CC-SLS-01",
-    monthlyTargetKes: 1400000,
-    actualAttributedKes: 1180000,
-    commissionRatePct: 3.0,
-  },
-];
-
-const erpShiftManagers = [
+export const erpShiftManagers: readonly string[] = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrDirector,
   PEOPLEOS_ROLES.hrManager,
@@ -92,6 +71,22 @@ const erpShiftManagers = [
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
+export const fleetManagers: readonly string[] = [
+  PEOPLEOS_ROLES.hrAdmin,
+  PEOPLEOS_ROLES.hrDirector,
+  PEOPLEOS_ROLES.warehouseSupervisor,
+  PEOPLEOS_ROLES.productionSupervisor,
+  PEOPLEOS_ROLES.systemAdmin,
+];
+
+export const salesManagers: readonly string[] = [
+  PEOPLEOS_ROLES.salesManager,
+  PEOPLEOS_ROLES.hrAdmin,
+  PEOPLEOS_ROLES.hrDirector,
+  PEOPLEOS_ROLES.systemAdmin,
+];
+
+// In-memory workflow rules fallback for tests without DATABASE_URL
 const MEM_WORKFLOW_RULES = new Map<string, any[]>();
 function ensureRulesSeeded(orgId: string) {
   if (!MEM_WORKFLOW_RULES.has(orgId)) {
@@ -104,318 +99,427 @@ function ensureRulesSeeded(orgId: string) {
   }
 }
 
-const MEM_WORKFORCE_SHIFTS = new Map<string, Array<(typeof DEMO_WORKFORCE_ROSTER)[number]>>();
-function ensureShiftsSeeded(orgId: string) {
-  if (!MEM_WORKFORCE_SHIFTS.has(orgId)) {
-    MEM_WORKFORCE_SHIFTS.set(
-      orgId,
-      DEMO_WORKFORCE_ROSTER.map((r) => ({ ...r })),
-    );
-  }
-}
+// ---------------------------------------------------------------------------
+// Workstream F: Operational Staffing Availability & Heatmap
+// ---------------------------------------------------------------------------
 
-// GET /api/workforce-erp/overview — Staffing Availability & Dept × Shift Heatmap
+// GET /api/workforce-erp/overview
 router.get("/workforce-erp/overview", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, erpOpsReaders);
   if (!membership) return;
 
-  const onLeaveIds = new Set(
-    DEMO_LEAVE_STORE.filter((l) => l.status === "approved" || l.status === "pending").map((l) => l.employeeId),
-  );
-  const empStatusMap = new Map(DEMO_EMPLOYEES_LIST.map((e) => [e.id, e]));
+  const unitType = typeof req.query.unitType === "string" ? req.query.unitType : undefined;
+  const shiftDate = typeof req.query.date === "string" ? req.query.date : undefined;
 
-  let baseRoster: Array<{
-    employeeId: string;
-    employeeName: string;
-    unitType: string;
-    workZone: string;
-    shiftName: string;
-    roleSkill: string;
-    certificationValidUntil: string | null;
-    costCentreCode: string;
-  }>;
-
-  if (!process.env.DATABASE_URL) {
-    ensureShiftsSeeded(membership.organizationId);
-    baseRoster = MEM_WORKFORCE_SHIFTS.get(membership.organizationId)!;
-  } else {
-    const [dbShifts, dbEmps] = await Promise.all([
-      db.select().from(workforceShiftsTable).where(eq(workforceShiftsTable.organizationId, membership.organizationId)),
-      db.select().from(employeesTable).where(eq(employeesTable.organizationId, membership.organizationId)),
-    ]);
-    const dbEmpMap = new Map(dbEmps.map((e) => [e.id, e]));
-    for (const e of dbEmps) empStatusMap.set(e.id, { ...e, departmentName: "", managerName: null } as any);
-    baseRoster = dbShifts.length
-      ? dbShifts.map((s) => {
-          const emp = dbEmpMap.get(s.employeeId);
-          return {
-            employeeId: s.employeeId,
-            employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Rekker Employee",
-            unitType: s.unitType,
-            workZone: s.workZone,
-            shiftName: s.shiftName,
-            roleSkill: s.roleSkill,
-            certificationValidUntil: s.certificationValidUntil,
-            costCentreCode: s.costCentreCode,
-          };
-        })
-      : DEMO_WORKFORCE_ROSTER;
-  }
-
-  const roster = baseRoster.map((r) => {
-    const emp = empStatusMap.get(r.employeeId);
-    const unavailable = emp?.status === "on_leave" || onLeaveIds.has(r.employeeId);
-    return {
-      ...r,
-      employeeStatus: emp?.status ?? "active",
-      availableToday: !unavailable,
-    };
+  const result = await getWorkforceOverview(membership.organizationId, {
+    unitType,
+    shiftDate,
   });
 
-  const zones = Array.from(new Set(roster.map((r) => r.unitType)));
-  const heatmap = zones.map((unitType) => {
-    const unitRows = roster.filter((r) => r.unitType === unitType);
-    const present = unitRows.filter((r) => r.availableToday).length;
-    return {
-      unitType,
-      scheduled: unitRows.length,
-      present,
-      awayOrPendingLeave: unitRows.length - present,
-      coveragePct: unitRows.length ? Math.round((present / unitRows.length) * 100) : 100,
-    };
-  });
+  res.json(result);
+});
+
+// GET /api/workforce-erp/executive-summary
+router.get("/workforce-erp/executive-summary", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpOpsReaders);
+  if (!membership) return;
+
+  const overview = await getWorkforceOverview(membership.organizationId);
+  const drivers = await listDrivers(membership.organizationId);
+  const sales = await listSalesForce(membership.organizationId);
+  const certs = await listCertifications(membership.organizationId, { expiringWithinDays: 30 });
 
   res.json({
-    dataScope: "ERP_WORKFORCE_AVAILABILITY",
-    roster,
-    heatmap,
-    understaffedUnits: heatmap.filter((h) => h.coveragePct < 100),
+    dataScope: "ERP_EXECUTIVE_SUMMARY",
+    overallCoveragePct: overview.overallCoveragePct,
+    criticalShortagesCount: overview.understaffedUnits.length,
+    activeDriversCount: drivers.items.length,
+    driverAlertsCount: drivers.alertsCount,
+    salesTargetAttainmentPct: sales.averageAttainmentPct,
+    totalAttributedSalesKes: sales.totalAttributedKes,
+    expiringCertifications30dCount: certs.total,
+    generatedAt: new Date().toISOString(),
   });
 });
 
-// POST /api/workforce-erp/shifts — Assign / Update Operational Shift Allocation
+// ---------------------------------------------------------------------------
+// Workstream A & G: Shift Scheduling & Production Lines
+// ---------------------------------------------------------------------------
+
+// GET /api/workforce-erp/shifts
+router.get("/workforce-erp/shifts", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const isSupervisor = erpOpsReaders.includes(membership.role);
+  const employeeId = isSupervisor
+    ? (typeof req.query.employeeId === "string" ? req.query.employeeId : undefined)
+    : membership.employeeId ?? membership.userId;
+
+  const shiftDate = typeof req.query.date === "string" ? req.query.date : undefined;
+  const unitType = typeof req.query.unitType === "string" ? req.query.unitType : undefined;
+
+  const result = await listShiftAssignments(membership.organizationId, {
+    employeeId,
+    shiftDate,
+    unitType,
+  });
+
+  res.json(result);
+});
+
+// POST /api/workforce-erp/shifts
 router.post("/workforce-erp/shifts", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, erpShiftManagers);
   if (!membership) return;
 
-  const employeeId = sanitizeText(req.body?.employeeId, 64);
-  const unitType = sanitizeText(req.body?.unitType || "production", 30);
-  const workZone = sanitizeText(req.body?.workZone, 120);
-  const shiftName = sanitizeText(req.body?.shiftName || "Morning (06:00-14:00)", 80);
-  const roleSkill = sanitizeText(req.body?.roleSkill || "Line Operator", 120);
-  const costCentreCode = sanitizeText(req.body?.costCentreCode || "CC-MFG-01", 30);
-  const certExpiry = sanitizeText(req.body?.certificationValidUntil || "2027-06-30", 20);
-
-  if (!employeeId || !workZone) {
-    res.status(400).json({ error: "employeeId and workZone are required." });
-    return;
+  try {
+    const created = await createShiftAssignment(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to assign shift." });
   }
-
-  if (!process.env.DATABASE_URL) {
-    ensureShiftsSeeded(membership.organizationId);
-    const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
-    const employeeName = emp ? `${emp.firstName} ${emp.lastName}` : sanitizeText(req.body?.employeeName || "Rekker Specialist", 100);
-    const roster = MEM_WORKFORCE_SHIFTS.get(membership.organizationId)!;
-    const entry = {
-      employeeId,
-      employeeName,
-      unitType,
-      workZone,
-      shiftName,
-      roleSkill,
-      certificationValidUntil: certExpiry,
-      costCentreCode,
-    };
-    const existingIdx = roster.findIndex((r) => r.employeeId === employeeId && r.unitType === unitType);
-    if (existingIdx >= 0) {
-      roster[existingIdx] = entry;
-    } else {
-      roster.unshift(entry);
-    }
-    await recordAuditEvent({
-      organizationId: membership.organizationId,
-      actorUserId: membership.userId,
-      actor: membership.role,
-      action: "WORKFORCE_SHIFT_ASSIGNED",
-      targetType: "workforce_shift",
-      targetId: employeeId,
-      summary: `Scheduled ${employeeName} to ${unitType} · ${workZone} (${shiftName})`,
-      isDemo: true,
-    });
-    res.status(201).json(entry);
-    return;
-  }
-
-  const [created] = await db
-    .insert(workforceShiftsTable)
-    .values({
-      organizationId: membership.organizationId,
-      employeeId,
-      unitType,
-      workZone,
-      shiftName,
-      roleSkill,
-      certificationValidUntil: certExpiry,
-      safetyCleared: true,
-      costCentreCode,
-    })
-    .returning();
-  await recordAuditEvent({
-    organizationId: membership.organizationId,
-    actorUserId: membership.userId,
-    actor: membership.role,
-    action: "WORKFORCE_SHIFT_ASSIGNED",
-    targetType: "workforce_shift",
-    targetId: created?.id ?? employeeId,
-    summary: `Scheduled employee ${employeeId} to ${unitType} · ${workZone} (${shiftName})`,
-  });
-  res.status(201).json(created);
 });
 
-// POST /api/workforce-erp/production/assign-relief — Deploy Safety-Cleared Relief Operator
-router.post("/workforce-erp/production/assign-relief", async (req: Request, res: Response) => {
+// GET /api/workforce-erp/production/lines
+router.get("/workforce-erp/production/lines", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpOpsReaders);
+  if (!membership) return;
+
+  const result = await listProductionLines(membership.organizationId);
+  res.json(result);
+});
+
+// POST /api/workforce-erp/production/lines
+router.post("/workforce-erp/production/lines", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, erpShiftManagers);
   if (!membership) return;
 
-  const replacementEmployeeId = sanitizeText(req.body?.replacementEmployeeId, 64);
-  const targetUnitType = sanitizeText(req.body?.targetUnitType || "production", 30);
-  const targetZone = sanitizeText(req.body?.targetZone || "Formulation Line A", 120);
-  const shiftName = sanitizeText(req.body?.shiftName || "Morning (06:00-14:00)", 80);
-
-  if (!replacementEmployeeId) {
-    res.status(400).json({ error: "replacementEmployeeId is required." });
-    return;
+  try {
+    const created = await createProductionLine(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to configure production line." });
   }
-
-  const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === replacementEmployeeId);
-  const empName = emp ? `${emp.firstName} ${emp.lastName}` : replacementEmployeeId;
-  const ccMap: Record<string, string> = {
-    production: "CC-MFG-01",
-    warehouse: "CC-WHS-01",
-    distribution: "CC-LOG-01",
-    sales: "CC-SLS-01",
-  };
-
-  if (!process.env.DATABASE_URL) {
-    ensureShiftsSeeded(membership.organizationId);
-    MEM_WORKFORCE_SHIFTS.get(membership.organizationId)!.unshift({
-      employeeId: replacementEmployeeId,
-      employeeName: empName,
-      unitType: targetUnitType,
-      workZone: `${targetZone} (Relief)`,
-      shiftName,
-      roleSkill: emp?.jobTitle ?? "Certified Relief Operator",
-      certificationValidUntil: "2027-06-30",
-      costCentreCode: ccMap[targetUnitType] ?? "CC-MFG-01",
-    });
-  } else {
-    await db.insert(workforceShiftsTable).values({
-      organizationId: membership.organizationId,
-      employeeId: replacementEmployeeId,
-      unitType: targetUnitType,
-      workZone: `${targetZone} (Relief)`,
-      shiftName,
-      roleSkill: emp?.jobTitle ?? "Certified Relief Operator",
-      certificationValidUntil: "2027-06-30",
-      safetyCleared: true,
-      costCentreCode: ccMap[targetUnitType] ?? "CC-MFG-01",
-    });
-  }
-
-  await recordAuditEvent({
-    organizationId: membership.organizationId,
-    actorUserId: membership.userId,
-    actor: membership.role,
-    action: "SHIFT_RELIEF_ASSIGNED",
-    targetType: "workforce_shift",
-    targetId: replacementEmployeeId,
-    summary: `Deployed relief operator ${empName} to ${targetZone} (${shiftName})`,
-    isDemo: !process.env.DATABASE_URL,
-  });
-
-  res.status(201).json({
-    assigned: true,
-    replacementEmployeeId,
-    employeeName: empName,
-    targetZone: `${targetZone} (Relief)`,
-    shiftName,
-  });
 });
 
-// GET /api/workforce-erp/production/replacements — Match Qualified Replacements for Missing Shift Coverage
+// GET /api/workforce-erp/shift-templates
+router.get("/workforce-erp/shift-templates", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpOpsReaders);
+  if (!membership) return;
+
+  const unitType = typeof req.query.unitType === "string" ? req.query.unitType : undefined;
+  const result = await listShiftTemplates(membership.organizationId, unitType);
+  res.json(result);
+});
+
+// POST /api/workforce-erp/shift-templates
+router.post("/workforce-erp/shift-templates", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpShiftManagers);
+  if (!membership) return;
+
+  try {
+    const created = await createShiftTemplate(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to create shift template." });
+  }
+});
+
+// POST /api/workforce-erp/shift-swaps
+router.post("/workforce-erp/shift-swaps", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  try {
+    const requestingEmployeeId =
+      req.body?.requestingEmployeeId || membership.employeeId || membership.userId;
+    const created = await requestShiftSwap(
+      membership.organizationId,
+      {
+        ...req.body,
+        requestingEmployeeId,
+      },
+      membership.userId,
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to request shift swap." });
+  }
+});
+
+// POST /api/workforce-erp/shift-swaps/:id/decision
+router.post("/workforce-erp/shift-swaps/:id/decision", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpShiftManagers);
+  if (!membership) return;
+
+  const swapId = String(req.params.id);
+  const decision = req.body?.decision === "approved" ? "approved" : "rejected";
+
+  try {
+    const updated = await decideShiftSwap(
+      membership.organizationId,
+      swapId,
+      decision,
+      req.body?.decisionNotes || req.body?.decisionComment,
+      membership.userId,
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to process shift swap decision." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Workstream B: Absence Replacement Matching & Relief Deployment
+// ---------------------------------------------------------------------------
+
+// GET /api/workforce-erp/production/replacements
 router.get("/workforce-erp/production/replacements", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, erpOpsReaders);
   if (!membership) return;
 
-  const onLeaveSet = new Set(
-    DEMO_EMPLOYEES_LIST.filter((e) => e.status === "on_leave").map((e) => e.id),
-  );
-  const qualifiedPool = DEMO_EMPLOYEES_LIST.filter(
-    (e) => e.status === "active" && !onLeaveSet.has(e.id),
-  ).map((e) => ({
-    employeeId: e.id,
-    name: `${e.firstName} ${e.lastName}`,
-    departmentName: e.departmentName,
-    jobTitle: e.jobTitle,
-    safetyCleared: true,
-    readinessNote: e.departmentName.includes("Formulation")
-      ? "Direct Production Line Certified"
-      : "Cross-trainable Support Backup",
-  }));
-
-  res.json({
-    missingCoverageEmployees: DEMO_EMPLOYEES_LIST.filter((e) => e.status === "on_leave").map((e) => ({
-      employeeId: e.id,
-      name: `${e.firstName} ${e.lastName}`,
-      departmentName: e.departmentName,
-    })),
-    qualifiedReplacements: qualifiedPool.slice(0, 5),
-  });
+  const targetDate = typeof req.query.date === "string" ? req.query.date : undefined;
+  const result = await findMissingCoverageAndReplacements(membership.organizationId, targetDate);
+  res.json(result);
 });
 
-// GET /api/workforce-erp/drivers — Driver Credentials & Expiry Monitoring
+// POST /api/workforce-erp/production/assign-relief
+router.post("/workforce-erp/production/assign-relief", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpShiftManagers);
+  if (!membership) return;
+
+  try {
+    const result = await deployReliefAssignment(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to deploy relief operator." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Workstream C: Warehouse & Equipment Competency Registry
+// ---------------------------------------------------------------------------
+
+// GET /api/workforce-erp/certifications
+router.get("/workforce-erp/certifications", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const isSupervisor = erpOpsReaders.includes(membership.role);
+  const employeeId = isSupervisor
+    ? (typeof req.query.employeeId === "string" ? req.query.employeeId : undefined)
+    : membership.employeeId ?? membership.userId;
+
+  const category = typeof req.query.category === "string" ? req.query.category : undefined;
+  const verificationStatus = typeof req.query.verificationStatus === "string" ? req.query.verificationStatus : undefined;
+  const expiringWithinDays = req.query.expiringWithinDays ? Number(req.query.expiringWithinDays) : undefined;
+
+  const result = await listCertifications(membership.organizationId, {
+    employeeId,
+    category,
+    verificationStatus,
+    expiringWithinDays,
+  });
+
+  res.json(result);
+});
+
+// POST /api/workforce-erp/certifications
+router.post("/workforce-erp/certifications", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, [
+    ...erpShiftManagers,
+    PEOPLEOS_ROLES.warehouseSupervisor,
+  ]);
+  if (!membership) return;
+
+  try {
+    const created = await createCertification(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to register certification." });
+  }
+});
+
+// POST /api/workforce-erp/certifications/:id/verify
+router.post("/workforce-erp/certifications/:id/verify", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, [
+    PEOPLEOS_ROLES.hrAdmin,
+    PEOPLEOS_ROLES.hrDirector,
+    PEOPLEOS_ROLES.hrManager,
+    PEOPLEOS_ROLES.systemAdmin,
+  ]);
+  if (!membership) return;
+
+  const certId = String(req.params.id);
+  const decision = req.body?.decision;
+  if (decision !== "verified" && decision !== "rejected" && decision !== "revoked") {
+    res.status(400).json({ error: "decision must be 'verified', 'rejected', or 'revoked'." });
+    return;
+  }
+
+  try {
+    const updated = await verifyCertification(
+      membership.organizationId,
+      certId,
+      decision,
+      req.body?.reason,
+      membership.userId,
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to verify certification." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Workstream D: Distribution & Driver Compliance
+// ---------------------------------------------------------------------------
+
+// GET /api/workforce-erp/drivers
 router.get("/workforce-erp/drivers", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, erpOpsReaders);
   if (!membership) return;
 
-  const todayMs = Date.parse("2026-03-06T00:00:00Z");
-  const drivers = DEMO_DRIVER_CREDENTIALS.map((d) => {
-    const expMs = Date.parse(`${d.licenseExpiry}T00:00:00Z`);
-    const daysRemaining = Math.ceil((expMs - todayMs) / 86400000);
-    const alertLevel = daysRemaining <= 0 ? "expired" : daysRemaining <= 45 ? "expiring_soon" : "valid";
-    return { ...d, daysRemaining, alertLevel };
-  });
-
-  res.json({ items: drivers, alertsCount: drivers.filter((d) => d.alertLevel !== "valid").length });
+  const asOf = req.query.asOfDate ? new Date(String(req.query.asOfDate)) : new Date();
+  const result = await listDrivers(membership.organizationId, asOf);
+  res.json(result);
 });
 
-// GET /api/workforce-erp/sales-force — Sales Reps Territory, Targets & Commission Alignment
+// POST /api/workforce-erp/drivers
+router.post("/workforce-erp/drivers", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, fleetManagers);
+  if (!membership) return;
+
+  try {
+    const updated = await createOrUpdateDriverProfile(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to update driver profile." });
+  }
+});
+
+// POST /api/workforce-erp/drivers/:employeeId/dispatch-check
+router.post("/workforce-erp/drivers/:employeeId/dispatch-check", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, fleetManagers);
+  if (!membership) return;
+
+  const employeeId = String(req.params.employeeId);
+  const check = await validateVehicleDispatch(membership.organizationId, employeeId);
+  res.json(check);
+});
+
+// POST /api/workforce-erp/drivers/validate-dispatch
+router.post("/workforce-erp/drivers/validate-dispatch", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, fleetManagers);
+  if (!membership) return;
+
+  const employeeId = String(req.body?.driverEmployeeId || req.body?.employeeId);
+  const check = await validateVehicleDispatch(membership.organizationId, employeeId);
+  res.json(check);
+});
+
+// ---------------------------------------------------------------------------
+// Workstream E: Sales Force & Territory Alignment
+// ---------------------------------------------------------------------------
+
+// GET /api/workforce-erp/territories
+router.get("/workforce-erp/territories", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, erpOpsReaders);
+  if (!membership) return;
+
+  const result = await listTerritories(membership.organizationId);
+  res.json(result);
+});
+
+// POST /api/workforce-erp/territories
+router.post("/workforce-erp/territories", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, salesManagers);
+  if (!membership) return;
+
+  try {
+    const created = await createTerritory(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to create sales territory." });
+  }
+});
+
+// GET /api/workforce-erp/sales-force
 router.get("/workforce-erp/sales-force", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, erpOpsReaders);
   if (!membership) return;
 
-  const items = DEMO_SALES_WORKFORCE.map((rep) => {
-    const attainmentPct = Math.round((rep.actualAttributedKes / rep.monthlyTargetKes) * 1000) / 10;
-    const estimatedCommissionKes = Math.round(rep.actualAttributedKes * (rep.commissionRatePct / 100));
-    return { ...rep, attainmentPct, estimatedCommissionKes };
-  });
-
-  res.json({ items, totalAttributedKes: items.reduce((s, r) => s + r.actualAttributedKes, 0) });
+  const period = typeof req.query.period === "string" ? req.query.period : "2026-03";
+  const result = await listSalesForce(membership.organizationId, period);
+  res.json(result);
 });
 
-// GET /api/workflow-rules & POST /api/workflow-rules
+// POST /api/workforce-erp/sales-force
+router.post("/workforce-erp/sales-force", async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, salesManagers);
+  if (!membership) return;
+
+  try {
+    const assigned = await assignSalesRep(
+      membership.organizationId,
+      req.body ?? {},
+      membership.userId,
+    );
+    res.status(201).json(assigned);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Failed to assign sales representative." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Workflow Rules & Approval Matrix
+// ---------------------------------------------------------------------------
+
+// GET /api/workflow-rules
 router.get("/workflow-rules", async (req: Request, res: Response) => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+
   if (!process.env.DATABASE_URL) {
     ensureRulesSeeded(membership.organizationId);
     res.json({ items: MEM_WORKFLOW_RULES.get(membership.organizationId)! });
     return;
   }
+
   const rows = await db
     .select()
     .from(workflowRulesTable)
     .where(eq(workflowRulesTable.organizationId, membership.organizationId));
+
   res.json({
     items: rows.map((r) => ({
       ...r,
@@ -424,6 +528,7 @@ router.get("/workflow-rules", async (req: Request, res: Response) => {
   });
 });
 
+// POST /api/workflow-rules
 router.post("/workflow-rules", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, [
     PEOPLEOS_ROLES.hrAdmin,
@@ -460,6 +565,7 @@ router.post("/workflow-rules", async (req: Request, res: Response) => {
       isActive: true,
     };
     MEM_WORKFLOW_RULES.get(membership.organizationId)!.unshift(created);
+
     await recordAuditEvent({
       organizationId: membership.organizationId,
       actorUserId: membership.userId,
@@ -470,6 +576,7 @@ router.post("/workflow-rules", async (req: Request, res: Response) => {
       summary: `Created ${approvalLevels}-level workflow rule "${name}" for ${domain}`,
       isDemo: true,
     });
+
     res.status(201).json(created);
     return;
   }
@@ -487,74 +594,42 @@ router.post("/workflow-rules", async (req: Request, res: Response) => {
       isActive: true,
     })
     .returning();
+
   res.status(201).json(created);
 });
 
-// GET /api/integrations/status — Honest Integration Adapter Center
-router.get("/integrations/status", async (req: Request, res: Response) => {
+// ---------------------------------------------------------------------------
+// Workstream H: Honest Integration Adapter Status & Diagnostic Ping
+// ---------------------------------------------------------------------------
+
+// GET /api/integrations/status & /api/workforce-erp/integrations
+const handleIntegrationsStatus = async (req: Request, res: Response) => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
 
-  res.json({
-    permissionMatrix: MODULE_PERMISSION_MATRIX,
-    adapters: [
-      {
-        key: "clerk_auth",
-        name: "Clerk Identity & MFA",
-        category: "Authentication",
-        configured: Boolean(process.env.CLERK_SECRET_KEY),
-        status: process.env.CLERK_SECRET_KEY ? "CONNECTED" : "SANDBOX_FALLBACK",
-        detail: process.env.CLERK_SECRET_KEY
-          ? "CLERK_SECRET_KEY configured on server."
-          : "Running local non-production demo mode; supply CLERK_SECRET_KEY for SSO/MFA.",
-      },
-      {
-        key: "openai_llm",
-        name: "OpenAI Multi-Agent Reasoning",
-        category: "AI Orchestrator",
-        configured: Boolean(process.env.OPENAI_API_KEY),
-        status: process.env.OPENAI_API_KEY ? "CONNECTED" : "DETERMINISTIC_FALLBACK",
-        detail: process.env.OPENAI_API_KEY
-          ? "Live LLM tool-calling active."
-          : "Using deterministic tool-grounded synthesis until OPENAI_API_KEY is supplied.",
-      },
-      {
-        key: "python_ml",
-        name: "Python Scikit-learn / XGBoost ML Service",
-        category: "Predictive ML",
-        configured: true,
-        status: "CONNECTED",
-        detail: process.env.PEOPLEOS_ML_URL || "Embedded services/ml-engine CLI runtime active.",
-      },
-      {
-        key: "mpesa_daraja",
-        name: "Safaricom M-Pesa Daraja B2C",
-        category: "Kenyan Payroll",
-        configured: isMpesaLiveConfigured(),
-        status: isMpesaLiveConfigured() ? "CONNECTED" : "AWAITING_CREDENTIALS",
-        detail: isMpesaLiveConfigured()
-          ? "Daraja B2C credentials verified in environment."
-          : "Adapter ready; running SANDBOX_SIMULATION until MPESA_CONSUMER_KEY/SECRET/SHORTCODE provided.",
-      },
-      {
-        key: "biometric_clock",
-        name: "Plant & Warehouse Biometric Timeclock Feed",
-        category: "Attendance ERP",
-        configured: Boolean(process.env.BIOMETRIC_SYNC_SECRET),
-        status: process.env.BIOMETRIC_SYNC_SECRET ? "CONNECTED" : "AWAITING_CREDENTIALS",
-        detail: "Accepts signed webhook punches when BIOMETRIC_SYNC_SECRET is provisioned.",
-      },
-      {
-        key: "rekker_external_sites",
-        name: "Launched Rekker Websites (rekker.co.ke & shop.rekker.co.ke)",
-        category: "External Channels",
-        configured: false,
-        status: "EXTERNAL_SYSTEMS_LINKED",
-        detail: "Kept intentionally separate to avoid storefront/catalog duplication; direct outbound links active.",
-      },
-    ],
-  });
-});
+  const result = await getIntegrationsStatus(membership.organizationId);
+  res.json(result);
+};
+router.get("/integrations/status", handleIntegrationsStatus);
+router.get("/workforce-erp/integrations", handleIntegrationsStatus);
+
+// POST /api/integrations/:key/ping & /api/workforce-erp/integrations/:key/ping
+const handleIntegrationPing = async (req: Request, res: Response) => {
+  const membership = await requireRoles(req, res, [
+    PEOPLEOS_ROLES.hrAdmin,
+    PEOPLEOS_ROLES.hrDirector,
+    PEOPLEOS_ROLES.systemAdmin,
+    PEOPLEOS_ROLES.financeManager,
+    PEOPLEOS_ROLES.productionSupervisor,
+    PEOPLEOS_ROLES.warehouseSupervisor,
+  ]);
+  if (!membership) return;
+
+  const key = String(req.params.key);
+  const result = await pingIntegrationAdapter(membership.organizationId, key, membership.userId);
+  res.json(result);
+};
+router.post("/integrations/:key/ping", handleIntegrationPing);
+router.post("/workforce-erp/integrations/:key/ping", handleIntegrationPing);
 
 export default router;
-

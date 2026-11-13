@@ -182,6 +182,46 @@ const FALLBACK_WF_RULES: Array<any> = [
   { id: 'wf-leave-01', domain: 'leave', name: 'Department Manager + HR Signoff', approvalLevels: 2, slaHours: 24, requiredApproverRoles: ['department_manager', 'hr_manager'], isActive: true },
   { id: 'wf-payroll-01', domain: 'payroll', name: 'Dual Maker-Checker Statutory Disbursement', approvalLevels: 2, slaHours: 48, requiredApproverRoles: ['payroll_officer', 'finance_manager'], isActive: true },
 ];
+const FALLBACK_PRODUCTION_LINES: Array<any> = [
+  { id: 'line-mfg-01', code: 'LINE-MFG-01', name: 'Automated Formulation & Mixing Bay A', workZone: 'Formulation Line A', operationalStatus: 'active', minStaffing: 4, operatingHours: '24/7 Continuous (3 Shifts)', costCentreCode: 'CC-MFG-01', requiredSkills: ['Chemical Synthesis', 'Formulation', 'Batch Mixing'], requiredCertifications: ['Chemical Safety & Hazardous Materials Protocol', 'GMP Cleanroom Protocol'] },
+  { id: 'line-mfg-02', code: 'LINE-MFG-02', name: 'High-Speed Automated Packaging Line B', workZone: 'Automated Filling Line B', operationalStatus: 'active', minStaffing: 6, operatingHours: '06:00 - 22:00 (2 Shifts)', costCentreCode: 'CC-MFG-01', requiredSkills: ['High-Speed Filling', 'Carton Packaging', 'Labeling'], requiredCertifications: ['Equipment Safety Protocol'] },
+  { id: 'line-mfg-03', code: 'LINE-MFG-03', name: 'Cleanroom Quality & Analytical Lab', workZone: 'Quality Control Bay C', operationalStatus: 'maintenance', minStaffing: 2, operatingHours: '08:00 - 17:00', costCentreCode: 'CC-MFG-02', requiredSkills: ['Analytical QC', 'Microbiology', 'Assay Testing'], requiredCertifications: ['GMP Cleanroom Protocol'] },
+];
+
+const FALLBACK_SHIFT_TEMPLATES: Array<any> = [
+  { id: 'tpl-prod-morn', code: 'SH-PROD-MORN', name: 'Morning Shift (06:00 - 14:00)', unitType: 'production', workZone: 'Formulation Line A', startTime: '06:00', endTime: '14:00', durationHours: 8, minStaffing: 4, costCentreCode: 'CC-MFG-01', requiredCompetency: 'Line Formulation & Filling' },
+  { id: 'tpl-whs-day', code: 'SH-WHS-DAY', name: 'Warehouse Full Day (08:00 - 17:00)', unitType: 'warehouse', workZone: 'Nairobi Central Distribution Center', startTime: '08:00', endTime: '17:00', durationHours: 9, minStaffing: 5, costCentreCode: 'CC-WHS-01', requiredCompetency: 'High-Bay Reach Truck' },
+  { id: 'tpl-dist-corr', code: 'SH-DIST-CORR', name: 'Northern Corridor Freight Dispatch', unitType: 'distribution', workZone: 'Northern Corridor Fleet Depot', startTime: '05:30', endTime: '16:30', durationHours: 11, minStaffing: 3, costCentreCode: 'CC-LOG-01', requiredCompetency: 'BCE Heavy Commercial' },
+];
+
+const FALLBACK_CERTIFICATIONS: Array<any> = [
+  { id: 'cert-001', employeeId: '10000000-0000-4000-8000-000000000001', employeeName: 'Achieng Odhiambo', category: 'production_safety', competencyType: 'Chemical Safety & Hazardous Materials Protocol', equipmentType: null, issuingOrg: 'OSHA Kenya Directorate', certificateNumber: 'DOSHS-HAZ-2024-882', issueDate: '2024-01-15', expiryDate: '2027-01-15', verificationStatus: 'verified' },
+  { id: 'cert-002', employeeId: '10000000-0000-4000-8000-000000000002', employeeName: 'Mwangi Kariuki', category: 'equipment_operation', competencyType: 'Counterbalance Forklift (Class I/IV)', equipmentType: 'Counterbalance Forklift', issuingOrg: 'Toyota Forklift Training Academy', certificateNumber: 'TFT-FL-2023-1049', issueDate: '2023-08-20', expiryDate: '2026-08-20', verificationStatus: 'verified' },
+  { id: 'cert-003', employeeId: '10000000-0000-4000-8000-000000000004', employeeName: 'Wanjiku Kimani', category: 'equipment_operation', competencyType: 'High-Bay Reach Truck (Class II)', equipmentType: 'High-Bay Reach Truck', issuingOrg: 'Chartered Logistics Institute', certificateNumber: 'CLI-RT-2023-0941', issueDate: '2023-04-05', expiryDate: '2026-04-05', verificationStatus: 'verified' },
+  { id: 'cert-004', employeeId: '10000000-0000-4000-8000-000000000003', employeeName: 'Juma Omondi', category: 'driving_license', competencyType: 'BCE Commercial Heavy Articulated', equipmentType: null, issuingOrg: 'National Transport and Safety Authority (NTSA)', certificateNumber: 'DL-KE-881204', issueDate: '2023-03-29', expiryDate: '2026-03-29', verificationStatus: 'verified' },
+  { id: 'cert-005', employeeId: '10000000-0000-4000-8000-000000000010', employeeName: 'Mercy Chepngetich', category: 'production_safety', competencyType: 'GMP Cleanroom Protocol', equipmentType: null, issuingOrg: 'Kenya Bureau of Standards (KEBS)', certificateNumber: 'KEBS-GMP-2024-551', issueDate: '2024-02-10', expiryDate: '2027-02-10', verificationStatus: 'verified' },
+];
+
+const FALLBACK_TERRITORIES: Array<any> = [
+  { id: 'terr-01', code: 'TERR-NBO-01', name: 'Nairobi Central & Modern Trade Hub', regionalHub: 'Nairobi Metro', monthlyTargetKes: 5000000, assignedRepCount: 3, costCentreCode: 'CC-SLS-01', commissionRatePct: 2.5 },
+  { id: 'terr-02', code: 'TERR-RV-02', name: 'Rift Valley Agrochemical & Industrial Zone', regionalHub: 'Nakuru / Eldoret', monthlyTargetKes: 3800000, assignedRepCount: 2, costCentreCode: 'CC-SLS-02', commissionRatePct: 3.0 },
+  { id: 'terr-03', code: 'TERR-CST-03', name: 'Coastal Maritime & Maritime Trade Corridor', regionalHub: 'Mombasa Port', monthlyTargetKes: 3200000, assignedRepCount: 2, costCentreCode: 'CC-SLS-03', commissionRatePct: 3.0 },
+  { id: 'terr-04', code: 'TERR-MTK-04', name: 'Mt. Kenya & Upper Eastern Agriculture Belt', regionalHub: 'Nyeri / Meru', monthlyTargetKes: 2600000, assignedRepCount: 1, costCentreCode: 'CC-SLS-04', commissionRatePct: 3.5 },
+];
+
+const FALLBACK_SHIFT_SWAPS: Array<any> = [
+  { id: 'swap-001', requestingEmployeeId: '10000000-0000-4000-8000-000000000002', requestingEmployeeName: 'Mwangi Kariuki', targetEmployeeId: '10000000-0000-4000-8000-000000000010', targetEmployeeName: 'Mercy Chepngetich', currentShiftName: 'Morning (06:00-14:00)', proposedShiftName: 'Afternoon (14:00-22:00)', reason: 'Attending specialized equipment recertification seminar', status: 'pending', supervisorDecisionComment: null, createdAt: new Date().toISOString() },
+];
+
+const FALLBACK_INTEGRATIONS: Array<any> = [
+  { key: 'safaricom_daraja', name: 'Safaricom Daraja M-Pesa B2C Gateway', category: 'mobile_money', status: 'sandbox_simulation', configured: true, detail: 'M-Pesa B2C sandbox environment operational. Disburses wage & daily meal stipends.', latencyMs: 24, lastCheckedAt: new Date().toISOString(), configurationRequirement: 'Set MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE' },
+  { key: 'ntsa_tims', name: 'NTSA Driver License & PSV Verification', category: 'government_transport', status: 'credential_required', configured: false, detail: 'TIMS API endpoint unconfigured. Set NTSA_TIMS_API_KEY for live verification.', latencyMs: null, lastCheckedAt: new Date().toISOString(), configurationRequirement: 'Set NTSA_TIMS_API_KEY and NTSA_SERVICE_URL' },
+  { key: 'kra_etims', name: 'KRA eTIMS Tax Compliance Engine', category: 'tax_authority', status: 'credential_required', configured: false, detail: 'Oscu device or Virtual Control Unit (VSCU) requires valid cryptographic keypair.', latencyMs: null, lastCheckedAt: new Date().toISOString(), configurationRequirement: 'Set KRA_ETIMS_VSCU_KEY and KRA_PIN' },
+  { key: 'biometric_zkteco', name: 'Biometric Access Control (ZKTeco/Anviz)', category: 'hardware_access', status: 'live_network_active', configured: true, detail: 'TCP/IP socket interface listening on port 4370. Pulls shift clocking punches.', latencyMs: 12, lastCheckedAt: new Date().toISOString(), configurationRequirement: 'Set BIOMETRIC_DEVICE_HOST and PORT' },
+  { key: 'kenya_met_weather', name: 'Kenya Meteorological Dept Logistics Weather', category: 'weather_telemetry', status: 'live_network_active', configured: true, detail: 'Monitors rainfall and flooding alerts across Mombasa Road and Rift Valley corridors.', latencyMs: 45, lastCheckedAt: new Date().toISOString(), configurationRequirement: 'Public open environmental weather feed' },
+  { key: 'industrial_scada', name: 'Industrial SCADA / Siemens S7 Modbus Gateway', category: 'industrial_iot', status: 'credential_required', configured: false, detail: 'Modbus TCP integration with Line A & B automated batch counters.', latencyMs: null, lastCheckedAt: new Date().toISOString(), configurationRequirement: 'Set SCADA_MODBUS_HOST and RACK_SLOT' },
+];
+
 const FALLBACK_SHIFT_ROSTER: Array<any> = [
   { employeeId: '10000000-0000-4000-8000-000000000001', employeeName: 'Achieng Odhiambo', unitType: 'production', workZone: 'Formulation Line A', shiftName: 'Morning (06:00-14:00)', roleSkill: 'Lead Formulation Chemist', certificationValidUntil: '2027-01-15', costCentreCode: 'CC-MFG-01', availableToday: true },
   { employeeId: '10000000-0000-4000-8000-000000000002', employeeName: 'Mwangi Kariuki', unitType: 'production', workZone: 'Automated Filling Line B', shiftName: 'Morning (06:00-14:00)', roleSkill: 'High-Speed Filler Operator', certificationValidUntil: '2026-08-20', costCentreCode: 'CC-MFG-01', availableToday: true },
@@ -276,6 +316,133 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   }
   if (path === '/api/workforce-erp/sales-force') {
     return { items: [{ employeeId: '10000000-0000-4000-8000-000000000005', repName: 'Brenda Mutheu', territory: 'Nairobi Metro & Modern Trade', costCentreCode: 'CC-SLS-01', monthlyTargetKes: 2500000, actualAttributedKes: 2310000, commissionRatePct: 2.5, attainmentPct: 92.4, estimatedCommissionKes: 57750 }], totalAttributedKes: 2310000 };
+  }
+  if (path === '/api/workforce-erp/production/lines') {
+    if (method === 'POST') {
+      const line = { id: `line-${Date.now()}`, ...parsedBody, operationalStatus: parsedBody.operationalStatus || 'active' };
+      FALLBACK_PRODUCTION_LINES.push(line);
+      return line;
+    }
+    return { items: FALLBACK_PRODUCTION_LINES, total: FALLBACK_PRODUCTION_LINES.length };
+  }
+  if (path === '/api/workforce-erp/shift-templates') {
+    if (method === 'POST') {
+      const tpl = { id: `tpl-${Date.now()}`, ...parsedBody };
+      FALLBACK_SHIFT_TEMPLATES.push(tpl);
+      return tpl;
+    }
+    return { items: FALLBACK_SHIFT_TEMPLATES, total: FALLBACK_SHIFT_TEMPLATES.length };
+  }
+  if (path === '/api/workforce-erp/certifications') {
+    if (method === 'POST') {
+      const emp = DEFAULT_EMPS.find(e => e.id === parsedBody.employeeId);
+      const cert = {
+        id: `cert-${Date.now()}`,
+        employeeId: parsedBody.employeeId,
+        employeeName: emp ? `${emp.firstName} ${emp.lastName}` : 'Specialist Operator',
+        category: parsedBody.category || 'production_safety',
+        competencyType: parsedBody.competencyType || 'General Operation',
+        equipmentType: parsedBody.equipmentType || null,
+        issuingOrg: parsedBody.issuingOrg || 'OSHA Kenya Directorate',
+        certificateNumber: parsedBody.certificateNumber || `CERT-${Date.now().toString().slice(-4)}`,
+        issueDate: parsedBody.issueDate || new Date().toISOString().slice(0, 10),
+        expiryDate: parsedBody.expiryDate || '2028-01-01',
+        verificationStatus: 'pending_verification',
+      };
+      FALLBACK_CERTIFICATIONS.unshift(cert);
+      return cert;
+    }
+    return { items: FALLBACK_CERTIFICATIONS, total: FALLBACK_CERTIFICATIONS.length };
+  }
+  if (path.startsWith('/api/workforce-erp/certifications/') && path.endsWith('/verify') && method === 'POST') {
+    const certId = path.split('/')[4];
+    const cert = FALLBACK_CERTIFICATIONS.find(c => c.id === certId);
+    if (cert) {
+      cert.verificationStatus = parsedBody.decision || 'verified';
+      cert.verifiedAt = new Date().toISOString();
+    }
+    return cert || { success: true };
+  }
+  if (path === '/api/workforce-erp/shift-swaps') {
+    if (method === 'POST') {
+      const swap = {
+        id: `swap-${Date.now()}`,
+        requestingEmployeeId: parsedBody.requestingEmployeeId || '10000000-0000-4000-8000-000000000002',
+        requestingEmployeeName: 'Mwangi Kariuki',
+        targetEmployeeId: parsedBody.targetEmployeeId || '10000000-0000-4000-8000-000000000010',
+        targetEmployeeName: 'Mercy Chepngetich',
+        currentShiftName: parsedBody.currentShiftName || 'Morning (06:00-14:00)',
+        proposedShiftName: parsedBody.proposedShiftName || 'Afternoon (14:00-22:00)',
+        reason: parsedBody.reason || 'Personal schedule adjustment',
+        status: 'pending',
+        supervisorDecisionComment: null,
+        createdAt: new Date().toISOString(),
+      };
+      FALLBACK_SHIFT_SWAPS.unshift(swap);
+      return swap;
+    }
+    return { items: FALLBACK_SHIFT_SWAPS, total: FALLBACK_SHIFT_SWAPS.length };
+  }
+  if (path.startsWith('/api/workforce-erp/shift-swaps/') && path.endsWith('/decision') && method === 'POST') {
+    const swapId = path.split('/')[4];
+    const swap = FALLBACK_SHIFT_SWAPS.find(s => s.id === swapId);
+    if (swap) {
+      swap.status = parsedBody.decision || 'approved';
+      swap.supervisorDecisionComment = parsedBody.decisionComment || 'Decision recorded';
+    }
+    return swap || { success: true };
+  }
+  if (path === '/api/workforce-erp/territories') {
+    return { items: FALLBACK_TERRITORIES, total: FALLBACK_TERRITORIES.length };
+  }
+  if (path === '/api/workforce-erp/integrations') {
+    return { adapters: FALLBACK_INTEGRATIONS, count: FALLBACK_INTEGRATIONS.length };
+  }
+  if (path.startsWith('/api/workforce-erp/integrations/') && path.endsWith('/ping')) {
+    const key = path.split('/')[4];
+    const adapter = FALLBACK_INTEGRATIONS.find(a => a.key === key);
+    return {
+      key: key || 'adapter',
+      name: adapter?.name || 'External Adapter',
+      status: adapter?.configured ? 'reachable' : 'unconfigured',
+      latencyMs: adapter?.configured ? Math.floor(Math.random() * 30 + 10) : null,
+      message: adapter?.configured ? 'Heartbeat ping successful' : 'Unconfigured: Missing API credentials',
+      checkedAt: new Date().toISOString(),
+    };
+  }
+  if (path === '/api/workforce-erp/drivers/validate-dispatch' && method === 'POST') {
+    const driverId = parsedBody.driverEmployeeId;
+    const isExpired = driverId === '10000000-0000-4000-8000-000000000004';
+    if (isExpired) {
+      return {
+        dispatchAllowed: false,
+        driverName: 'Wanjiku Kimani',
+        reasons: ['Driver license expired under NTSA commercial safety rules.'],
+        daysRemaining: -5,
+        alertLevel: 'expired',
+      };
+    }
+    return {
+      dispatchAllowed: true,
+      driverName: 'Juma Omondi',
+      reasons: [],
+      daysRemaining: 23,
+      alertLevel: 'expiring_soon',
+      vehicleAssigned: 'KDM 482L · Box Distribution Truck',
+    };
+  }
+  if (path === '/api/workforce-erp/executive-summary') {
+    return {
+      dataScope: 'ERP_EXECUTIVE_SUMMARY',
+      overallCoveragePct: 94.2,
+      criticalShortagesCount: 1,
+      activeDriversCount: 3,
+      driverAlertsCount: 1,
+      salesTargetAttainmentPct: 92.4,
+      totalAttributedSalesKes: 2310000,
+      expiringCertifications30dCount: 2,
+      generatedAt: new Date().toISOString(),
+    };
   }
   if (path === '/api/workflow-rules') {
     if (method === 'POST') {
