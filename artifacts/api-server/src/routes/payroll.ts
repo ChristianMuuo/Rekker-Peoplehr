@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
 import {
   db,
@@ -25,12 +25,18 @@ import {
 import { maskKraPin } from "../lib/security";
 import {
   ensureMembership,
+  isDemoAuthPermitted,
   PEOPLEOS_ROLES,
   requireRoles,
 } from "../middlewares/peopleosAccess";
 import { DEMO_EMPLOYEES_LIST } from "./peopleos";
 
 const router: IRouter = Router();
+
+export function isSoloApprovePermitted(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.PEOPLEOS_ALLOW_SOLO_APPROVE === "true";
+}
 
 const payrollViewRoles = [
   PEOPLEOS_ROLES.hrAdmin,
@@ -582,7 +588,7 @@ router.post("/payroll/approve", async (req: Request, res: Response) => {
     // Enforce Maker-Checker Governance: Preparer cannot authorize their own run
     if (
       run.createdByUserId === membership.userId &&
-      process.env.PEOPLEOS_ALLOW_SOLO_APPROVE !== "true"
+      !isSoloApprovePermitted()
     ) {
       res.status(403).json({
         error:
@@ -628,7 +634,7 @@ router.post("/payroll/approve", async (req: Request, res: Response) => {
   if (
     creatorUserId &&
     creatorUserId === membership.userId &&
-    process.env.PEOPLEOS_ALLOW_SOLO_APPROVE !== "true"
+    !isSoloApprovePermitted()
   ) {
     res.status(403).json({
       error:
@@ -970,7 +976,6 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
 
   const runId = String(req.params.runId ?? "run_2026_03");
   const cfg = await getActiveStatutoryConfig(membership.organizationId);
-  const items = buildDemoItemsForRun(runId, "March 2026", cfg);
 
   const costCentreMap: Record<string, string> = {
     "Formulation & Filling": "CC-MFG-01",
@@ -981,6 +986,89 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
     "Finance & Supply Chain": "CC-FIN-01",
   };
 
+  let itemsToUse: Array<{
+    grossPay: number;
+    employerNssf: number;
+    employerHousingLevy: number;
+    netPay: number;
+    netPaye: number;
+    totalNssf: number;
+    sha: number;
+    housingLevy: number;
+    departmentName: string;
+  }> = [];
+
+  if (!process.env.DATABASE_URL) {
+    const demoItems = buildDemoItemsForRun(runId, "March 2026", cfg);
+    itemsToUse = demoItems.map((r) => ({
+      grossPay: r.grossPay,
+      employerNssf: r.employerNssf,
+      employerHousingLevy: r.employerHousingLevy,
+      netPay: r.netPay,
+      netPaye: r.netPaye,
+      totalNssf: r.totalNssf,
+      sha: r.sha,
+      housingLevy: r.housingLevy,
+      departmentName: (r as { departmentName?: string }).departmentName ?? "Formulation & Filling",
+    }));
+  } else {
+    const [dbRun] = await db
+      .select()
+      .from(payrollRunsTable)
+      .where(
+        and(
+          eq(payrollRunsTable.organizationId, membership.organizationId),
+          or(eq(payrollRunsTable.id, runId), eq(payrollRunsTable.period, runId)),
+        ),
+      )
+      .limit(1);
+
+    if (!dbRun) {
+      if (process.env.NODE_ENV === "production" || !isDemoAuthPermitted()) {
+        res.status(404).json({ error: "Payroll run not found." });
+        return;
+      }
+      const demoItems = buildDemoItemsForRun(runId, "March 2026", cfg);
+      itemsToUse = demoItems.map((r) => ({
+        grossPay: r.grossPay,
+        employerNssf: r.employerNssf,
+        employerHousingLevy: r.employerHousingLevy,
+        netPay: r.netPay,
+        netPaye: r.netPaye,
+        totalNssf: r.totalNssf,
+        sha: r.sha,
+        housingLevy: r.housingLevy,
+        departmentName: (r as { departmentName?: string }).departmentName ?? "Formulation & Filling",
+      }));
+    } else {
+      const dbItems = await db
+        .select({
+          item: payrollItemsTable,
+          emp: employeesTable,
+        })
+        .from(payrollItemsTable)
+        .innerJoin(employeesTable, eq(payrollItemsTable.employeeId, employeesTable.id))
+        .where(eq(payrollItemsTable.payrollRunId, dbRun.id));
+
+      if (dbItems.length === 0) {
+        res.status(404).json({ error: "No payroll items found for this run." });
+        return;
+      }
+
+      itemsToUse = dbItems.map(({ item }) => ({
+        grossPay: item.grossPay,
+        employerNssf: item.nssfTier1 + item.nssfTier2,
+        employerHousingLevy: item.housingLevy,
+        netPay: item.netPay,
+        netPaye: item.netPaye,
+        totalNssf: item.totalNssf,
+        sha: item.sha,
+        housingLevy: item.housingLevy,
+        departmentName: "Formulation & Filling",
+      }));
+    }
+  }
+
   const deptTotals = new Map<string, { costCentre: string; dept: string; gross: number; empNssf: number; empAhl: number }>();
   let totalNetPay = 0;
   let totalPaye = 0;
@@ -990,8 +1078,8 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
   let totalEmployeeAhl = 0;
   let totalEmployerAhl = 0;
 
-  for (const row of items) {
-    const deptName = (row as { departmentName?: string }).departmentName ?? "Formulation & Filling";
+  for (const row of itemsToUse) {
+    const deptName = row.departmentName;
     const cc = costCentreMap[deptName] ?? "CC-GEN-01";
     const entry = deptTotals.get(cc) ?? { costCentre: cc, dept: deptName, gross: 0, empNssf: 0, empAhl: 0 };
     entry.gross += row.grossPay;

@@ -19,6 +19,7 @@ import {
   type MemShiftTemplate,
 } from "./workforceErpMemoryStore";
 import { hasVerifiedCompetency } from "./competencyCertificationService";
+import { validateVehicleDispatch } from "./driverComplianceService";
 import { DEMO_EMPLOYEES_LIST } from "../../routes/peopleos";
 import { DEMO_LEAVE_STORE } from "../../routes/leave";
 
@@ -521,6 +522,20 @@ export async function createShiftAssignment(
     const compResult = await hasVerifiedCompetency(organizationId, employeeId, competencyToCheck, shiftDate);
     if (!compResult.verified) {
       throw new Error(`Competency verification failed for ${employeeName}: ${compResult.reason}`);
+    }
+  }
+
+  // 5. Driver Compliance Check for Distribution & Fleet Drivers
+  if (unitType === "distribution" || roleSkill.toLowerCase().includes("driver")) {
+    const dispatch = await validateVehicleDispatch(
+      organizationId,
+      employeeId,
+      new Date(`${shiftDate}T00:00:00Z`),
+    );
+    if (!dispatch.allowed) {
+      throw new Error(
+        `Commercial Driver compliance check failed for ${employeeName}: ${dispatch.reasons.join("; ")}`,
+      );
     }
   }
 

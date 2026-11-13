@@ -129,21 +129,31 @@ router.post(
       return;
     }
 
-    const updated = await decideAiApproval({
-      organizationId: membership.organizationId,
-      approvalId,
-      deciderUserId: membership.userId,
-      deciderRole: membership.role,
-      decision,
-      comment: typeof comment === "string" ? comment.trim() : null,
-    });
+    try {
+      const updated = await decideAiApproval({
+        organizationId: membership.organizationId,
+        approvalId,
+        deciderUserId: membership.userId,
+        deciderRole: membership.role,
+        decision,
+        comment: typeof comment === "string" ? comment.trim() : null,
+        enforceReviewerSeparation: true,
+      });
 
-    if (!updated) {
-      res.status(404).json({ error: "Pending AI approval proposal not found." });
-      return;
+      if (!updated) {
+        res.status(404).json({ error: "Pending AI approval proposal not found." });
+        return;
+      }
+
+      res.json(updated);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to decide proposal.";
+      const isReviewerViolation = msg.includes("Reviewer separation");
+      res.status(isReviewerViolation ? 403 : 400).json({
+        error: msg,
+        code: isReviewerViolation ? "REVIEWER_SEPARATION_VIOLATION" : "APPROVAL_DECISION_FAILED",
+      });
     }
-
-    res.json(updated);
   },
 );
 

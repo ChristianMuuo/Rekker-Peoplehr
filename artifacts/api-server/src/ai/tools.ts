@@ -97,8 +97,10 @@ export const HR_POLICIES: RagPolicy[] = [
  */
 export function sanitizeRagText(rawText: string): string {
   let clean = rawText
-    .replace(/ignore\s+previous\s+instructions/gi, "[REDACTED_INSTRUCTION]")
+    .replace(/ignore\s+(all\s+)?(previous\s+)?instructions/gi, "[REDACTED_INSTRUCTION]")
     .replace(/disregard\s+(all\s+)?(rbac|rules|instructions)/gi, "[REDACTED_INSTRUCTION]")
+    .replace(/delete\s+from\s+[a-z0-9_]+/gi, "[REDACTED_COMMAND]")
+    .replace(/drop\s+table\s+[a-z0-9_]+/gi, "[REDACTED_COMMAND]")
     .replace(/you\s+are\s+now\s+in\s+debug\s+mode/gi, "[REDACTED_INSTRUCTION]")
     .replace(/system\s*:\s*/gi, "Context Citation: ")
     .replace(/<\|im_start\|>/gi, "")
@@ -270,6 +272,11 @@ export async function listAiApprovals(
   });
 }
 
+function isSoloApprovePermitted(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.PEOPLEOS_ALLOW_SOLO_APPROVE === "true";
+}
+
 export async function decideAiApproval(params: {
   organizationId: string;
   approvalId: string;
@@ -277,6 +284,7 @@ export async function decideAiApproval(params: {
   deciderRole: string;
   decision: "approve" | "reject";
   comment?: string | null;
+  enforceReviewerSeparation?: boolean;
 }): Promise<AiApprovalItem | null> {
   const newStatus = params.decision === "approve" ? "approved" : "rejected";
 
@@ -287,6 +295,18 @@ export async function decideAiApproval(params: {
         a.organizationId === params.organizationId,
     );
     if (!item || item.status !== "pending") return null;
+
+    if (
+      params.enforceReviewerSeparation &&
+      params.decision === "approve" &&
+      item.requestedByUserId === params.deciderUserId &&
+      !isSoloApprovePermitted()
+    ) {
+      throw new Error(
+        "Reviewer separation violation: you cannot approve an AI proposal you requested.",
+      );
+    }
+
     item.status = newStatus;
     item.decidedByUserId = params.deciderUserId;
     item.decisionComment = params.comment ?? null;
@@ -302,6 +322,31 @@ export async function decideAiApproval(params: {
       isDemo: true,
     });
     return item;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(aiApprovalRequestsTable)
+    .where(
+      and(
+        eq(aiApprovalRequestsTable.id, params.approvalId),
+        eq(aiApprovalRequestsTable.organizationId, params.organizationId),
+        eq(aiApprovalRequestsTable.status, "pending"),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) return null;
+
+  if (
+    params.enforceReviewerSeparation &&
+    params.decision === "approve" &&
+    existing.requestedByUserId === params.deciderUserId &&
+    !isSoloApprovePermitted()
+  ) {
+    throw new Error(
+      "Reviewer separation violation: you cannot approve an AI proposal you requested.",
+    );
   }
 
   const [updated] = await db

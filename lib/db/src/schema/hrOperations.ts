@@ -32,7 +32,11 @@ export const hrCasesTable = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("hr_cases_org_status_idx").on(table.organizationId, table.status)],
+  (table) => [
+    index("hr_cases_org_status_idx").on(table.organizationId, table.status),
+    index("hr_cases_org_submitter_idx").on(table.organizationId, table.submittedByUserId),
+    index("hr_cases_org_case_no_idx").on(table.organizationId, table.caseNumber),
+  ],
 );
 
 export const workforceShiftsTable = pgTable(
@@ -54,7 +58,10 @@ export const workforceShiftsTable = pgTable(
     costCentreCode: text("cost_centre_code").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("workforce_shifts_org_unit_idx").on(table.organizationId, table.unitType)],
+  (table) => [
+    index("workforce_shifts_org_unit_idx").on(table.organizationId, table.unitType),
+    index("workforce_shifts_org_emp_idx").on(table.organizationId, table.employeeId),
+  ],
 );
 
 export const workflowRulesTable = pgTable(

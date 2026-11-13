@@ -52,14 +52,14 @@ async function checkMlServiceReadiness(): Promise<{
   };
 }
 
-// GET /api/healthz — Lightweight process liveness probe (zero secrets)
-router.get("/healthz", (_req, res) => {
+// GET /api/health & /api/healthz — Lightweight process liveness probe (zero secrets)
+router.get(["/health", "/healthz"], (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.json(data);
 });
 
-// GET /api/readyz — Dependency & configuration readiness probe (fails closed on critical failure)
-router.get("/readyz", async (_req: Request, res: Response) => {
+// GET /api/ready & /api/readyz — Dependency & configuration readiness probe (fails closed on critical failure)
+router.get(["/ready", "/readyz"], async (_req: Request, res: Response) => {
   const runtime = validateRuntimeEnvironment(process.env, { throwOnFatal: false });
   const dbHealth = await checkDbHealth(2000);
   const mlHealth = await checkMlServiceReadiness();
@@ -86,6 +86,34 @@ router.get("/readyz", async (_req: Request, res: Response) => {
       openAiLlm: runtime.openaiApiKey ? "configured" : "awaiting_credentials",
       mpesaDaraja: isMpesaLiveConfigured() ? "configured" : "awaiting_credentials",
     },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /api/health/database — Database latency and connection health
+router.get("/health/database", async (_req: Request, res: Response) => {
+  const dbHealth = await checkDbHealth(2000);
+  const healthy = !dbHealth.configured || dbHealth.connected;
+  res.status(healthy ? 200 : 503).json({
+    status: !dbHealth.configured
+      ? "sandbox_in_memory"
+      : dbHealth.connected
+        ? "connected"
+        : "unavailable",
+    healthy,
+    configured: dbHealth.configured,
+    latencyMs: dbHealth.latencyMs ?? null,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /api/health/ml — Python ML engine availability check
+router.get("/health/ml", async (_req: Request, res: Response) => {
+  const mlHealth = await checkMlServiceReadiness();
+  res.status(mlHealth.reachable ? 200 : 503).json({
+    status: mlHealth.reachable ? "operational" : "unavailable",
+    mode: mlHealth.mode,
+    detail: mlHealth.detail,
     timestamp: new Date().toISOString(),
   });
 });

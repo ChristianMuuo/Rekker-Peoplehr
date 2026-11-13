@@ -78,6 +78,11 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
+// Top-level liveness probe for cloud load balancers, container orchestrators & deployment platforms
+app.get(["/health", "/healthz"], (_req: Request, res: Response) => {
+  res.status(200).json({ status: "ok" });
+});
+
 // Reject unapproved cross-origin requests explicitly; never reflect arbitrary origins with credentials
 app.use((req: Request, res: Response, next: NextFunction) => {
   const origin = req.headers.origin;

@@ -392,6 +392,7 @@ export const payrollItemsTable = pgTable(
   },
   (table) => [
     index("peopleos_payroll_items_run_idx").on(table.payrollRunId),
+    index("peopleos_payroll_items_emp_idx").on(table.employeeId),
   ],
 );
 

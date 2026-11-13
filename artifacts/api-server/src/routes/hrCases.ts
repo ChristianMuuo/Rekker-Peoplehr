@@ -245,39 +245,133 @@ router.post("/hr-cases", async (req: Request, res: Response) => {
       targetType: "hr_case",
       targetId: created.id,
       summary: `Confidential HR case ${caseNumber} opened (${category})`,
+      critical: true,
       isDemo: true,
     });
     res.status(201).json(isOfficer ? created : redactForEmployee(created, membership.userId));
     return;
   }
 
-  const [created] = await db
-    .insert(hrCasesTable)
-    .values({
-      organizationId: membership.organizationId,
-      caseNumber,
-      subjectEmployeeId,
-      submittedByUserId: membership.userId,
-      category,
-      severity,
-      title,
-      description,
-      confidentialNotes,
-      status: "open",
-    })
-    .returning();
+  const created = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(hrCasesTable)
+      .values({
+        organizationId: membership.organizationId,
+        caseNumber,
+        subjectEmployeeId,
+        submittedByUserId: membership.userId,
+        category,
+        severity,
+        title,
+        description,
+        confidentialNotes,
+        status: "open",
+      })
+      .returning();
 
-  await recordAuditEvent({
-    organizationId: membership.organizationId,
-    actorUserId: membership.userId,
-    actor: membership.role,
-    action: "HR_CASE_OPENED",
-    targetType: "hr_case",
-    targetId: created?.id ?? caseNumber,
-    summary: `Confidential HR case ${caseNumber} opened (${category})`,
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "HR_CASE_OPENED",
+      targetType: "hr_case",
+      targetId: row?.id ?? caseNumber,
+      summary: `Confidential HR case ${caseNumber} opened (${category})`,
+      critical: true,
+      tx,
+    });
+
+    return row!;
   });
 
-  res.status(201).json(created);
+  res.status(201).json(
+    isOfficer
+      ? created
+      : {
+          id: created.id,
+          caseNumber: created.caseNumber,
+          category: created.category,
+          severity: created.severity,
+          title: created.title,
+          description: created.description,
+          confidentialNotes: null,
+          assignedInvestigatorUserId: null,
+          status: created.status,
+          resolutionSummary: created.resolutionSummary,
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt,
+        },
+  );
+});
+
+// GET /api/hr-cases/:id — Strict access boundary per case
+router.get("/hr-cases/:id", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const caseId = String(req.params.id ?? "");
+  const isOfficer = HR_CASE_OFFICERS.includes(membership.role);
+
+  if (!process.env.DATABASE_URL) {
+    ensureHrCasesSeeded(membership.organizationId);
+    const target = DEMO_HR_CASES.get(membership.organizationId)?.find((c) => c.id === caseId);
+    if (!target) {
+      res.status(404).json({ error: "HR Case not found." });
+      return;
+    }
+    if (!isOfficer && target.submittedByUserId !== membership.userId) {
+      res.status(403).json({
+        error: "Confidential HR Case access denied. You are not authorized to view this investigation.",
+        code: "CONFIDENTIAL_CASE_ACCESS_DENIED",
+      });
+      return;
+    }
+    res.json(isOfficer ? target : redactForEmployee(target, membership.userId));
+    return;
+  }
+
+  const [target] = await db
+    .select()
+    .from(hrCasesTable)
+    .where(
+      and(
+        eq(hrCasesTable.id, caseId),
+        eq(hrCasesTable.organizationId, membership.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!target) {
+    res.status(404).json({ error: "HR Case not found." });
+    return;
+  }
+
+  if (!isOfficer && target.submittedByUserId !== membership.userId) {
+    res.status(403).json({
+      error: "Confidential HR Case access denied. You are not authorized to view this investigation.",
+      code: "CONFIDENTIAL_CASE_ACCESS_DENIED",
+    });
+    return;
+  }
+
+  res.json(
+    isOfficer
+      ? target
+      : {
+          id: target.id,
+          caseNumber: target.caseNumber,
+          category: target.category,
+          severity: target.severity,
+          title: target.title,
+          description: target.description,
+          confidentialNotes: null,
+          assignedInvestigatorUserId: null,
+          status: target.status,
+          resolutionSummary: target.resolutionSummary,
+          createdAt: target.createdAt,
+          updatedAt: target.updatedAt,
+        },
+  );
 });
 
 // PATCH /api/hr-cases/:id — Strictly HR Case Officers Only
@@ -315,23 +409,43 @@ router.patch("/hr-cases/:id", async (req: Request, res: Response) => {
       targetType: "hr_case",
       targetId: target.id,
       summary: `Updated HR case ${target.caseNumber} -> ${target.status}`,
+      critical: true,
       isDemo: true,
     });
     res.json(target);
     return;
   }
 
-  const [updated] = await db
-    .update(hrCasesTable)
-    .set({
-      ...(status ? { status } : {}),
-      ...(confidentialNotes !== undefined ? { confidentialNotes } : {}),
-      ...(resolutionSummary !== undefined ? { resolutionSummary } : {}),
-      assignedInvestigatorUserId: membership.userId,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(hrCasesTable.id, caseId), eq(hrCasesTable.organizationId, membership.organizationId)))
-    .returning();
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(hrCasesTable)
+      .set({
+        ...(status ? { status } : {}),
+        ...(confidentialNotes !== undefined ? { confidentialNotes } : {}),
+        ...(resolutionSummary !== undefined ? { resolutionSummary } : {}),
+        assignedInvestigatorUserId: membership.userId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(hrCasesTable.id, caseId), eq(hrCasesTable.organizationId, membership.organizationId)))
+      .returning();
+
+    if (!row) return null;
+
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "HR_CASE_UPDATED",
+      targetType: "hr_case",
+      targetId: row.id,
+      summary: `Updated HR case ${row.caseNumber} -> ${row.status}`,
+      critical: true,
+      tx,
+    });
+
+    return row;
+  });
+
   if (!updated) {
     res.status(404).json({ error: "HR Case not found." });
     return;
