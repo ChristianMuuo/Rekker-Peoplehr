@@ -24,10 +24,14 @@ class TestRekkerMlEngine(unittest.TestCase):
         res = dispatch_ml_task("attrition", {"employees": employees, "isDemo": True})
         self.assertEqual(res["status"], "completed")
         self.assertEqual(res["analyticsMode"], "SIMULATED_DEMO_BASELINE")
+        self.assertEqual(res["modelVersion"], "1.2.0")
+        self.assertEqual(res["dataProvenance"], "synthetic_development_fixture")
         self.assertIn("cvRocAuc", res["evaluationMetrics"])
         self.assertGreater(res["evaluationMetrics"]["cvRocAuc"], 0.7)
         self.assertEqual(len(res["predictions"]), 2)
         self.assertEqual(len(res["predictions"][0]["topDrivers"]), 3)
+        self.assertIn("confidenceInterval", res["predictions"][0])
+        self.assertEqual(len(res["predictions"][0]["confidenceInterval"]), 2)
         # Contract expiring + low tenure + high overtime should produce higher risk than stable veteran
         risks = {p["employeeId"]: p["attritionProbability"] for p in res["predictions"]}
         self.assertGreater(risks["e2"], risks["e1"])

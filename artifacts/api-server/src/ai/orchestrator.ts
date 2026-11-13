@@ -10,7 +10,9 @@ import { invokeLlmWithRetry } from "./llmClient";
 import {
   enqueueAiApprovalProposal,
   executeScopedTool,
+  retrieveDynamicPolicies,
   retrieveRelevantPolicies,
+  type ApprovalRiskLevel,
   type RagPolicy,
 } from "./tools";
 import { PEOPLEOS_ROLES } from "../middlewares/peopleosAccess";
@@ -190,8 +192,9 @@ export function classifyIntentToAgent(
     lower.includes("attendance") ||
     lower.includes("clock") ||
     lower.includes("shift") ||
-    lower.includes("late") ||
-    lower.includes("overtime pattern")
+    /\blate\b/.test(lower) ||
+    lower.includes("overtime pattern") ||
+    lower.includes("punch")
   ) {
     return "attendance";
   }
@@ -248,6 +251,7 @@ function detectHighImpactProposal(query: string): {
   targetType: string;
   targetId: string;
   payload: Record<string, unknown>;
+  riskLevel: ApprovalRiskLevel;
 } | null {
   const lower = query.toLowerCase();
   if (
@@ -263,6 +267,7 @@ function detectHighImpactProposal(query: string): {
       action: "MODIFY_COMPENSATION",
       targetType: "employee",
       targetId: "10000000-0000-4000-8000-000000000006",
+      riskLevel: "critical",
       payload: {
         proposedAmountKes: numMatch ? Number(numMatch[1]!.replace(/,/g, "")) : 135000,
         sourcePrompt: query.slice(0, 240),
@@ -279,6 +284,7 @@ function detectHighImpactProposal(query: string): {
       action: "APPROVE_AND_DISBURSE_PAYROLL",
       targetType: "payroll_run",
       targetId: "run_2026_03",
+      riskLevel: "critical",
       payload: { period: "March 2026", channel: "mpesa_b2c" },
     };
   }
@@ -287,7 +293,17 @@ function detectHighImpactProposal(query: string): {
       action: "TERMINATE_EMPLOYMENT_CONTRACT",
       targetType: "employee",
       targetId: "review_required",
+      riskLevel: "critical",
       payload: { reason: "Requested via AI agent workflow", sourcePrompt: query.slice(0, 240) },
+    };
+  }
+  if (lower.includes("statutory config") && (lower.includes("override") || lower.includes("modify"))) {
+    return {
+      action: "OVERRIDE_STATUTORY_CONFIG",
+      targetType: "statutory_config",
+      targetId: "active_config",
+      riskLevel: "high",
+      payload: { reason: "Manual statutory rate adjustment", sourcePrompt: query.slice(0, 240) },
     };
   }
   return null;
@@ -351,11 +367,23 @@ export async function runMultiAgentGraph(params: {
   const toolOutputs: Record<string, any> = {};
   const collaborators: SpecialistAgentId[] = [...agentMeta.collaboratesWith];
 
+  // Dynamic cross-domain collaboration routing
+  if (lower.includes("shortage") || lower.includes("turnover") || lower.includes("retention")) {
+    if (!collaborators.includes("retention")) collaborators.push("retention");
+    if (!collaborators.includes("executive")) collaborators.push("executive");
+  }
+  if (lower.includes("training") || lower.includes("skill") || lower.includes("competency")) {
+    if (!collaborators.includes("learning")) collaborators.push("learning");
+  }
+  if (lower.includes("shift") || lower.includes("plant") || lower.includes("overtime")) {
+    if (!collaborators.includes("attendance")) collaborators.push("attendance");
+  }
+
   const snapshot = await executeScopedTool("get_workforce_snapshot", membership);
   toolsCalled.push("get_workforce_snapshot");
   toolOutputs.snapshot = snapshot.data;
 
-  const retrievedPolicies: RagPolicy[] = retrieveRelevantPolicies(query, 2);
+  const retrievedPolicies: RagPolicy[] = await retrieveDynamicPolicies(query, membership.organizationId, role, 2);
   toolsCalled.push("search_policies_rag");
 
   if (resolvedAgent === "payroll") {
@@ -410,6 +438,7 @@ export async function runMultiAgentGraph(params: {
       proposedAction: highImpact.action,
       payload: highImpact.payload,
       rationale: `Triggered from ${agentMeta.name} user inquiry; held pending human HR/Payroll Admin approval.`,
+      riskLevel: highImpact.riskLevel,
     });
     toolsCalled.push("enqueue_ai_approval_proposal");
   }
@@ -497,6 +526,8 @@ function buildGroundedNarrative(
           status: approval.status,
           targetType: approval.targetType,
           targetId: approval.targetId,
+          riskLevel: approval.riskLevel || "high",
+          expiresAt: approval.expiresAt,
           payload: approval.payload,
         },
       },

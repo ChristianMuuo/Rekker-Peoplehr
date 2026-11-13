@@ -1,12 +1,21 @@
 import crypto from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { aiApprovalRequestsTable, db, type MembershipRecord } from "@workspace/db";
+import {
+  aiApprovalRequestsTable,
+  db,
+  employeesTable,
+  ragPolicyDocumentsTable,
+  workforceShiftsTable,
+  type MembershipRecord,
+} from "@workspace/db";
 import {
   calculateKenyaStatutoryWithConfig,
   getActiveStatutoryConfig,
 } from "../lib/kenyaPayrollEngine";
 import { runPythonMlTask } from "../lib/mlBridge";
-import { buildDefaultPayloadForTask } from "../routes/ml";
+import {
+  assembleTenantFeaturesForTask,
+} from "../services/mlFeatureAssembly";
 import { PEOPLEOS_ROLES } from "../middlewares/peopleosAccess";
 import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "../routes/peopleos";
 import { DEMO_LEAVE_POLICIES, DEMO_LEAVE_STORE } from "../routes/leave";
@@ -19,6 +28,7 @@ export interface RagPolicy {
   content: string;
   sourceDocument: string;
   effectiveDate: string;
+  isCustomPolicy?: boolean;
 }
 
 export const HR_POLICIES: RagPolicy[] = [
@@ -81,6 +91,24 @@ export const HR_POLICIES: RagPolicy[] = [
   },
 ];
 
+/**
+ * Sanitizes external / document text to prevent prompt injection attacks.
+ * Strips adversarial instruction override patterns before feeding context to LLM.
+ */
+export function sanitizeRagText(rawText: string): string {
+  let clean = rawText
+    .replace(/ignore\s+previous\s+instructions/gi, "[REDACTED_INSTRUCTION]")
+    .replace(/disregard\s+(all\s+)?(rbac|rules|instructions)/gi, "[REDACTED_INSTRUCTION]")
+    .replace(/you\s+are\s+now\s+in\s+debug\s+mode/gi, "[REDACTED_INSTRUCTION]")
+    .replace(/system\s*:\s*/gi, "Context Citation: ")
+    .replace(/<\|im_start\|>/gi, "")
+    .replace(/<\|im_end\|>/gi, "");
+  return clean.trim();
+}
+
+/**
+ * Synchronous baseline retrieval (preserves 100% backward compatibility for tests and sync helpers)
+ */
 export function retrieveRelevantPolicies(
   query: string,
   maxResults: number = 2,
@@ -104,6 +132,77 @@ export function retrieveRelevantPolicies(
     .map((s) => s.policy);
 }
 
+/**
+ * Dynamic tenant-scoped RAG search incorporating database policies + statutory baseline
+ */
+export async function retrieveDynamicPolicies(
+  query: string,
+  organizationId: string,
+  userRole: string,
+  maxResults: number = 3,
+): Promise<RagPolicy[]> {
+  const allPolicies: RagPolicy[] = [...HR_POLICIES];
+
+  if (process.env.DATABASE_URL) {
+    try {
+      const dbDocs = await db
+        .select()
+        .from(ragPolicyDocumentsTable)
+        .where(
+          and(
+            eq(ragPolicyDocumentsTable.organizationId, organizationId),
+            eq(ragPolicyDocumentsTable.status, "active"),
+          ),
+        );
+
+      for (const doc of dbDocs) {
+        // Enforce RBAC access check on custom documents
+        let allowedRoles: string[] = [];
+        try {
+          if (doc.accessRolesJson) allowedRoles = JSON.parse(doc.accessRolesJson);
+        } catch {}
+
+        if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
+          continue; // User role not authorized to view this confidential policy
+        }
+
+        allPolicies.push({
+          id: doc.id,
+          title: doc.title,
+          category: doc.category,
+          content: sanitizeRagText(doc.content),
+          sourceDocument: `${doc.sourceDocument} (v${doc.version})`,
+          effectiveDate: doc.effectiveDate,
+          isCustomPolicy: true,
+        });
+      }
+    } catch (err) {
+      console.warn("Dynamic policy retrieval fallback to statutory baseline:", err);
+    }
+  }
+
+  const q = query.toLowerCase();
+  const words = q.split(/\W+/).filter((w) => w.length > 2);
+
+  const scored = allPolicies.map((p) => {
+    let score = 0;
+    for (const w of words) {
+      if (p.title.toLowerCase().includes(w)) score += 4;
+      if (p.category.toLowerCase().includes(w)) score += 3;
+      if (p.content.toLowerCase().includes(w)) score += 1;
+    }
+    return { policy: p, score };
+  });
+
+  return scored
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxResults)
+    .map((s) => s.policy);
+}
+
+export type ApprovalRiskLevel = "low" | "medium" | "high" | "critical";
+
 export interface AiApprovalItem {
   id: string;
   organizationId: string;
@@ -115,6 +214,8 @@ export interface AiApprovalItem {
   payload: Record<string, unknown>;
   rationale: string;
   status: "pending" | "approved" | "rejected";
+  riskLevel: ApprovalRiskLevel;
+  expiresAt: string;
   decidedByUserId: string | null;
   decisionComment: string | null;
   decidedAt: string | null;
@@ -137,22 +238,36 @@ export async function listAiApprovals(
     .where(eq(aiApprovalRequestsTable.organizationId, organizationId))
     .orderBy(desc(aiApprovalRequestsTable.createdAt));
 
-  return rows.map((r) => ({
-    id: r.id,
-    organizationId: r.organizationId,
-    agentRole: r.agentRole,
-    requestedByUserId: r.requestedByUserId,
-    targetType: r.targetType,
-    targetId: r.targetId,
-    proposedAction: r.proposedAction,
-    payload: JSON.parse(r.payloadJson) as Record<string, unknown>,
-    rationale: r.rationale,
-    status: r.status as "pending" | "approved" | "rejected",
-    decidedByUserId: r.decidedByUserId,
-    decisionComment: r.decisionComment,
-    decidedAt: r.decidedAt?.toISOString() ?? null,
-    createdAt: r.createdAt.toISOString(),
-  }));
+  return rows.map((r) => {
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(r.payloadJson);
+    } catch {}
+
+    const riskLevel = (parsed._riskLevel as ApprovalRiskLevel) || "high";
+    const expiresAt =
+      (parsed._expiresAt as string) ||
+      new Date(r.createdAt.getTime() + 72 * 3600 * 1000).toISOString();
+
+    return {
+      id: r.id,
+      organizationId: r.organizationId,
+      agentRole: r.agentRole,
+      requestedByUserId: r.requestedByUserId,
+      targetType: r.targetType,
+      targetId: r.targetId,
+      proposedAction: r.proposedAction,
+      payload: parsed,
+      rationale: r.rationale,
+      status: r.status as "pending" | "approved" | "rejected",
+      riskLevel,
+      expiresAt,
+      decidedByUserId: r.decidedByUserId,
+      decisionComment: r.decisionComment,
+      decidedAt: r.decidedAt?.toISOString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+    };
+  });
 }
 
 export async function decideAiApproval(params: {
@@ -217,6 +332,11 @@ export async function decideAiApproval(params: {
     summary: `${updated.proposedAction} proposal ${newStatus} by ${params.deciderRole}`,
   });
 
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(updated.payloadJson);
+  } catch {}
+
   return {
     id: updated.id,
     organizationId: updated.organizationId,
@@ -225,9 +345,13 @@ export async function decideAiApproval(params: {
     targetType: updated.targetType,
     targetId: updated.targetId,
     proposedAction: updated.proposedAction,
-    payload: JSON.parse(updated.payloadJson) as Record<string, unknown>,
+    payload: parsed,
     rationale: updated.rationale,
     status: updated.status as "pending" | "approved" | "rejected",
+    riskLevel: (parsed._riskLevel as ApprovalRiskLevel) || "high",
+    expiresAt:
+      (parsed._expiresAt as string) ||
+      new Date(updated.createdAt.getTime() + 72 * 3600 * 1000).toISOString(),
     decidedByUserId: updated.decidedByUserId,
     decisionComment: updated.decisionComment,
     decidedAt: updated.decidedAt?.toISOString() ?? null,
@@ -243,7 +367,17 @@ export async function enqueueAiApprovalProposal(params: {
   proposedAction: string;
   payload: Record<string, unknown>;
   rationale: string;
+  riskLevel?: ApprovalRiskLevel;
 }): Promise<AiApprovalItem> {
+  const riskLevel = params.riskLevel ?? "critical";
+  const expiresAt = new Date(Date.now() + 72 * 3600 * 1000).toISOString(); // 72-hour human signoff window
+
+  const payloadWithMeta = {
+    ...params.payload,
+    _riskLevel: riskLevel,
+    _expiresAt: expiresAt,
+  };
+
   const item: AiApprovalItem = {
     id: crypto.randomUUID(),
     organizationId: params.membership.organizationId,
@@ -252,9 +386,11 @@ export async function enqueueAiApprovalProposal(params: {
     targetType: params.targetType,
     targetId: params.targetId,
     proposedAction: params.proposedAction,
-    payload: params.payload,
+    payload: payloadWithMeta,
     rationale: params.rationale,
     status: "pending",
+    riskLevel,
+    expiresAt,
     decidedByUserId: null,
     decisionComment: null,
     decidedAt: null,
@@ -273,7 +409,7 @@ export async function enqueueAiApprovalProposal(params: {
         targetType: params.targetType,
         targetId: params.targetId,
         proposedAction: params.proposedAction,
-        payloadJson: JSON.stringify(params.payload),
+        payloadJson: JSON.stringify(payloadWithMeta),
         rationale: params.rationale,
         status: "pending",
       })
@@ -288,7 +424,7 @@ export async function enqueueAiApprovalProposal(params: {
     action: "AI_APPROVAL_QUEUED",
     targetType: params.targetType,
     targetId: item.id,
-    summary: `AI Agent (${params.agentRole}) proposed ${params.proposedAction} requiring human approval`,
+    summary: `AI Agent (${params.agentRole}) proposed ${params.proposedAction} (${riskLevel} risk) requiring human approval`,
     isDemo: !process.env.DATABASE_URL,
   });
 
@@ -296,8 +432,8 @@ export async function enqueueAiApprovalProposal(params: {
 }
 
 /**
- * Permission-scoped tool execution helper.
- * Never exposes company-wide payroll/attrition/audit to standard employee roles.
+ * Enterprise Tool Registry with RBAC enforcement and typed domain outputs.
+ * Never exposes company-wide payroll/attrition/audit to unauthorized roles.
  */
 export async function executeScopedTool(
   toolName: string,
@@ -353,6 +489,81 @@ export async function executeScopedTool(
       };
     }
 
+    case "get_employee_profile": {
+      const targetEmpId = String(args.employeeId ?? membership.employeeId ?? "");
+      // Non-management employees cannot browse peer profiles
+      if (!isExecutiveOrManager && targetEmpId !== membership.employeeId) {
+        return {
+          allowed: false,
+          reason: "Standard employees may only query their own self-service profile.",
+        };
+      }
+
+      const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === targetEmpId);
+      if (!emp) {
+        return { allowed: true, data: { status: "not_found", message: "Employee not found." } };
+      }
+
+      return {
+        allowed: true,
+        data: {
+          id: emp.id,
+          name: `${emp.firstName} ${emp.lastName}`,
+          jobTitle: emp.jobTitle,
+          departmentName: emp.departmentName,
+          startDate: emp.startDate,
+          status: emp.status,
+          contractEndDate: emp.contractEndDate ? String(emp.contractEndDate) : null,
+          skills: (emp as any).skills ?? [],
+        },
+      };
+    }
+
+    case "get_leave_summary": {
+      const empLeaves = DEMO_LEAVE_STORE.filter(
+        (l) => isExecutiveOrManager || l.employeeId === membership.employeeId,
+      );
+      return {
+        allowed: true,
+        data: {
+          totalLeaveRequests: empLeaves.length,
+          pendingCount: empLeaves.filter((l) => l.status === "pending").length,
+          approvedCount: empLeaves.filter((l) => l.status === "approved").length,
+          annualDaysFloor: 21,
+        },
+      };
+    }
+
+    case "get_attendance_summary": {
+      return {
+        allowed: true,
+        data: {
+          overallOnTimeRatePct: 96.2,
+          overtimeHoursRecorded: 84.5,
+          shiftCoveragePct: 98.0,
+        },
+      };
+    }
+
+    case "get_payroll_summary": {
+      if (!isPayrollAuthorized) {
+        return {
+          allowed: false,
+          reason: "Payroll summary access requires Payroll Officer or HR Admin role.",
+        };
+      }
+      return {
+        allowed: true,
+        data: {
+          period: "March 2026",
+          totalGrossPayKes: 2280000,
+          totalNetPayKes: 1695420,
+          statutoryRemittancesKes: 584580,
+          disbursementStatus: "awaiting_approval",
+        },
+      };
+    }
+
     case "compute_kenya_statutory_breakdown": {
       const amount = Number(args.grossSalary) || 180000;
       const cfg = await getActiveStatutoryConfig(orgId);
@@ -374,8 +585,10 @@ export async function executeScopedTool(
         };
       }
       try {
-        const mlPayload = await buildDefaultPayloadForTask("payroll_anomalies", orgId);
-        const result = await runPythonMlTask("payroll_anomalies", mlPayload);
+        const assembled = await assembleTenantFeaturesForTask("payroll_anomalies", orgId, {
+          allowDemoFallback: true,
+        });
+        const result = await runPythonMlTask("payroll_anomalies", assembled.payload);
         return { allowed: true, data: result };
       } catch (err) {
         return {
@@ -393,9 +606,14 @@ export async function executeScopedTool(
         };
       }
       try {
+        const [attAssembled, sentAssembled] = await Promise.all([
+          assembleTenantFeaturesForTask("attrition", orgId, { allowDemoFallback: true }),
+          assembleTenantFeaturesForTask("sentiment", orgId, { allowDemoFallback: true }),
+        ]);
+
         const [attrition, sentiment] = await Promise.all([
-          runPythonMlTask("attrition", await buildDefaultPayloadForTask("attrition", orgId)),
-          runPythonMlTask("sentiment", await buildDefaultPayloadForTask("sentiment", orgId)),
+          runPythonMlTask("attrition", attAssembled.payload),
+          runPythonMlTask("sentiment", sentAssembled.payload),
         ]);
         return { allowed: true, data: { attrition, sentiment } };
       } catch (err) {
@@ -414,10 +632,10 @@ export async function executeScopedTool(
         };
       }
       try {
-        const forecast = await runPythonMlTask(
-          "workforce_forecast",
-          await buildDefaultPayloadForTask("workforce_forecast", orgId),
-        );
+        const assembled = await assembleTenantFeaturesForTask("workforce_forecast", orgId, {
+          allowDemoFallback: true,
+        });
+        const forecast = await runPythonMlTask("workforce_forecast", assembled.payload);
         return { allowed: true, data: forecast };
       } catch (err) {
         return {
@@ -435,10 +653,10 @@ export async function executeScopedTool(
         };
       }
       try {
-        const ranking = await runPythonMlTask(
-          "candidate_match",
-          await buildDefaultPayloadForTask("candidate_match", orgId),
-        );
+        const assembled = await assembleTenantFeaturesForTask("candidate_match", orgId, {
+          allowDemoFallback: true,
+        });
+        const ranking = await runPythonMlTask("candidate_match", assembled.payload);
         return { allowed: true, data: ranking };
       } catch (err) {
         return {
@@ -456,10 +674,10 @@ export async function executeScopedTool(
         };
       }
       try {
-        const res = await runPythonMlTask(
-          "attendance_anomalies",
-          await buildDefaultPayloadForTask("attendance_anomalies", orgId),
-        );
+        const assembled = await assembleTenantFeaturesForTask("attendance_anomalies", orgId, {
+          allowDemoFallback: true,
+        });
+        const res = await runPythonMlTask("attendance_anomalies", assembled.payload);
         return { allowed: true, data: res };
       } catch (err) {
         return {
@@ -471,13 +689,11 @@ export async function executeScopedTool(
 
     case "run_skills_gap_ml": {
       try {
-        const payload = await buildDefaultPayloadForTask("skills_gap", orgId);
-        if (!isExecutiveOrManager && membership.employeeId) {
-          payload.employees = (payload.employees as any[]).filter(
-            (e) => e.id === membership.employeeId,
-          );
-        }
-        const res = await runPythonMlTask("skills_gap", payload);
+        const assembled = await assembleTenantFeaturesForTask("skills_gap", orgId, {
+          allowDemoFallback: true,
+          employeeId: !isExecutiveOrManager ? membership.employeeId ?? undefined : undefined,
+        });
+        const res = await runPythonMlTask("skills_gap", assembled.payload);
         return { allowed: true, data: res };
       } catch (err) {
         return {
@@ -487,9 +703,40 @@ export async function executeScopedTool(
       }
     }
 
+    case "get_certification_expiry_summary": {
+      if (!isExecutiveOrManager) {
+        return {
+          allowed: false,
+          reason: "Certification compliance reporting requires HR Manager or Supervisor access.",
+        };
+      }
+      return {
+        allowed: true,
+        data: {
+          expiringWithin30Days: 2,
+          expiringWithin60Days: 4,
+          highRiskDistributionVehiclesBlocked: 1,
+          complianceFloorMet: true,
+        },
+      };
+    }
+
+    case "get_workforce_coverage": {
+      return {
+        allowed: true,
+        data: {
+          overallCoveragePct: 98.4,
+          fillingLineCoveragePct: 100.0,
+          warehouseLogisticsCoveragePct: 96.8,
+          activeShiftSwapsPending: 1,
+        },
+      };
+    }
+
+    case "retrieve_hr_policy":
     case "search_policies_rag": {
       const query = String(args.query ?? "");
-      const policies = retrieveRelevantPolicies(query, 3);
+      const policies = await retrieveDynamicPolicies(query, orgId, role, 3);
       return { allowed: true, data: policies };
     }
 

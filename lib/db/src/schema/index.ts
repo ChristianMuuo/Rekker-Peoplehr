@@ -21,3 +21,4 @@ export * from "./peopleos";
 export * from "./hrOperations";
 export * from "./phase2CoreHr";
 export * from "./phase4WorkforceErp";
+export * from "./phase5AiGovernance";
