@@ -420,31 +420,42 @@ export async function customFetch<T = unknown>(
     const contentType = response.headers.get("content-type") || "";
     const isHtmlResponse = contentType.includes("text/html");
 
-    if (response.ok && (!isHtmlResponse || responseType === "text")) {
-      return (await parseSuccessBody(response, responseType, requestInfo)) as T;
-    }
+    // Detect Vercel static deployment serving index.html for /api/* routes.
+    // Covers: 200 HTML rewrite, Vercel edge 404 NOT_FOUND, and any response
+    // from a .vercel.app host that isn't a real JSON API.
+    const isOnVercel =
+      typeof window !== "undefined" &&
+      (window.location.hostname.endsWith(".vercel.app") ||
+        window.location.hostname.endsWith(".vercel.sh"));
 
-    // Static SPA host (e.g. Vite/Vercel rewrite returning index.html for /api/*, or Vercel edge 404 NOT_FOUND when backend is unhosted)
     const isVercelMissingBackend =
-      response.status === 404 &&
       !_baseUrl &&
       !getEnvVar("VITE_API_BASE_URL") &&
-      (response.headers.get("x-vercel-error") === "NOT_FOUND" ||
-        response.headers.get("server")?.toLowerCase().includes("vercel") ||
-        (typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app")));
+      (isHtmlResponse ||
+        response.status === 404 ||
+        (isOnVercel && !contentType.includes("application/json")));
+
+    if (response.ok && !isHtmlResponse && !isVercelMissingBackend && responseType !== "text") {
+      return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+    }
 
     if ((isHtmlResponse || isVercelMissingBackend) && allowFallback) {
       return handleFallbackApi(requestInfo.url, method, init.body) as T;
     }
 
-    // Never hide real API errors (401, 403, 404, 409, 422, 429, 500, 502, 503) behind mock data
+    if (response.ok && responseType === "text") {
+      return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+    }
+
+    // Never hide real API errors (401, 403, 409, 422, 429, 500, 502, 503) behind mock data
     const errData = await parseErrorBody(response, method);
     throw new ApiError(response, errData, requestInfo);
   } catch (err) {
-    if (err instanceof ApiError || err instanceof ResponseParseError) {
+    if (err instanceof ApiError) {
       throw err;
     }
-    // Network unreachable: use static fallback ONLY in explicitly allowed preview/sandbox environments
+    // ResponseParseError and network errors: use static fallback when permitted
+    // (covers HTML→JSON parse failures from SPA rewrites on Vercel)
     if (allowFallback) {
       return handleFallbackApi(requestInfo.url, method, init.body) as T;
     }

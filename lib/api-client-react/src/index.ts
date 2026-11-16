@@ -11,3 +11,4 @@ export {
   __setFallbackAllowedForTest,
 } from "./custom-fetch";
 export type { AuthTokenGetter, DemoAuthHeadersProvider } from "./custom-fetch";
+export { handleFallbackApi } from "./fallback-store";
