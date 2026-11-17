@@ -3,16 +3,42 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useGetAuthContext } from '@workspace/api-client-react';
 import {
   AlertCircle,
+  Calendar,
   CheckCircle2,
   ClipboardEdit,
+  Clock,
+  CreditCard,
+  Eye,
   FileText,
   Laptop,
+  Printer,
   Receipt,
   ShieldCheck,
   UserCheck,
   Users,
+  X,
 } from 'lucide-react';
 import { apiGet, apiPost } from '@/lib/api';
+
+interface PayslipRecord {
+  id: string;
+  payrollRunId: string;
+  period: string;
+  employeeId: string;
+  employeeNumber: string;
+  employeeName: string;
+  departmentName?: string;
+  kraPinMasked?: string;
+  baseSalary: number;
+  allowances: number;
+  grossPay: number;
+  totalNssf: number;
+  sha: number;
+  housingLevy: number;
+  taxablePay: number;
+  netPaye: number;
+  netPay: number;
+}
 
 export function SelfServicePage() {
   const qc = useQueryClient();
@@ -20,6 +46,7 @@ export function SelfServicePage() {
   const [tab, setTab] = useState<'overview' | 'corrections' | 'privacy' | 'team'>('overview');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [selectedPayslip, setSelectedPayslip] = useState<PayslipRecord | null>(null);
 
   const meQuery = useQuery({
     queryKey: ['peopleos-me', auth.data?.role ?? 'anon', auth.data?.canManagePeople ?? false],
@@ -41,6 +68,24 @@ export function SelfServicePage() {
     enabled: Boolean(linkedEmpId),
   });
 
+  const payslipsQuery = useQuery({
+    queryKey: ['self-service-payslips', ...scopeKey],
+    queryFn: () => apiGet<{ payslips: PayslipRecord[]; totalCount: number }>(`/api/payroll/employees/${linkedEmpId}/payslips`),
+    enabled: Boolean(linkedEmpId),
+  });
+
+  const leaveBalancesQuery = useQuery({
+    queryKey: ['self-service-leave-balances', ...scopeKey],
+    queryFn: () => apiGet<any[]>('/api/leave-balances'),
+    enabled: Boolean(linkedEmpId),
+  });
+
+  const attendanceQuery = useQuery({
+    queryKey: ['self-service-attendance', ...scopeKey],
+    queryFn: () => apiGet<{ items: any[]; total: number }>('/api/attendance'),
+    enabled: Boolean(linkedEmpId),
+  });
+
   const expensesQuery = useQuery({
     queryKey: ['self-service-expenses', ...scopeKey],
     queryFn: () => apiGet<{ items: any[] }>('/api/expenses'),
@@ -55,6 +100,9 @@ export function SelfServicePage() {
 
   const refreshMe = () => {
     qc.invalidateQueries({ queryKey: ['peopleos-me'] });
+    qc.invalidateQueries({ queryKey: ['self-service-payslips'] });
+    qc.invalidateQueries({ queryKey: ['self-service-leave-balances'] });
+    qc.invalidateQueries({ queryKey: ['self-service-attendance'] });
     qc.invalidateQueries({ queryKey: ['peopleos-manager-workspace'] });
   };
 
@@ -206,12 +254,12 @@ export function SelfServicePage() {
 
       {tab === 'overview' && me?.linked && (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <section className="surface p-5">
               <div className="flex items-center gap-2 text-[#C71D1D]">
                 <UserCheck size={17} />
                 <h2 className="font-display text-base font-semibold text-stone-900">
-                  Identity &amp; Section 10 Status
+                  Identity &amp; Section 10
                 </h2>
               </div>
               <div className="mt-3 space-y-1.5 text-xs">
@@ -228,12 +276,11 @@ export function SelfServicePage() {
                   Manager: <strong>{me.manager?.fullName ?? 'Executive Board'}</strong>
                 </p>
                 <p className="text-stone-500">
-                  National ID (ODPC Masked):{' '}
-                  <span className="font-mono">{me.employee.maskedNationalId ?? 'On File'}</span>
+                  National ID: <span className="font-mono">{me.employee.maskedNationalId ?? 'On File'}</span>
                 </p>
-                <div className="mt-2 rounded-lg bg-[#faf8f5] p-2.5">
+                <div className="mt-2 rounded-lg bg-[#faf8f5] p-2">
                   <div className="flex justify-between font-semibold">
-                    <span>Section 10 Completeness</span>
+                    <span>Section 10</span>
                     <span className="text-[#C71D1D]">{me.completeness?.scorePercent ?? 85}%</span>
                   </div>
                 </div>
@@ -244,13 +291,13 @@ export function SelfServicePage() {
               <div className="flex items-center gap-2 text-[#C71D1D]">
                 <FileText size={17} />
                 <h2 className="font-display text-base font-semibold text-stone-900">
-                  Statutory P9A Summary
+                  Statutory P9A
                 </h2>
               </div>
               <div className="mt-3 space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-stone-500">Year</span>
-                  <span className="font-semibold">{p9aQuery.data?.year ?? '2026'}</span>
+                  <span className="text-stone-500">Tax Year</span>
+                  <span className="font-semibold">{p9aQuery.data?.taxYear ?? p9aQuery.data?.year ?? '2026'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-stone-500">Gross YTD</span>
@@ -261,7 +308,13 @@ export function SelfServicePage() {
                 <div className="flex justify-between">
                   <span className="text-stone-500">PAYE Deducted</span>
                   <span className="font-mono font-semibold text-[#C71D1D]">
-                    KES {Number(p9aQuery.data?.totals?.paye ?? 0).toLocaleString()}
+                    KES {Number(p9aQuery.data?.totals?.payeDeducted ?? p9aQuery.data?.totals?.paye ?? 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">NSSF YTD</span>
+                  <span className="font-mono font-semibold">
+                    KES {Number(p9aQuery.data?.totals?.nssf ?? 0).toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -269,19 +322,40 @@ export function SelfServicePage() {
 
             <section className="surface p-5">
               <div className="flex items-center gap-2 text-[#C71D1D]">
+                <Calendar size={17} />
+                <h2 className="font-display text-base font-semibold text-stone-900">
+                  Leave Balances
+                </h2>
+              </div>
+              <div className="mt-3 space-y-1.5 text-xs">
+                {(leaveBalancesQuery.data ?? []).length === 0 ? (
+                  <p className="text-stone-500">No active leave policies assigned.</p>
+                ) : (
+                  (leaveBalancesQuery.data ?? []).slice(0, 4).map((b: any) => (
+                    <div key={b.policyId || b.policyName} className="flex justify-between rounded bg-stone-50 px-2 py-1">
+                      <span className="font-medium text-stone-700 capitalize">{b.policyName || b.leaveType}</span>
+                      <span className="font-bold text-[#C71D1D]">{b.remainingDays ?? b.entitlementDays ?? 0}d rem</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="surface p-5">
+              <div className="flex items-center gap-2 text-[#C71D1D]">
                 <Laptop size={17} />
                 <h2 className="font-display text-base font-semibold text-stone-900">
-                  Assigned Assets &amp; Tasks
+                  Assigned Assets
                 </h2>
               </div>
               <p className="mt-3 text-xs text-stone-600">
-                <strong>{(me.assets ?? []).length}</strong> assigned company asset(s) ·{' '}
-                <strong>{(me.onboardingTasks ?? []).length}</strong> active checklist task(s)
+                <strong>{(me.assets ?? []).length}</strong> assigned asset(s) ·{' '}
+                <strong>{(me.onboardingTasks ?? []).length}</strong> open task(s)
               </p>
-              <div className="mt-2 space-y-1.5 text-xs">
+              <div className="mt-2 space-y-1 text-xs">
                 {(me.assets ?? []).slice(0, 3).map((a: any) => (
-                  <div key={a.id} className="flex justify-between rounded bg-stone-50 px-2.5 py-1.5">
-                    <span className="font-medium text-stone-700">{a.assetTag || a.name}</span>
+                  <div key={a.id} className="flex justify-between rounded bg-stone-50 px-2 py-1">
+                    <span className="font-medium text-stone-700 truncate">{a.assetTag || a.name}</span>
                     <span className="font-mono text-[10px] text-stone-500">{a.status}</span>
                   </div>
                 ))}
@@ -289,52 +363,238 @@ export function SelfServicePage() {
             </section>
           </div>
 
+          {/* Official Payslip History */}
           <section className="surface p-5">
-            <div className="flex items-center gap-2 text-[#C71D1D]">
-              <Receipt size={17} />
-              <h2 className="font-display text-base font-semibold text-stone-900">
-                My Submitted Expenses &amp; Recent Leave
-              </h2>
-            </div>
-            <div className="mt-3 grid gap-4 md:grid-cols-2 text-xs">
-              <div>
-                <p className="mb-2 font-bold uppercase tracking-wider text-stone-400">Expenses</p>
-                {(expensesQuery.data?.items ?? []).length === 0 ? (
-                  <p className="text-stone-500">No personal expense claims logged.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {(expensesQuery.data?.items ?? []).slice(0, 4).map((x: any) => (
-                      <div key={x.id} className="flex justify-between rounded-lg bg-stone-50 p-2.5">
-                        <span className="font-medium">{x.title || x.category}</span>
-                        <span className="font-mono">
-                          KES {Number(x.amountKes ?? x.amount ?? 0).toLocaleString()} ({x.status})
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#C71D1D]">
+                <CreditCard size={17} />
+                <h2 className="font-display text-base font-semibold text-stone-900">
+                  My Official Payslip History
+                </h2>
               </div>
-              <div>
-                <p className="mb-2 font-bold uppercase tracking-wider text-stone-400">
+              <span className="text-[11px] font-medium text-stone-500">
+                Kenya Statutory PAYE, NSSF Act 2013 &amp; SHIF Compliant
+              </span>
+            </div>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 text-[10px] uppercase tracking-wider text-stone-400">
+                    <th className="py-2 pr-3">Period</th>
+                    <th className="py-2 pr-3 text-right">Gross Pay</th>
+                    <th className="py-2 pr-3 text-right">NSSF</th>
+                    <th className="py-2 pr-3 text-right">SHIF</th>
+                    <th className="py-2 pr-3 text-right">Housing Levy</th>
+                    <th className="py-2 pr-3 text-right">KRA PAYE</th>
+                    <th className="py-2 pr-3 text-right">Net Payout</th>
+                    <th className="py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {(payslipsQuery.data?.payslips ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-4 text-center text-stone-500">
+                        No disbursed or reviewed payslips found for this employee profile.
+                      </td>
+                    </tr>
+                  ) : (
+                    (payslipsQuery.data?.payslips ?? []).map((ps) => (
+                      <tr key={ps.id} className="hover:bg-stone-50/80">
+                        <td className="py-2.5 pr-3 font-semibold text-stone-900">{ps.period}</td>
+                        <td className="py-2.5 pr-3 text-right font-mono text-stone-700">
+                          KES {Number(ps.grossPay).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right font-mono text-stone-500">
+                          -KES {Number(ps.totalNssf).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right font-mono text-stone-500">
+                          -KES {Number(ps.sha).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right font-mono text-stone-500">
+                          -KES {Number(ps.housingLevy).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right font-mono text-[#C71D1D] font-medium">
+                          -KES {Number(ps.netPaye).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right font-mono font-bold text-emerald-700">
+                          KES {Number(ps.netPay).toLocaleString()}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPayslip(ps)}
+                            className="inline-flex items-center gap-1 rounded-lg bg-stone-100 px-2 py-1 text-[11px] font-semibold text-stone-800 hover:bg-stone-200"
+                            data-testid={`btn-view-payslip-${ps.period.replace(/\s+/g, '-').toLowerCase()}`}
+                          >
+                            <Eye size={12} /> View Payslip
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Activity Grid: Leave, Attendance, Expenses */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <section className="surface p-5">
+              <div className="flex items-center gap-2 text-[#C71D1D]">
+                <Calendar size={17} />
+                <h2 className="font-display text-base font-semibold text-stone-900">
                   Recent Leave Requests
-                </p>
+                </h2>
+              </div>
+              <div className="mt-3 space-y-2 text-xs">
                 {(me.leaveRequests ?? []).length === 0 ? (
                   <p className="text-stone-500">No recent leave requests.</p>
                 ) : (
-                  <div className="space-y-1.5">
-                    {(me.leaveRequests ?? []).slice(0, 4).map((l: any) => (
-                      <div key={l.id} className="flex justify-between rounded-lg bg-stone-50 p-2.5">
-                        <span className="capitalize">
-                          {l.leaveType} ({l.days}d)
-                        </span>
-                        <span className="font-semibold capitalize">{l.status}</span>
+                  (me.leaveRequests ?? []).slice(0, 4).map((l: any) => (
+                    <div key={l.id} className="flex justify-between rounded-lg bg-stone-50 p-2.5">
+                      <div>
+                        <span className="font-medium capitalize">{l.leaveType}</span>
+                        <p className="text-[11px] text-stone-400">{l.days} day(s)</p>
                       </div>
-                    ))}
-                  </div>
+                      <span className="font-semibold capitalize text-stone-700">{l.status}</span>
+                    </div>
+                  ))
                 )}
               </div>
+            </section>
+
+            <section className="surface p-5">
+              <div className="flex items-center gap-2 text-[#C71D1D]">
+                <Clock size={17} />
+                <h2 className="font-display text-base font-semibold text-stone-900">
+                  Attendance &amp; Clock Logs
+                </h2>
+              </div>
+              <div className="mt-3 space-y-2 text-xs">
+                {((attendanceQuery.data?.items ?? me.attendanceRecords ?? []).length === 0) ? (
+                  <p className="text-stone-500">No recent clock logs recorded.</p>
+                ) : (
+                  (attendanceQuery.data?.items ?? me.attendanceRecords ?? []).slice(0, 4).map((att: any) => (
+                    <div key={att.id} className="flex justify-between rounded-lg bg-stone-50 p-2.5">
+                      <div>
+                        <span className="font-medium">{att.date}</span>
+                        <p className="text-[11px] text-stone-400">
+                          {att.clockIn ?? '--:--'} – {att.clockOut ?? '--:--'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-semibold capitalize text-stone-700">{att.status}</span>
+                        {att.overtimeHours > 0 && (
+                          <p className="text-[10px] font-bold text-amber-700">+{att.overtimeHours}h OT</p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="surface p-5">
+              <div className="flex items-center gap-2 text-[#C71D1D]">
+                <Receipt size={17} />
+                <h2 className="font-display text-base font-semibold text-stone-900">
+                  Submitted Expenses
+                </h2>
+              </div>
+              <div className="mt-3 space-y-2 text-xs">
+                {(expensesQuery.data?.items ?? me.expenses ?? []).length === 0 ? (
+                  <p className="text-stone-500">No personal expense claims logged.</p>
+                ) : (
+                  (expensesQuery.data?.items ?? me.expenses ?? []).slice(0, 4).map((x: any) => (
+                    <div key={x.id} className="flex justify-between rounded-lg bg-stone-50 p-2.5">
+                      <div>
+                        <span className="font-medium">{x.title || x.category}</span>
+                        <p className="text-[11px] text-stone-400">{x.status}</p>
+                      </div>
+                      <span className="font-mono font-semibold">
+                        KES {Number(x.amountKes ?? x.amount ?? 0).toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+          </div>
+        </div>
+      )}
+
+      {/* Official Payslip Modal */}
+      {selectedPayslip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-200 pb-3">
+              <div>
+                <h3 className="font-display text-base font-bold text-stone-900">Rekker Limited</h3>
+                <p className="text-xs text-stone-500">
+                  Official Payslip · {selectedPayslip.period} · {selectedPayslip.employeeName} ({selectedPayslip.employeeNumber})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPayslip(null)}
+                className="rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
             </div>
-          </section>
+            <div className="mt-4 space-y-2.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-stone-600">Base Salary</span>
+                <span className="font-mono font-medium">KES {Number(selectedPayslip.baseSalary).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-600">Allowances</span>
+                <span className="font-mono font-medium">KES {Number(selectedPayslip.allowances).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between font-bold text-stone-900 border-t border-stone-100 pt-1.5">
+                <span>Gross Taxable Pay</span>
+                <span className="font-mono">KES {Number(selectedPayslip.grossPay).toLocaleString()}</span>
+              </div>
+              <div className="mt-2 space-y-1.5 border-t border-stone-100 pt-2 text-stone-600">
+                <div className="flex justify-between">
+                  <span>NSSF Act 2013 (Tier I + II)</span>
+                  <span className="font-mono">- KES {Number(selectedPayslip.totalNssf).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Social Health Insurance (SHIF 2.75%)</span>
+                  <span className="font-mono">- KES {Number(selectedPayslip.sha).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Affordable Housing Levy (1.5%)</span>
+                  <span className="font-mono">- KES {Number(selectedPayslip.housingLevy).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-[#C71D1D]">
+                  <span>KRA Net PAYE</span>
+                  <span className="font-mono font-semibold">- KES {Number(selectedPayslip.netPaye).toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="flex justify-between border-t border-stone-200 pt-2.5 text-sm font-bold text-emerald-800">
+                <span>Net Salary Disbursed</span>
+                <span className="font-mono">KES {Number(selectedPayslip.netPay).toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="btn btn-secondary inline-flex items-center gap-1.5 text-xs"
+              >
+                <Printer size={13} /> Print
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPayslip(null)}
+                className="btn btn-primary text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -350,6 +610,14 @@ export function SelfServicePage() {
             <p className="mt-1 text-xs text-stone-500">
               Permits personal contact updates subject to HR approval. Protected fields (job title, department, salary, statutory IDs) are blocked here and require formal HR workflows.
             </p>
+            <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 text-[11px] text-stone-600 space-y-1">
+              <p className="font-semibold text-stone-800 flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-[#C71D1D]" />
+                Kenya Data Protection Act 2019 — Field Integrity Rules:
+              </p>
+              <p>• <strong>Allowed via Self-Service:</strong> Preferred Name, Personal Email, Telephone, Timezone, Emergency Contacts.</p>
+              <p>• <strong>Strictly Protected (Blocked):</strong> National ID, KRA PIN, NSSF, SHIF/NHIF, Base Salary, Job Title &amp; Department (require formal HR Maker-Checker verification).</p>
+            </div>
             <form onSubmit={submitCorrection} className="mt-4 space-y-3 text-xs">
               <label className="block">
                 <span className="label">Field to Update</span>

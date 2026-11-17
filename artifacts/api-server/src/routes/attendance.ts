@@ -58,7 +58,7 @@ export interface AttendanceCorrectionItem {
   decidedByUserId: string | null;
 }
 
-let ATTENDANCE_RECORDS: AttendanceItem[] = [
+export let ATTENDANCE_RECORDS: AttendanceItem[] = [
   {
     id: "att_01",
     organizationId: "rekker-demo",

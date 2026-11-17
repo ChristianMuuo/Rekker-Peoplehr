@@ -269,6 +269,14 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  if (
+    membership.role === PEOPLEOS_ROLES.employee &&
+    query.data.employeeId &&
+    query.data.employeeId !== membership.employeeId
+  ) {
+    res.status(403).json({ error: "You cannot view leave requests for this employee." });
+    return;
+  }
   if (!process.env.DATABASE_URL) {
     let items = [...DEMO_LEAVE_STORE];
     if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId) {

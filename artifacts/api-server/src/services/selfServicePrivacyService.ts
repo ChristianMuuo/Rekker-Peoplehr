@@ -27,6 +27,7 @@ export const ALLOWED_PROFILE_CORRECTION_FIELDS = new Set([
   "phone",
   "personalEmail",
   "preferredName",
+  "timezone",
   "emergencyContactJson",
   "contactPreferencesJson",
   "qualificationsJson",

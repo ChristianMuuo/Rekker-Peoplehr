@@ -913,6 +913,290 @@ router.get("/payroll/p9a/:employeeId", async (req: Request, res: Response) => {
   });
 });
 
+// GET /api/payroll/employees/:employeeId/payslips - Retrieve payslip history for an employee
+router.get("/payroll/employees/:employeeId/payslips", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const targetEmployeeId = String(req.params.employeeId ?? "");
+  const isViewer = (payrollViewRoles as readonly string[]).includes(membership.role);
+  if (!isViewer && membership.employeeId !== targetEmployeeId) {
+    res.status(403).json({ error: "Access denied to another employee's payslips." });
+    return;
+  }
+
+  const cfg = await getActiveStatutoryConfig(membership.organizationId);
+
+  if (!process.env.DATABASE_URL) {
+    await ensureDemoRunsSeeded(membership.organizationId);
+    const orgRuns = DEMO_PAYROLL_RUNS.filter(
+      (r) => r.organizationId === membership.organizationId,
+    );
+    const payslips = orgRuns.flatMap((run) => {
+      const items = buildDemoItemsForRun(run.id, run.period, cfg);
+      return items.filter((item) => item.employeeId === targetEmployeeId);
+    });
+
+    res.json({
+      employeeId: targetEmployeeId,
+      payslips,
+      totalCount: payslips.length,
+    });
+    return;
+  }
+
+  const rawItems = await db
+    .select({
+      id: payrollItemsTable.id,
+      payrollRunId: payrollItemsTable.payrollRunId,
+      employeeId: payrollItemsTable.employeeId,
+      baseSalary: payrollItemsTable.baseSalary,
+      allowances: payrollItemsTable.allowances,
+      overtimePay: payrollItemsTable.overtimePay,
+      grossPay: payrollItemsTable.grossPay,
+      nssfTier1: payrollItemsTable.nssfTier1,
+      nssfTier2: payrollItemsTable.nssfTier2,
+      totalNssf: payrollItemsTable.totalNssf,
+      sha: payrollItemsTable.sha,
+      housingLevy: payrollItemsTable.housingLevy,
+      taxablePay: payrollItemsTable.taxablePay,
+      netPaye: payrollItemsTable.netPaye,
+      totalDeductions: payrollItemsTable.totalDeductions,
+      netPay: payrollItemsTable.netPay,
+      period: payrollRunsTable.period,
+      runStatus: payrollRunsTable.status,
+    })
+    .from(payrollItemsTable)
+    .innerJoin(
+      payrollRunsTable,
+      eq(payrollItemsTable.payrollRunId, payrollRunsTable.id),
+    )
+    .where(
+      and(
+        eq(payrollRunsTable.organizationId, membership.organizationId),
+        eq(payrollItemsTable.employeeId, targetEmployeeId),
+      ),
+    )
+    .orderBy(desc(payrollRunsTable.period));
+
+  const [emp] = await db
+    .select()
+    .from(employeesTable)
+    .where(
+      and(
+        eq(employeesTable.id, targetEmployeeId),
+        eq(employeesTable.organizationId, membership.organizationId),
+      ),
+    )
+    .limit(1);
+
+  const payslips = rawItems.map((item) => ({
+    ...item,
+    employeeNumber: emp?.employeeNumber ?? "REK",
+    employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Employee",
+    kraPinMasked: maskKraPin(emp?.kraPin),
+  }));
+
+  res.json({
+    employeeId: targetEmployeeId,
+    payslips,
+    totalCount: payslips.length,
+  });
+});
+
+// GET /api/payroll/my-payslips - Self-service convenience endpoint strictly bound to caller's employee profile
+router.get("/payroll/my-payslips", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  if (!membership.employeeId) {
+    res.status(403).json({ error: "Your account is not linked to an employee record." });
+    return;
+  }
+
+  const targetEmployeeId = membership.employeeId;
+  const cfg = await getActiveStatutoryConfig(membership.organizationId);
+
+  if (!process.env.DATABASE_URL) {
+    await ensureDemoRunsSeeded(membership.organizationId);
+    const orgRuns = DEMO_PAYROLL_RUNS.filter(
+      (r) => r.organizationId === membership.organizationId,
+    );
+    const payslips = orgRuns.flatMap((run) => {
+      const items = buildDemoItemsForRun(run.id, run.period, cfg);
+      return items.filter((item) => item.employeeId === targetEmployeeId);
+    });
+
+    res.json({
+      employeeId: targetEmployeeId,
+      payslips,
+      totalCount: payslips.length,
+    });
+    return;
+  }
+
+  const rawItems = await db
+    .select({
+      id: payrollItemsTable.id,
+      payrollRunId: payrollItemsTable.payrollRunId,
+      employeeId: payrollItemsTable.employeeId,
+      baseSalary: payrollItemsTable.baseSalary,
+      allowances: payrollItemsTable.allowances,
+      overtimePay: payrollItemsTable.overtimePay,
+      grossPay: payrollItemsTable.grossPay,
+      nssfTier1: payrollItemsTable.nssfTier1,
+      nssfTier2: payrollItemsTable.nssfTier2,
+      totalNssf: payrollItemsTable.totalNssf,
+      sha: payrollItemsTable.sha,
+      housingLevy: payrollItemsTable.housingLevy,
+      taxablePay: payrollItemsTable.taxablePay,
+      netPaye: payrollItemsTable.netPaye,
+      totalDeductions: payrollItemsTable.totalDeductions,
+      netPay: payrollItemsTable.netPay,
+      period: payrollRunsTable.period,
+      runStatus: payrollRunsTable.status,
+    })
+    .from(payrollItemsTable)
+    .innerJoin(
+      payrollRunsTable,
+      eq(payrollItemsTable.payrollRunId, payrollRunsTable.id),
+    )
+    .where(
+      and(
+        eq(payrollRunsTable.organizationId, membership.organizationId),
+        eq(payrollItemsTable.employeeId, targetEmployeeId),
+      ),
+    )
+    .orderBy(desc(payrollRunsTable.period));
+
+  const [emp] = await db
+    .select()
+    .from(employeesTable)
+    .where(
+      and(
+        eq(employeesTable.id, targetEmployeeId),
+        eq(employeesTable.organizationId, membership.organizationId),
+      ),
+    )
+    .limit(1);
+
+  const payslips = rawItems.map((item) => ({
+    ...item,
+    employeeNumber: emp?.employeeNumber ?? "REK",
+    employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Employee",
+    kraPinMasked: maskKraPin(emp?.kraPin),
+  }));
+
+  res.json({
+    employeeId: targetEmployeeId,
+    payslips,
+    totalCount: payslips.length,
+  });
+});
+
+// GET /api/payroll/payslips/:itemId - View specific payslip item with IDOR guard
+router.get("/payroll/payslips/:itemId", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const itemId = String(req.params.itemId ?? "");
+  const isViewer = (payrollViewRoles as readonly string[]).includes(membership.role);
+  const cfg = await getActiveStatutoryConfig(membership.organizationId);
+
+  if (!process.env.DATABASE_URL) {
+    await ensureDemoRunsSeeded(membership.organizationId);
+    const orgRuns = DEMO_PAYROLL_RUNS.filter(
+      (r) => r.organizationId === membership.organizationId,
+    );
+    let matchedItem: ReturnType<typeof buildDemoItemsForRun>[number] | undefined;
+    for (const run of orgRuns) {
+      const items = buildDemoItemsForRun(run.id, run.period, cfg);
+      const found = items.find((i) => i.id === itemId);
+      if (found) {
+        matchedItem = found;
+        break;
+      }
+    }
+
+    if (!matchedItem) {
+      res.status(404).json({ error: "Payslip item not found." });
+      return;
+    }
+
+    if (!isViewer && membership.employeeId !== matchedItem.employeeId) {
+      res.status(403).json({ error: "Access denied to another employee's payslip." });
+      return;
+    }
+
+    res.json({ payslip: matchedItem });
+    return;
+  }
+
+  const [rawItem] = await db
+    .select({
+      id: payrollItemsTable.id,
+      payrollRunId: payrollItemsTable.payrollRunId,
+      employeeId: payrollItemsTable.employeeId,
+      baseSalary: payrollItemsTable.baseSalary,
+      allowances: payrollItemsTable.allowances,
+      overtimePay: payrollItemsTable.overtimePay,
+      grossPay: payrollItemsTable.grossPay,
+      nssfTier1: payrollItemsTable.nssfTier1,
+      nssfTier2: payrollItemsTable.nssfTier2,
+      totalNssf: payrollItemsTable.totalNssf,
+      sha: payrollItemsTable.sha,
+      housingLevy: payrollItemsTable.housingLevy,
+      taxablePay: payrollItemsTable.taxablePay,
+      netPaye: payrollItemsTable.netPaye,
+      totalDeductions: payrollItemsTable.totalDeductions,
+      netPay: payrollItemsTable.netPay,
+      period: payrollRunsTable.period,
+      runStatus: payrollRunsTable.status,
+    })
+    .from(payrollItemsTable)
+    .innerJoin(
+      payrollRunsTable,
+      eq(payrollItemsTable.payrollRunId, payrollRunsTable.id),
+    )
+    .where(
+      and(
+        eq(payrollRunsTable.organizationId, membership.organizationId),
+        eq(payrollItemsTable.id, itemId),
+      ),
+    )
+    .limit(1);
+
+  if (!rawItem) {
+    res.status(404).json({ error: "Payslip item not found." });
+    return;
+  }
+
+  if (!isViewer && membership.employeeId !== rawItem.employeeId) {
+    res.status(403).json({ error: "Access denied to another employee's payslip." });
+    return;
+  }
+
+  const [emp] = await db
+    .select()
+    .from(employeesTable)
+    .where(
+      and(
+        eq(employeesTable.id, rawItem.employeeId),
+        eq(employeesTable.organizationId, membership.organizationId),
+      ),
+    )
+    .limit(1);
+
+  res.json({
+    payslip: {
+      ...rawItem,
+      employeeNumber: emp?.employeeNumber ?? "REK",
+      employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Employee",
+      kraPinMasked: maskKraPin(emp?.kraPin),
+    },
+  });
+});
+
 // GET /api/payroll/anomalies - Fixed route path (was wrongly /api/payroll/anomalies!)
 router.get("/payroll/anomalies", async (req: Request, res: Response) => {
   const membership = await requireRoles(req, res, payrollViewRoles);

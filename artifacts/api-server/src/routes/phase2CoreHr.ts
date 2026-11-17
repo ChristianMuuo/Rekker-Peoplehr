@@ -23,6 +23,9 @@ import {
 } from "./recruitment";
 import { DEMO_LIFECYCLE_TASKS } from "./onboarding";
 import { DEMO_ASSETS } from "./assets";
+import { DEMO_LEAVE_STORE } from "./leave";
+import { ATTENDANCE_RECORDS } from "./attendance";
+import { DEMO_EXPENSES } from "./expenses";
 import {
   applyEffectiveDatedAssignmentChange,
   getEmployeeCompletenessForOrg,
@@ -76,7 +79,26 @@ const managerAndHrRoles: readonly string[] = [
 ];
 const allEmployeeRoles: readonly string[] = Object.values(PEOPLEOS_ROLES);
 
-const CHANGE_TYPES = new Set([
+type AssignmentChangeType =
+  | "transfer"
+  | "promotion"
+  | "manager_change"
+  | "position_change"
+  | "status_change"
+  | "contract_renewal"
+  | "offboarding"
+  | "profile_update";
+
+type PositionTargetStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "vacant"
+  | "occupied"
+  | "frozen"
+  | "abolished";
+
+const CHANGE_TYPES = new Set<string>([
   "transfer",
   "promotion",
   "manager_change",
@@ -86,7 +108,7 @@ const CHANGE_TYPES = new Set([
   "offboarding",
   "profile_update",
 ]);
-const POSITION_STATUSES = new Set([
+const POSITION_STATUSES = new Set<string>([
   "draft",
   "pending_approval",
   "approved",
@@ -109,6 +131,9 @@ router.get("/peopleos/me", async (req, res): Promise<void> => {
     demoDepartments: DEMO_DEPARTMENTS_LIST,
     demoOnboardingTasks: DEMO_LIFECYCLE_TASKS,
     demoAssets: DEMO_ASSETS,
+    demoLeaves: DEMO_LEAVE_STORE,
+    demoAttendance: ATTENDANCE_RECORDS,
+    demoExpenses: DEMO_EXPENSES,
   });
   res.json(workspace);
 });
@@ -121,6 +146,7 @@ router.get("/peopleos/manager/workspace", async (req, res): Promise<void> => {
     membership,
     demoEmployees: DEMO_EMPLOYEES_LIST,
     demoDepartments: DEMO_DEPARTMENTS_LIST,
+    demoLeaves: DEMO_LEAVE_STORE,
   });
   res.json(workspace);
 });
@@ -212,7 +238,7 @@ router.post(
         actorName: membership.role,
         employeeId: String(req.params.employeeId ?? ""),
         effectiveDate,
-        changeType: changeType as any,
+        changeType: changeType as AssignmentChangeType,
         reason,
         departmentId: typeof body.departmentId === "string" ? body.departmentId : undefined,
         positionId: body.positionId === null ? null : typeof body.positionId === "string" ? body.positionId : undefined,
@@ -409,7 +435,7 @@ router.post(
         actorUserId: membership.userId,
         actorName: membership.role,
         positionId: String(req.params.positionId ?? ""),
-        targetStatus: targetStatus as any,
+        targetStatus: targetStatus as PositionTargetStatus,
         demoEmployees: DEMO_EMPLOYEES_LIST,
       });
       res.json(updated);
@@ -454,7 +480,10 @@ router.post("/peopleos/profile-correction-requests", async (req, res): Promise<v
 });
 
 router.post(
-  "/peopleos/profile-correction-requests/:requestId/decide",
+  [
+    "/peopleos/profile-correction-requests/:requestId/decide",
+    "/peopleos/profile-correction-requests/:requestId/decision",
+  ],
   async (req, res): Promise<void> => {
     const membership = await requireRoles(req, res, peopleManagers);
     if (!membership) return;

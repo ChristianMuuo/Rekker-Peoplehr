@@ -232,13 +232,22 @@ export async function ensureMembership(
                         ? PEOPLEOS_ROLES.hrManager
                         : PEOPLEOS_ROLES.hrAdmin);
 
+  const headerEmployeeId =
+    typeof req.headers["x-peopleos-employee-id"] === "string" &&
+    req.headers["x-peopleos-employee-id"].trim().length > 0
+      ? req.headers["x-peopleos-employee-id"].trim()
+      : undefined;
+
   const demoEmployeeId =
-    simulatedRole === PEOPLEOS_ROLES.employee
-      ? "10000000-0000-4000-8000-000000000002"
-      : simulatedRole === PEOPLEOS_ROLES.departmentManager ||
-          simulatedRole === PEOPLEOS_ROLES.productionSupervisor
-        ? "10000000-0000-4000-8000-000000000001"
-        : "10000000-0000-4000-8000-000000000007";
+    headerEmployeeId ??
+    (userId === "user_demo_emp_03"
+      ? "10000000-0000-4000-8000-000000000003"
+      : simulatedRole === PEOPLEOS_ROLES.employee
+        ? "10000000-0000-4000-8000-000000000002"
+        : simulatedRole === PEOPLEOS_ROLES.departmentManager ||
+            simulatedRole === PEOPLEOS_ROLES.productionSupervisor
+          ? "10000000-0000-4000-8000-000000000001"
+          : "10000000-0000-4000-8000-000000000007");
 
   if (!process.env.DATABASE_URL) {
     return {

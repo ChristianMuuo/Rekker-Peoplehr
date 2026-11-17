@@ -39,7 +39,7 @@ interface DemoExpense {
   createdAt: string;
 }
 
-const DEMO_EXPENSES: DemoExpense[] = [
+export const DEMO_EXPENSES: DemoExpense[] = [
   {
     id: "exp-001",
     organizationId: "rekker-demo",
