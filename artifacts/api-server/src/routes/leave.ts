@@ -1422,6 +1422,283 @@ router.get("/leave/department-coverage", async (req, res): Promise<void> => {
     startDate,
     endDate,
     departments,
+    items: departments,
+  });
+});
+
+// ─── Workstream: Team Availability & Role-Aware Leave Calendar ────────────────
+
+router.get(["/leave/calendar", "/leave-calendar"], async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const nowIso = new Date().toISOString().slice(0, 10);
+  const month =
+    typeof req.query.month === "string" && /^\d{4}-\d{2}$/.test(req.query.month)
+      ? req.query.month
+      : nowIso.slice(0, 7);
+
+  const startDate =
+    typeof req.query.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.startDate)
+      ? req.query.startDate
+      : `${month}-01`;
+
+  const endDate =
+    typeof req.query.endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.endDate)
+      ? req.query.endDate
+      : (() => {
+          const [y, m] = month.split("-").map(Number);
+          const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+          return `${month}-${String(lastDay).padStart(2, "0")}`;
+        })();
+
+  const departmentFilter =
+    typeof req.query.departmentId === "string" && req.query.departmentId.trim()
+      ? req.query.departmentId.trim()
+      : undefined;
+
+  // Retrieve effective work calendar and holidays
+  const effectiveCalendar = await resolveEffectiveWorkCalendar(membership.organizationId);
+  const holidays = (effectiveCalendar.holidays ?? []).filter(
+    (h) => h.date >= startDate && h.date <= endDate,
+  );
+
+  const employees = process.env.DATABASE_URL
+    ? await db
+        .select()
+        .from(employeesTable)
+        .where(eq(employeesTable.organizationId, membership.organizationId))
+    : DEMO_EMPLOYEES_LIST;
+
+  const empMap = new Map(employees.map((e) => [e.id, e]));
+  const deptMap = new Map(DEMO_DEPARTMENTS_LIST.map((d) => [d.id, d]));
+
+  const policies = process.env.DATABASE_URL
+    ? await db
+        .select()
+        .from(leavePoliciesTable)
+        .where(eq(leavePoliciesTable.organizationId, membership.organizationId))
+    : DEMO_LEAVE_POLICIES;
+  const policyNameMap = new Map(policies.map((p) => [p.code, p.name]));
+
+  // Retrieve leave requests overlapping the window
+  const leaveRows = process.env.DATABASE_URL
+    ? await db
+        .select()
+        .from(leaveRequestsTable)
+        .where(
+          and(
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
+            inArray(leaveRequestsTable.status, ["approved", "pending"]),
+            lte(leaveRequestsTable.startDate, endDate),
+            gte(leaveRequestsTable.endDate, startDate),
+          ),
+        )
+    : DEMO_LEAVE_STORE.filter(
+        (r) =>
+          (r.status === "approved" || r.status === "pending") &&
+          dateOnly(r.startDate) <= endDate &&
+          dateOnly(r.endDate) >= startDate,
+      );
+
+  // Role resolution for Privacy & Kenya ODPC Compliance:
+  // - HR/Admin sees full details (actual policy, reason, approver)
+  // - Managers see actual policy unless Sick / Compassionate (redacted to 'Leave' and reason hidden)
+  // - Peers/Employees see 'Away' without policy type or reason (unless it is their own leave)
+  const isHrOrAdmin = [
+    PEOPLEOS_ROLES.hrAdmin,
+    PEOPLEOS_ROLES.hrDirector,
+    PEOPLEOS_ROLES.hrManager,
+    PEOPLEOS_ROLES.systemAdmin,
+  ].includes(membership.role as any);
+
+  const isManager = [
+    PEOPLEOS_ROLES.departmentManager,
+    PEOPLEOS_ROLES.productionSupervisor,
+    PEOPLEOS_ROLES.warehouseSupervisor,
+    PEOPLEOS_ROLES.salesManager,
+  ].includes(membership.role as any);
+
+  const callerEmp = membership.employeeId ? empMap.get(membership.employeeId) : null;
+  const callerDeptId = callerEmp?.departmentId ?? null;
+
+  const entries: Array<{
+    id: string;
+    employeeId: string;
+    employeeName: string;
+    departmentId: string | null;
+    departmentName: string;
+    startDate: string;
+    endDate: string;
+    days: number;
+    status: "approved" | "pending";
+    displayType: string;
+    reason: string | null;
+    isOwn: boolean;
+  }> = [];
+
+  for (const row of leaveRows) {
+    const emp = empMap.get(row.employeeId);
+    if (departmentFilter && emp?.departmentId !== departmentFilter) {
+      continue;
+    }
+
+    const isOwn = Boolean(membership.employeeId && row.employeeId === membership.employeeId);
+    const rawType = row.leaveType;
+    const policyName =
+      policyNameMap.get(rawType) ??
+      (rawType.charAt(0).toUpperCase() + rawType.slice(1) + " Leave");
+
+    const isSensitive =
+      /sick|compassionate|medical|bereavement/i.test(rawType) ||
+      /sick|compassionate|medical|bereavement/i.test(policyName);
+
+    let displayType: string;
+    let reason: string | null = null;
+
+    if (isOwn || isHrOrAdmin) {
+      displayType = policyName;
+      reason = row.reason ?? null;
+    } else if (isManager) {
+      const inDept = callerDeptId && emp?.departmentId === callerDeptId;
+      if (inDept) {
+        if (isSensitive) {
+          displayType = "Leave"; // Redacted for medical privacy
+          reason = null;
+        } else {
+          displayType = policyName;
+          reason = row.reason ?? null;
+        }
+      } else {
+        displayType = "Away";
+        reason = null;
+      }
+    } else {
+      // Regular employee / peer
+      displayType = "Away";
+      reason = null;
+    }
+
+    const dept = emp?.departmentId ? deptMap.get(emp.departmentId) : null;
+
+    const rowEmpName =
+      "employeeName" in row && typeof row.employeeName === "string"
+        ? row.employeeName
+        : "Employee";
+
+    entries.push({
+      id: row.id,
+      employeeId: row.employeeId,
+      employeeName: emp ? `${emp.firstName} ${emp.lastName}` : rowEmpName,
+      departmentId: emp?.departmentId ?? null,
+      departmentName: dept?.name ?? "General",
+      startDate: dateOnly(row.startDate),
+      endDate: dateOnly(row.endDate),
+      days: row.days,
+      status: row.status as "approved" | "pending",
+      displayType,
+      reason,
+      isOwn,
+    });
+  }
+
+  entries.sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  res.json({
+    period: {
+      month,
+      startDate,
+      endDate,
+    },
+    workCalendar: {
+      timezone: effectiveCalendar.timezone,
+      workdays: effectiveCalendar.workdays,
+      shiftStartTime: effectiveCalendar.shiftStartTime,
+      shiftEndTime: effectiveCalendar.shiftEndTime,
+    },
+    holidays,
+    entries,
+    summary: {
+      totalEmployeesOnLeave: new Set(entries.map((e) => e.employeeId)).size,
+      approvedCount: entries.filter((e) => e.status === "approved").length,
+      pendingCount: entries.filter((e) => e.status === "pending").length,
+      holidaysCount: holidays.length,
+    },
+    viewMode: isHrOrAdmin ? "hr" : isManager ? "manager" : "peer",
+  });
+});
+
+router.post("/leave/requests/preview", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const { leaveType, startDate, endDate, employeeId } = req.body ?? {};
+  if (
+    typeof leaveType !== "string" ||
+    typeof startDate !== "string" ||
+    typeof endDate !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(endDate)
+  ) {
+    res.status(400).json({
+      error: "leaveType, startDate, and endDate (YYYY-MM-DD) are required.",
+    });
+    return;
+  }
+
+  if (endDate < startDate) {
+    res.status(400).json({ error: "End date must be on or after start date." });
+    return;
+  }
+
+  const targetEmpId =
+    membership.role === PEOPLEOS_ROLES.employee && membership.employeeId
+      ? membership.employeeId
+      : typeof employeeId === "string" && employeeId
+        ? employeeId
+        : membership.employeeId;
+
+  const effectiveCalendar = await resolveEffectiveWorkCalendar(membership.organizationId);
+  const calendarDaysResult = countCalendarWorkingDays(startDate, endDate, effectiveCalendar);
+  const days = calendarDaysResult.workingDays;
+
+  const existingRows = process.env.DATABASE_URL
+    ? await db
+        .select()
+        .from(leaveRequestsTable)
+        .where(
+          and(
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
+            targetEmpId ? eq(leaveRequestsTable.employeeId, targetEmpId) : undefined,
+            inArray(leaveRequestsTable.status, ["approved", "pending"]),
+            lte(leaveRequestsTable.startDate, endDate),
+            gte(leaveRequestsTable.endDate, startDate),
+          ),
+        )
+    : DEMO_LEAVE_STORE.filter(
+        (r) =>
+          (!targetEmpId || r.employeeId === targetEmpId) &&
+          (r.status === "approved" || r.status === "pending") &&
+          dateOnly(r.startDate) <= endDate &&
+          dateOnly(r.endDate) >= startDate,
+      );
+
+  const hasOverlap = existingRows.length > 0;
+  const holidaysInRange = (effectiveCalendar.holidays ?? []).filter(
+    (h) => h.date >= startDate && h.date <= endDate,
+  );
+
+  res.json({
+    workingDays: days,
+    excludedHolidays: holidaysInRange,
+    excludedHolidayCount: calendarDaysResult.excludedHolidayCount,
+    hasOverlap,
+    overlappingRequests: existingRows.map((r) => ({
+      id: r.id,
+      startDate: dateOnly(r.startDate),
+      endDate: dateOnly(r.endDate),
+      status: r.status,
+    })),
   });
 });
 
