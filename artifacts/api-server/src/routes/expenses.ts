@@ -74,6 +74,23 @@ const DEMO_EXPENSES: DemoExpense[] = [
     decidedAt: "2026-02-28T10:20:00.000Z",
     createdAt: "2026-02-27T11:00:00.000Z",
   },
+  {
+    id: "exp-003",
+    organizationId: "rekker-demo",
+    employeeId: "10000000-0000-4000-8000-000000000001",
+    employeeName: "Achieng Odhiambo",
+    title: "Filling Line Calibration Reagents & Test Consumables",
+    category: "Operations & Lab",
+    amountKes: 18400,
+    incurredDate: "2026-03-05",
+    receiptReference: "KRA-ETR-774910",
+    notes: "Emergency pH buffer calibration standards for Line B.",
+    status: "pending",
+    approverUserId: null,
+    decisionComment: null,
+    decidedAt: null,
+    createdAt: "2026-03-05T08:30:00.000Z",
+  },
 ];
 
 // GET /api/expenses
@@ -229,6 +246,13 @@ router.post("/expenses/:expenseId/decision", async (req: Request, res: Response)
       res.status(404).json({ error: "Expense claim not found." });
       return;
     }
+    if (membership.employeeId && item.employeeId === membership.employeeId) {
+      res.status(403).json({
+        error: "Maker-Checker policy violation: You cannot approve or decide your own expense claim.",
+        code: "MAKER_CHECKER_VIOLATION",
+      });
+      return;
+    }
     item.status = nextStatus;
     item.approverUserId = membership.userId;
     item.decisionComment = comment ? sanitizeText(comment, 240) : null;
@@ -244,6 +268,30 @@ router.post("/expenses/:expenseId/decision", async (req: Request, res: Response)
       isDemo: true,
     });
     res.json(item);
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(expensesTable)
+    .where(
+      and(
+        eq(expensesTable.id, expenseId),
+        eq(expensesTable.organizationId, membership.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Expense claim not found." });
+    return;
+  }
+
+  if (membership.employeeId && existing.employeeId === membership.employeeId) {
+    res.status(403).json({
+      error: "Maker-Checker policy violation: You cannot approve or decide your own expense claim.",
+      code: "MAKER_CHECKER_VIOLATION",
+    });
     return;
   }
 

@@ -387,13 +387,13 @@ router.get("/leave-policies", async (req, res): Promise<void> => {
 });
 
 router.post("/leave-policies", async (req, res): Promise<void> => {
+  const membership = await requireRoles(req, res, adminRoles);
+  if (!membership) return;
   const body = CreateLeavePolicyBody.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const membership = await requireRoles(req, res, adminRoles);
-  if (!membership) return;
   const name = body.data.name.trim();
   const code = name
     .toLowerCase()
@@ -1246,6 +1246,10 @@ router.post(
       }
       if (target.status !== "pending") {
         res.status(409).json({ error: "This request has already been decided." });
+        return;
+      }
+      if (membership.employeeId && target.employeeId === membership.employeeId) {
+        res.status(403).json({ error: "You cannot approve a leave request you submitted." });
         return;
       }
       target.status = body.data.decision === "approve" ? "approved" : "rejected";

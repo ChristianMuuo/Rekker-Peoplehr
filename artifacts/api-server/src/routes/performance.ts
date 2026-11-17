@@ -167,6 +167,13 @@ router.patch(
     const nextStatus =
       progress >= 100 ? "completed" : progress < 40 ? "behind" : "in_progress";
 
+    const isHrOrMgr = [
+      PEOPLEOS_ROLES.hrAdmin,
+      PEOPLEOS_ROLES.hrManager,
+      PEOPLEOS_ROLES.systemAdmin,
+      PEOPLEOS_ROLES.departmentManager,
+    ].includes(membership.role as any);
+
     if (!process.env.DATABASE_URL) {
       const goal = GOALS.find(
         (g) => g.id === id && g.organizationId === membership.organizationId,
@@ -175,9 +182,43 @@ router.patch(
         res.status(404).json({ error: "Goal not found." });
         return;
       }
+      if (goal.employeeId !== membership.employeeId && !isHrOrMgr) {
+        res.status(403).json({ error: "Cannot update goals for another employee." });
+        return;
+      }
       goal.progress = progress;
       goal.status = nextStatus;
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "PERFORMANCE_GOAL_UPDATED",
+        targetType: "goal",
+        targetId: goal.id,
+        summary: `Updated progress for goal "${goal.title}" to ${progress}%.`,
+      });
       res.json(goal);
+      return;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(goalsTable)
+      .where(
+        and(
+          eq(goalsTable.id, id),
+          eq(goalsTable.organizationId, membership.organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "Goal not found." });
+      return;
+    }
+
+    if (existing.employeeId !== membership.employeeId && !isHrOrMgr) {
+      res.status(403).json({ error: "Cannot update goals for another employee." });
       return;
     }
 
@@ -196,6 +237,16 @@ router.patch(
       res.status(404).json({ error: "Goal not found." });
       return;
     }
+
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "PERFORMANCE_GOAL_UPDATED",
+      targetType: "goal",
+      targetId: updated.id,
+      summary: `Updated progress for goal "${updated.title}" to ${progress}%.`,
+    });
     res.json(updated);
   },
 );
