@@ -297,6 +297,94 @@ function AppFrame() {
       {item.href === '/approvals' && <span className="ml-auto rounded-full bg-[#f5d8d4] px-2 py-0.5 text-[10px] text-[#a91919]" data-testid="badge-approvals-nav">{notificationCount > 0 ? notificationCount : 'Open'}</span>}
     </Link>;
   });
+
+  // Standalone Layout for Rekker Trade (trade.rekker.co.ke)
+  if (location === '/trade') {
+    return (
+      <div className="min-h-[100dvh] bg-[#fbfaf8] text-stone-900">
+        <header className="sticky top-0 z-40 border-b border-stone-200 bg-white/95 px-4 backdrop-blur md:px-8">
+          <div className="mx-auto flex h-[68px] max-w-[1600px] items-center justify-between">
+            {/* Rekker Trade Brand */}
+            <div className="flex items-center gap-3">
+              <Link href="/trade" className="flex items-center gap-2.5" data-testid="link-trade-brand">
+                <img src="https://rekker.co.ke/Logo.jpg" alt="Rekker" className="h-8 w-auto" />
+                <div className="border-l border-stone-300 pl-2.5">
+                  <span className="font-display text-sm font-black tracking-tight text-stone-900">
+                    REKKER <span className="text-[#C71D1D]">TRADE</span>
+                  </span>
+                  <span className="block text-[10px] font-mono font-bold text-stone-400">trade.rekker.co.ke</span>
+                </div>
+              </Link>
+              <span className="hidden sm:inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-bold text-[#C71D1D] uppercase tracking-wider">
+                B2B Wholesale Portal
+              </span>
+            </div>
+
+            {/* Brand Lines Quick Badges */}
+            <div className="hidden xl:flex items-center gap-2 text-[11px] font-semibold text-stone-600">
+              <span className="rounded-md bg-stone-100 px-2 py-0.5 text-stone-700">Saffron Milan</span>
+              <span className="rounded-md bg-stone-100 px-2 py-0.5 text-stone-700">Bio Saff</span>
+              <span className="rounded-md bg-stone-100 px-2 py-0.5 text-stone-700">Cornells</span>
+              <span className="rounded-md bg-stone-100 px-2 py-0.5 text-stone-700">PetCare</span>
+            </div>
+
+            {/* Right: Switch back to PeopleOS HR site & User info */}
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-2 border-r border-stone-200 pr-3 text-xs text-stone-500 font-medium">
+                <a href="https://rekker.co.ke" target="_blank" rel="noreferrer" className="hover:text-stone-900">rekker.co.ke ↗</a>
+                <span className="text-stone-300">·</span>
+                <a href="https://shop.rekker.co.ke" target="_blank" rel="noreferrer" className="hover:text-stone-900">shop.rekker ↗</a>
+              </div>
+
+              {/* Seamless switch to PeopleOS HR site */}
+              <Link
+                href="/overview"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2 text-xs font-bold text-stone-800 hover:bg-stone-100 transition shadow-sm"
+                title="Switch back to PeopleOS HRMS and Workforce ERP"
+                data-testid="button-switch-to-hr"
+              >
+                <Users size={14} className="text-[#C71D1D]" />
+                <span>PeopleOS HR ERP</span>
+              </Link>
+
+              {/* Dark mode toggle */}
+              <button
+                onClick={() => setDarkMode(d => !d)}
+                className="btn btn-ghost min-h-9 px-2"
+                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
+
+              {/* User avatar */}
+              <div className="flex items-center gap-2 border-l border-stone-200 pl-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eee2d8] font-display text-xs font-bold text-stone-700">
+                  {auth.displayName.split(' ').map(v => v[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="hidden sm:block text-left text-xs">
+                  <p className="font-bold text-stone-800 leading-tight">{auth.displayName}</p>
+                  <p className="text-[10px] text-stone-400 capitalize">{auth.role.replaceAll('_', ' ')}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {auth.isDemo && (
+          <div className="border-b border-[#e9d2aa] bg-[#fbf1dc] px-4 py-1.5 text-center text-[11px] font-semibold text-[#76551d]">
+            Rekker Trade B2B Wholesale Portal · Demo Mode with active KRA eTIMS invoices, multi-warehouse dispatch, and supplier procurement.
+          </div>
+        )}
+
+        <main className="mx-auto max-w-[1600px] px-4 py-6 md:px-8 md:py-8 enter">
+          <Suspense fallback={<LoadingScreen label="Loading Rekker Trade" />}>
+            <TradePage />
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
+
   return <div className="app-shell">
     <div className="flex min-h-[100dvh]">
       {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-30 bg-stone-950/40 md:hidden" onClick={() => setMobileOpen(false)} data-testid="button-close-nav-overlay" />}
