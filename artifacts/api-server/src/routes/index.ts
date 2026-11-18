@@ -17,10 +17,12 @@ import learningRouter from "./learning";
 import mlRouter from "./ml";
 import hrCasesRouter from "./hrCases";
 import workforceErpRouter from "./workforceErp";
+import tradeRouter from "./trade";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(tradeRouter);
 router.use(hrCasesRouter);
 router.use(workforceErpRouter);
 router.use(phase2CoreHrRouter);

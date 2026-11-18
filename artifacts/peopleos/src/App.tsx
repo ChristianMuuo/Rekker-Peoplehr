@@ -19,7 +19,7 @@ import type { Employee, EmployeeInput, EmployeeUpdate, LeavePolicy, LeaveRequest
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BadgeCheck, Bell, BrainCircuit, BriefcaseBusiness,
   CalendarDays, Check, ChevronLeft, ChevronRight, CircleHelp, Clock3, Command, Download, FileText,
-  Factory, Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, RefreshCw, Search, Settings2, ShieldAlert, ShieldCheck, Sparkles,
+  Factory, Filter, GitBranch, Laptop, LayoutDashboard, LogOut, Menu, Moon, Plus, Receipt, RefreshCw, Search, Settings2, ShieldAlert, ShieldCheck, ShoppingBag, Sparkles,
   Sun, Target, Upload, UserCheck, Users, X,
 } from 'lucide-react';
 import { Link, Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
@@ -42,6 +42,7 @@ const AssetsPage = lazy(() => import('@/pages/AssetsPage').then(m => ({ default:
 const PredictiveMlPage = lazy(() => import('@/pages/PredictiveMlPage').then(m => ({ default: m.PredictiveMlPage })));
 const WorkforceErpPage = lazy(() => import('@/pages/WorkforceErpPage').then(m => ({ default: m.WorkforceErpPage })));
 const HrCasesPage = lazy(() => import('@/pages/HrCasesPage').then(m => ({ default: m.HrCasesPage })));
+const TradePage = lazy(() => import('@/pages/TradePage').then(m => ({ default: m.TradePage })));
 import { apiGet, apiPost, triggerCsvDownload } from '@/lib/api';
 import { BulkImportDialog } from '@/components/phase2/BulkImportDialog';
 import { handleFallbackApi } from '@workspace/api-client-react';
@@ -218,6 +219,7 @@ const workNav: NavItem[] = [
 const workforceErpNav: NavItem[] = [
   { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
   { label: 'HR Cases', href: '/hr-cases', icon: ShieldAlert },
+  { label: 'Rekker Trade (B2B)', href: '/trade', icon: ShoppingBag },
 ];
 
 function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
@@ -387,6 +389,7 @@ function AppFrame() {
             <Route path="/reports" component={ReportsPage} />
             <Route path="/workforce-erp" component={WorkforceErpPage} />
             <Route path="/hr-cases" component={HrCasesPage} />
+            <Route path="/trade" component={TradePage} />
             <Route component={NotFound} />
           </Switch>
           </Suspense>
