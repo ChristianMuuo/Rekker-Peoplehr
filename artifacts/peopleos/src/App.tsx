@@ -198,7 +198,6 @@ type NavItem = { label: string; href: string; icon: typeof Users; permission?: '
 const primaryNav: NavItem[] = [
   { label: 'Overview', href: '/overview', icon: LayoutDashboard },
   { label: 'My workspace', href: '/self-service', icon: UserCheck },
-  { label: 'Rekker Trade', href: '/trade', icon: ShoppingBag },
   { label: 'People', href: '/people', icon: Users },
   { label: 'Organization', href: '/organization', icon: GitBranch },
   { label: 'Leave', href: '/leave', icon: CalendarDays },
@@ -220,7 +219,6 @@ const workNav: NavItem[] = [
 const workforceErpNav: NavItem[] = [
   { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
   { label: 'HR Cases', href: '/hr-cases', icon: ShieldAlert },
-  { label: 'Rekker Trade (B2B)', href: '/trade', icon: ShoppingBag },
 ];
 
 function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
@@ -405,9 +403,10 @@ function AppFrame() {
           <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
-          <div className="mb-2 grid grid-cols-2 gap-1.5">
-            <a href="https://rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-rekker">rekker.co.ke ↗</a>
-            <a href="https://shop.rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[11px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-shop">shop.rekker ↗</a>
+          <div className="mb-2 grid grid-cols-3 gap-1">
+            <a href="https://rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[10px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-rekker">rekker.co.ke ↗</a>
+            <a href="https://shop.rekker.co.ke/" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-stone-200 py-1.5 text-[10px] font-semibold text-stone-700 hover:bg-stone-50" data-testid="link-ext-shop">shop.rekker ↗</a>
+            <a href="/trade" target="_blank" rel="noreferrer" className="flex items-center justify-center rounded-lg border border-red-200 bg-red-50/50 py-1.5 text-[10px] font-bold text-[#C71D1D] hover:bg-red-100" data-testid="link-ext-trade">trade.rekker ↗</a>
           </div>
           <div className="mb-3 rounded-xl bg-[#f7f4f0] p-3">
             <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#338956]" /><span className="text-xs font-bold text-stone-800">{auth.isDemo ? 'Demo workspace' : 'Live workspace'}</span></div>
@@ -421,10 +420,10 @@ function AppFrame() {
           <div className="flex items-center gap-3">
             <button className="btn btn-ghost min-h-9 px-2 md:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu" data-testid="button-open-menu"><Menu size={19} /></button>
             <span className="text-[11px] font-semibold text-stone-400">REKKER /</span><span className="text-xs font-bold text-stone-800">{nav.find(n => n.href === location)?.label ?? (location.startsWith('/people/') ? 'Employee profile' : 'PeopleOS')}</span>
-            <Link href="/trade" className="hidden items-center gap-1.5 rounded-full border border-red-200 bg-red-50/80 px-2.5 py-1 text-[11px] font-bold text-[#C71D1D] hover:bg-red-100 sm:inline-flex" title="Launch Rekker Trade B2B Wholesale Platform">
+            <a href="/trade" target="_blank" rel="noreferrer" className="hidden items-center gap-1.5 rounded-full border border-red-200 bg-red-50/80 px-2.5 py-1 text-[11px] font-bold text-[#C71D1D] hover:bg-red-100 sm:inline-flex" title="Launch Rekker Trade B2B Wholesale Platform in new window">
               <ShoppingBag size={12} />
-              <span>trade.rekker.co.ke</span>
-            </Link>
+              <span>trade.rekker.co.ke ↗</span>
+            </a>
           </div>
           <div className="relative flex items-center gap-2 md:gap-3">
             <button onClick={() => setSearchOpen(true)} className="hidden items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs text-stone-500 hover:border-stone-300 sm:inline-flex" data-testid="button-global-search">
@@ -635,7 +634,7 @@ function OverviewPage() {
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-[#338956]" style={{ width: `${Math.min(100, dept.budgetedPositions ? dept.headcount / dept.budgetedPositions * 100 : 0)}%` }} /></div>
       </div>)}</div> : <EmptyState title="No department data" message="Department information will appear when available to your role." />}
     </section>
-    <section className="surface mt-4 border border-red-200/80 bg-gradient-to-r from-red-50/70 via-stone-50 to-orange-50/50 p-5 md:p-6" data-testid="section-trade-banner">
+    <section className="surface mt-4 border border-stone-200 bg-gradient-to-r from-stone-50 via-white to-red-50/40 p-5 md:p-6" data-testid="section-trade-banner">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3.5">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-100 text-[#C71D1D] shadow-sm">
@@ -643,16 +642,16 @@ function OverviewPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#C71D1D]">B2B Commerce</span>
-              <span className="font-mono text-xs font-bold text-stone-500">trade.rekker.co.ke</span>
+              <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-600">External B2B Platform</span>
+              <span className="font-mono text-xs font-bold text-[#C71D1D]">trade.rekker.co.ke</span>
             </div>
             <h2 className="mt-1 font-display text-lg font-bold text-stone-900">Rekker Trade Wholesale Platform</h2>
-            <p className="mt-0.5 text-xs text-stone-600">Carton bulk ordering, KRA eTIMS invoices, and distributor credit management across Saffron Milan, Bio Saff, Cornells, and PetCare.</p>
+            <p className="mt-0.5 text-xs text-stone-600">Standalone commercial trading portal for external buyers, distributors, carton wholesale orders &amp; KRA eTIMS invoices.</p>
           </div>
         </div>
-        <Link href="/trade" className="btn btn-primary min-h-9 px-4 text-xs font-bold whitespace-nowrap bg-[#C71D1D] hover:bg-red-800 text-white shadow">
-          Launch Trade Portal <ArrowRight size={14} />
-        </Link>
+        <a href="/trade" target="_blank" rel="noreferrer" className="btn btn-primary min-h-9 px-4 text-xs font-bold whitespace-nowrap bg-[#C71D1D] hover:bg-red-800 text-white shadow" data-testid="link-launch-trade-portal">
+          Launch trade.rekker ↗
+        </a>
       </div>
     </section>
 
@@ -660,11 +659,10 @@ function OverviewPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="font-display text-lg font-semibold text-stone-900">Operational readiness &amp; quick controls</h2>
-          <p className="mt-1 text-xs text-stone-500">Live plant shift coverage, fleet NTSA compliance, and intelligent modules</p>
+          <p className="mt-1 text-xs text-stone-500">Live plant shift coverage, fleet NTSA compliance, and workforce operations</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/trade" className="btn btn-primary min-h-8 px-3 text-xs bg-[#C71D1D] hover:bg-red-800 text-white font-bold"><ShoppingBag size={13} /> Rekker Trade (B2B)</Link>
-          <Link href="/workforce-erp" className="btn btn-secondary min-h-8 px-3 text-xs">Workforce ERP <ArrowRight size={13} /></Link>
+          <Link href="/workforce-erp" className="btn btn-primary min-h-8 px-3 text-xs bg-stone-900 hover:bg-stone-800 text-white font-bold"><Factory size={13} /> Workforce ERP</Link>
           {auth.data?.canViewPayroll && <Link href="/payroll" className="btn btn-secondary min-h-8 px-3 text-xs">Payroll &amp; GL <ArrowRight size={13} /></Link>}
           <Link href="/agent-hub" className="btn btn-secondary min-h-8 px-3 text-xs">Rekker AI Hub <Sparkles size={13} /></Link>
         </div>
