@@ -1349,4 +1349,846 @@ router.post("/trade/ai/query", async (req: Request, res: Response) => {
   });
 });
 
+// ─── Multi-Warehouse, Dispatch & Supplier Procurement Stores ──────────────────
+
+export interface DemoTradeWarehouse {
+  id: string;
+  code: string;
+  name: string;
+  county: string;
+  physicalAddress: string;
+  capacityCartons: number;
+  currentStockCartons: number;
+  managerName: string;
+  contactPhone: string;
+  isActive: boolean;
+}
+
+export interface DemoTradeShipment {
+  id: string;
+  shipmentNumber: string;
+  orderId: string;
+  orderNumber: string;
+  businessName: string;
+  warehouseCode: string;
+  warehouseName: string;
+  status: "picking" | "packed" | "dispatched" | "in_transit" | "delivered";
+  assignedDriverName: string;
+  vehicleRegistration: string;
+  dispatchedAt: string;
+  deliveredAt: string | null;
+  recipientName: string | null;
+  deliveryNotes: string;
+  totalCartons: number;
+}
+
+export interface DemoTradeSupplier {
+  id: string;
+  code: string;
+  name: string;
+  category: "packaging_glass" | "packaging_plastic" | "packaging_corrugated" | "raw_botanicals_oils" | "chemicals_surfactants";
+  kraPin: string;
+  primaryContact: string;
+  phone: string;
+  email: string;
+  physicalLocation: string;
+  paymentTerms: string;
+  status: "approved" | "review" | "suspended";
+}
+
+export interface DemoTradeRawMaterial {
+  id: string;
+  code: string;
+  name: string;
+  category: "bottles" | "caps_pumps" | "essential_oils" | "active_ingredients" | "cartons_boxes";
+  unitOfMeasure: "piece" | "kg" | "litre" | "bundle";
+  stockOnHand: number;
+  reorderLevel: number;
+  unitCostCents: number;
+  preferredSupplierId: string;
+  preferredSupplierName: string;
+  compatibleBrand: string;
+  status: "in_stock" | "low_stock" | "critical";
+}
+
+export interface DemoTradePurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  supplierName: string;
+  warehouseCode: string;
+  status: "draft" | "issued" | "partially_received" | "received" | "cancelled";
+  totalCents: number;
+  currency: string;
+  expectedDeliveryDate: string;
+  deliveryNotes: string | null;
+  items: Array<{
+    materialId: string;
+    code: string;
+    materialName: string;
+    quantityOrdered: number;
+    quantityReceived: number;
+    unitPriceCents: number;
+    totalCents: number;
+  }>;
+  createdAt: string;
+}
+
+export const DEMO_TRADE_WAREHOUSES: DemoTradeWarehouse[] = [
+  {
+    id: "wh-001",
+    code: "WH-NBO-01",
+    name: "Baba Dogo Central Plant & Logistics Hub",
+    county: "Nairobi",
+    physicalAddress: "Plot 48, Baba Dogo Road, Ruaraka Industrial Zone, Nairobi",
+    capacityCartons: 25000,
+    currentStockCartons: 18450,
+    managerName: "Kiprono Bett",
+    contactPhone: "+254722112233",
+    isActive: true,
+  },
+  {
+    id: "wh-002",
+    code: "WH-MSA-01",
+    name: "Mombasa Coastal Distribution Depot",
+    county: "Mombasa",
+    physicalAddress: "Miritini Logistics Park, Off Airport Road, Mombasa",
+    capacityCartons: 12000,
+    currentStockCartons: 7800,
+    managerName: "Fatuma Bakari",
+    contactPhone: "+254733445566",
+    isActive: true,
+  },
+  {
+    id: "wh-003",
+    code: "WH-KSM-01",
+    name: "Kisumu Lake Region Logistics Hub",
+    county: "Kisumu",
+    physicalAddress: "Obunga Industrial Avenue, Kisumu",
+    capacityCartons: 10000,
+    currentStockCartons: 5200,
+    managerName: "Otieno Odhiambo",
+    contactPhone: "+254711778899",
+    isActive: true,
+  },
+  {
+    id: "wh-004",
+    code: "WH-NKR-01",
+    name: "Nakuru Rift Valley Depot",
+    county: "Nakuru",
+    physicalAddress: "Nakuru Light Industrial Area, George Morara Rd, Nakuru",
+    capacityCartons: 8000,
+    currentStockCartons: 4100,
+    managerName: "Wanjohi Mwangi",
+    contactPhone: "+254720998877",
+    isActive: true,
+  },
+];
+
+export const DEMO_TRADE_SHIPMENTS: DemoTradeShipment[] = [
+  {
+    id: "shp-001",
+    shipmentNumber: "SHP-2026-0041",
+    orderId: "ord-001",
+    orderNumber: "ORD-2026-0301",
+    businessName: "Nairobi Mega Retail Distributors Limited",
+    warehouseCode: "WH-NBO-01",
+    warehouseName: "Baba Dogo Central Plant & Logistics Hub",
+    status: "dispatched",
+    assignedDriverName: "Juma Omondi",
+    vehicleRegistration: "KDF 492B (Isuzu FRR 10-Tonne Box Truck)",
+    dispatchedAt: "2026-03-02T11:00:00Z",
+    deliveredAt: null,
+    recipientName: null,
+    deliveryNotes: "Call receiving supervisor 30 minutes prior to gate arrival.",
+    totalCartons: 60,
+  },
+  {
+    id: "shp-002",
+    shipmentNumber: "SHP-2026-0042",
+    orderId: "ord-002",
+    orderNumber: "ORD-2026-0302",
+    businessName: "Rift Valley Retail & Supermarkets Kenya Ltd",
+    warehouseCode: "WH-NKR-01",
+    warehouseName: "Nakuru Rift Valley Depot",
+    status: "delivered",
+    assignedDriverName: "Peter Kariuki",
+    vehicleRegistration: "KDG 118C (Isuzu NPR 5-Tonne Cargo Van)",
+    dispatchedAt: "2026-03-04T15:00:00Z",
+    deliveredAt: "2026-03-04T18:30:00Z",
+    recipientName: "Simon Koech (Receiving Manager)",
+    deliveryNotes: "Confirmed 30 cartons delivered in tamper-evident sealed packaging.",
+    totalCartons: 30,
+  },
+];
+
+export const DEMO_TRADE_SUPPLIERS: DemoTradeSupplier[] = [
+  {
+    id: "sup-001",
+    code: "SUP-GLS-01",
+    name: "East African Glass Mills Ltd",
+    category: "packaging_glass",
+    kraPin: "P051112233A",
+    primaryContact: "Kamau Njoroge",
+    phone: "+254722880011",
+    email: "commercial@eaglassmills.co.ke",
+    physicalLocation: "Nairobi Industrial Area, Off Enterprise Road",
+    paymentTerms: "net_30",
+    status: "approved",
+  },
+  {
+    id: "sup-002",
+    code: "SUP-PLAS-01",
+    name: "Premier Plastics Kenya Ltd",
+    category: "packaging_plastic",
+    kraPin: "P051223344B",
+    primaryContact: "Dipak Patel",
+    phone: "+254733990022",
+    email: "orders@premierplastics.co.ke",
+    physicalLocation: "Athi River Export Processing Zone, Machakos",
+    paymentTerms: "net_30",
+    status: "approved",
+  },
+  {
+    id: "sup-003",
+    code: "SUP-BOT-01",
+    name: "Nzoia Botanicals & Fragrances Ltd",
+    category: "raw_botanicals_oils",
+    kraPin: "P051334455C",
+    primaryContact: "Mercy Chebet",
+    phone: "+254711554433",
+    email: "supply@nzoiabotanicals.co.ke",
+    physicalLocation: "Kipkenyo Industrial Estate, Eldoret",
+    paymentTerms: "net_14",
+    status: "approved",
+  },
+  {
+    id: "sup-004",
+    code: "SUP-PKG-01",
+    name: "Kenya Carton & Packaging Converters Ltd",
+    category: "packaging_corrugated",
+    kraPin: "P051445566D",
+    primaryContact: "Brian Omondi",
+    phone: "+254720667788",
+    email: "sales@kenyacarton.co.ke",
+    physicalLocation: "Thika Industrial Zone, Garissa Highway, Thika",
+    paymentTerms: "net_45",
+    status: "approved",
+  },
+];
+
+export const DEMO_TRADE_RAW_MATERIALS: DemoTradeRawMaterial[] = [
+  {
+    id: "rm-001",
+    code: "RM-GLS-100ML",
+    name: "100ml Cylindrical Amber Glass Bottle (Saffron Milan)",
+    category: "bottles",
+    unitOfMeasure: "piece",
+    stockOnHand: 45000,
+    reorderLevel: 10000,
+    unitCostCents: 3500, // KES 35.00
+    preferredSupplierId: "sup-001",
+    preferredSupplierName: "East African Glass Mills Ltd",
+    compatibleBrand: "Saffron Milan",
+    status: "in_stock",
+  },
+  {
+    id: "rm-002",
+    code: "RM-PUMP-GOLD",
+    name: "24mm Gold Fine Mist Atomizer Spray Pump & Collar",
+    category: "caps_pumps",
+    unitOfMeasure: "piece",
+    stockOnHand: 38000,
+    reorderLevel: 8000,
+    unitCostCents: 1800, // KES 18.00
+    preferredSupplierId: "sup-002",
+    preferredSupplierName: "Premier Plastics Kenya Ltd",
+    compatibleBrand: "Saffron Milan",
+    status: "in_stock",
+  },
+  {
+    id: "rm-003",
+    code: "RM-OIL-TEATREE",
+    name: "Pure Kenyan Tea Tree Essential Oil (Melaleuca Alternifolia)",
+    category: "essential_oils",
+    unitOfMeasure: "litre",
+    stockOnHand: 420,
+    reorderLevel: 80,
+    unitCostCents: 280000, // KES 2,800.00 / Litre
+    preferredSupplierId: "sup-003",
+    preferredSupplierName: "Nzoia Botanicals & Fragrances Ltd",
+    compatibleBrand: "Bio Saff",
+    status: "in_stock",
+  },
+  {
+    id: "rm-004",
+    code: "RM-BOX-24PACK",
+    name: "Master Shipping Carton Corrugated Box (24-pack Double Wall)",
+    category: "cartons_boxes",
+    unitOfMeasure: "bundle",
+    stockOnHand: 3200,
+    reorderLevel: 500,
+    unitCostCents: 8500, // KES 85.00 / bundle
+    preferredSupplierId: "sup-004",
+    preferredSupplierName: "Kenya Carton & Packaging Converters Ltd",
+    compatibleBrand: "All",
+    status: "in_stock",
+  },
+  {
+    id: "rm-005",
+    code: "RM-OIL-ARGAN",
+    name: "Virgin Cold-Pressed Argan Kernel Oil (Cornells Series)",
+    category: "essential_oils",
+    unitOfMeasure: "litre",
+    stockOnHand: 48,
+    reorderLevel: 60,
+    unitCostCents: 420000, // KES 4,200.00 / Litre
+    preferredSupplierId: "sup-003",
+    preferredSupplierName: "Nzoia Botanicals & Fragrances Ltd",
+    compatibleBrand: "Cornells",
+    status: "low_stock",
+  },
+];
+
+export const DEMO_TRADE_PURCHASE_ORDERS: DemoTradePurchaseOrder[] = [
+  {
+    id: "po-sup-001",
+    poNumber: "PO-SUP-2026-0011",
+    supplierId: "sup-001",
+    supplierName: "East African Glass Mills Ltd",
+    warehouseCode: "WH-NBO-01",
+    status: "received",
+    totalCents: 175000000, // KES 1,750,000
+    currency: "KES",
+    expectedDeliveryDate: "2026-03-01",
+    deliveryNotes: "Batch inspection passed with certificate of analysis.",
+    items: [
+      {
+        materialId: "rm-001",
+        code: "RM-GLS-100ML",
+        materialName: "100ml Cylindrical Amber Glass Bottle (Saffron Milan)",
+        quantityOrdered: 50000,
+        quantityReceived: 50000,
+        unitPriceCents: 3500,
+        totalCents: 175000000,
+      },
+    ],
+    createdAt: "2026-02-20T10:00:00Z",
+  },
+  {
+    id: "po-sup-002",
+    poNumber: "PO-SUP-2026-0012",
+    supplierId: "sup-003",
+    supplierName: "Nzoia Botanicals & Fragrances Ltd",
+    warehouseCode: "WH-NBO-01",
+    status: "issued",
+    totalCents: 84000000, // KES 840,000
+    currency: "KES",
+    expectedDeliveryDate: "2026-03-25",
+    deliveryNotes: "Expedited replenishment order for Argan & Tea Tree botanical oils.",
+    items: [
+      {
+        materialId: "rm-005",
+        code: "RM-OIL-ARGAN",
+        materialName: "Virgin Cold-Pressed Argan Kernel Oil (Cornells Series)",
+        quantityOrdered: 200,
+        quantityReceived: 0,
+        unitPriceCents: 420000,
+        totalCents: 84000000,
+      },
+    ],
+    createdAt: "2026-03-05T09:30:00Z",
+  },
+];
+
+/**
+ * GET /api/v1/trade/invoices/:id/print - Generate formal KRA eTIMS Tax Invoice
+ */
+router.get("/trade/invoices/:id/print", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const invoiceId = req.params.id;
+  const invoice = DEMO_TRADE_INVOICES.find((i) => i.id === invoiceId || i.invoiceNumber === invoiceId);
+  if (!invoice) {
+    res.status(404).json({ error: "Invoice not found." });
+    return;
+  }
+
+  const order = DEMO_TRADE_ORDERS.find((o) => o.id === invoice.orderId);
+  const business = DEMO_TRADE_BUSINESSES.find((b) => b.id === invoice.businessId);
+
+  const subtotalCents = order?.subtotalCents ?? Math.round(invoice.totalCents / 1.16);
+  const discountCents = order?.discountCents ?? 0;
+  const netVatableCents = subtotalCents - discountCents;
+  const vatCents = Math.round(netVatableCents * 0.16);
+
+  const printPayload = {
+    documentType: "TAX INVOICE",
+    complianceStandard: "KENYA REVENUE AUTHORITY (KRA) eTIMS REGULATION 2024",
+    seller: {
+      name: "REKKER LIMITED",
+      tradingAs: "Rekker Trade Wholesale & FMCG Distribution",
+      kraPin: "P051234567X",
+      vatNumber: "01234567K",
+      etimsControlUnit: "KRA-CU-REKKER-NBO-01",
+      physicalAddress: "Plot 48, Baba Dogo Road, Ruaraka Industrial Zone, Nairobi, Kenya",
+      postalAddress: "P.O. Box 48921-00100 Nairobi, Kenya",
+      telephone: "+254 700 000 000 / +254 722 000 000",
+      email: "finance@rekker.co.ke",
+      website: "trade.rekker.co.ke",
+    },
+    buyer: {
+      legalName: business?.legalName ?? invoice.businessName,
+      tradingName: business?.tradingName ?? business?.legalName ?? invoice.businessName,
+      kraPin: business?.kraPin ?? "P050000000Z",
+      businessType: business?.businessType ?? "wholesale_partner",
+      physicalLocation: business?.physicalLocation ?? "Nairobi, Kenya",
+      contactPerson: business?.primaryContactName ?? "Procurement Office",
+      telephone: business?.primaryPhone ?? "+254 700 000 000",
+      email: business?.primaryEmail ?? "procurement@buyer.co.ke",
+    },
+    invoiceDetails: {
+      invoiceNumber: invoice.invoiceNumber,
+      orderNumber: invoice.orderNumber,
+      poReference: order?.poReference ?? "N/A",
+      issueDate: invoice.createdAt.slice(0, 10),
+      dueDate: invoice.dueDate,
+      paymentTerms: order?.paymentTerms ?? "net_30",
+      paymentStatus: invoice.status.toUpperCase(),
+      etimsControlCode: invoice.etimsControlCode,
+      etimsQrUrl: `https://itax.kra.go.ke/KRA-Portal/invoiceConfirmation.htm?cu=${encodeURIComponent(invoice.etimsControlCode)}`,
+    },
+    lineItems: (order?.items ?? []).map((item, index) => ({
+      lineNo: index + 1,
+      sku: item.sku,
+      productName: item.productName,
+      packagingUnit: item.packagingUnit,
+      quantityCartons: item.quantity,
+      unitPriceExclVatKes: Math.round((item.unitPriceCents / 1.16) / 100),
+      vatRatePct: 16,
+      subtotalExclVatKes: Math.round((item.subtotalCents / 1.16) / 100),
+      discountKes: Math.round((item.discountCents / 1.16) / 100),
+      lineTotalInclVatKes: Math.round(item.totalCents / 100),
+    })),
+    taxSummary: {
+      rate16NetVatableKes: Math.round(netVatableCents / 100),
+      rate16VatAmountKes: Math.round(vatCents / 100),
+      zeroRatedKes: 0,
+      exemptKes: 0,
+      totalVatKes: Math.round(vatCents / 100),
+      grossTotalKes: Math.round(invoice.totalCents / 100),
+      grossTotalCents: invoice.totalCents,
+      paidAmountKes: Math.round(invoice.paidCents / 100),
+      balanceDueKes: Math.round(invoice.balanceDueCents / 100),
+      currency: "KES",
+    },
+    bankingInstructions: {
+      bankName: "Stanbic Bank Kenya Limited",
+      branch: "Chiromo Branch, Nairobi",
+      accountName: "Rekker Limited - Collection Account",
+      accountNumber: "0100088921101",
+      swiftCode: "SBICKENX",
+      mpesaPaybill: "522522",
+      mpesaAccount: invoice.invoiceNumber,
+    },
+  };
+
+  res.json(printPayload);
+});
+
+/**
+ * GET /api/v1/trade/orders/:id/delivery-note - Formal Consignment Delivery Note
+ */
+router.get("/trade/orders/:id/delivery-note", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const orderId = req.params.id;
+  const order = DEMO_TRADE_ORDERS.find((o) => o.id === orderId || o.orderNumber === orderId);
+  if (!order) {
+    res.status(404).json({ error: "Order not found." });
+    return;
+  }
+
+  const business = DEMO_TRADE_BUSINESSES.find((b) => b.id === order.businessId);
+  const shipment = DEMO_TRADE_SHIPMENTS.find((s) => s.orderId === order.id) ?? {
+    id: `shp-${randomUUID().slice(0, 6)}`,
+    shipmentNumber: `SHP-2026-${randomUUID().slice(0, 4).toUpperCase()}`,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    businessName: order.businessName,
+    warehouseCode: "WH-NBO-01",
+    warehouseName: "Baba Dogo Central Plant & Logistics Hub",
+    status: "dispatched",
+    assignedDriverName: "Juma Omondi",
+    vehicleRegistration: "KDF 492B (Isuzu FRR 10-Tonne Box Truck)",
+    dispatchedAt: new Date().toISOString(),
+    deliveredAt: null,
+    recipientName: null,
+    deliveryNotes: "Goods in transit under commercial carrier escort.",
+    totalCartons: order.items.reduce((s, i) => s + i.quantity, 0),
+  };
+
+  const deliveryNote = {
+    deliveryNoteNumber: `DN-${order.orderNumber.replace("ORD-", "")}`,
+    orderNumber: order.orderNumber,
+    poReference: order.poReference ?? "N/A",
+    dispatchDate: shipment.dispatchedAt.slice(0, 10),
+    warehouse: {
+      code: shipment.warehouseCode,
+      name: shipment.warehouseName,
+      dispatchOfficer: "Kiprono Bett (Warehouse Superintendent)",
+    },
+    consignee: {
+      customerName: business?.legalName ?? order.businessName,
+      deliveryBranch: order.branchName,
+      deliveryAddress: business?.physicalLocation ?? "Nairobi, Kenya",
+      contactPerson: business?.primaryContactName ?? "Receiving Manager",
+      contactPhone: business?.primaryPhone ?? "+254 700 000 000",
+    },
+    carrier: {
+      driverName: shipment.assignedDriverName,
+      driverNationalId: "24892104",
+      vehicleRegistration: shipment.vehicleRegistration,
+      ntsaInspectionValid: true,
+    },
+    consignmentLines: order.items.map((i, idx) => ({
+      itemNo: idx + 1,
+      sku: i.sku,
+      description: i.productName,
+      packagingUnit: i.packagingUnit,
+      cartonsDispatched: i.quantity,
+      estimatedGrossWeightKg: i.quantity * 14.5, // approx 14.5kg per carton
+      batchLotNumbers: [`LOT-2026-${(idx + 1) * 110}`],
+    })),
+    totalCartonsDispatched: order.items.reduce((s, i) => s + i.quantity, 0),
+    totalGrossWeightKg: Math.round(order.items.reduce((s, i) => s + i.quantity * 14.5, 0)),
+    instructions: "All cartons are secured with Rekker branded security tamper tape. Check seals before signing receipt.",
+    dualSignoff: {
+      dispatchedBy: {
+        name: "Kiprono Bett",
+        signatureDate: shipment.dispatchedAt,
+        status: "Signed & Sealed",
+      },
+      driverAcknowledged: {
+        name: shipment.assignedDriverName,
+        signatureDate: shipment.dispatchedAt,
+        status: "Received in Good Condition",
+      },
+      consigneeReceived: {
+        name: shipment.recipientName ?? "Pending Consignee Stamp",
+        receivedDate: shipment.deliveredAt,
+        status: shipment.deliveredAt ? "Goods Received & Accepted" : "In Transit",
+      },
+    },
+  };
+
+  res.json(deliveryNote);
+});
+
+/**
+ * GET /api/v1/trade/warehouses - Multi-Site Regional Warehouses
+ */
+router.get("/trade/warehouses", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  res.json({
+    warehouses: DEMO_TRADE_WAREHOUSES,
+    total: DEMO_TRADE_WAREHOUSES.length,
+    totalCapacityCartons: DEMO_TRADE_WAREHOUSES.reduce((s, w) => s + w.capacityCartons, 0),
+    currentStockCartons: DEMO_TRADE_WAREHOUSES.reduce((s, w) => s + w.currentStockCartons, 0),
+  });
+});
+
+/**
+ * GET /api/v1/trade/shipments - List Shipments & Carrier Movements
+ */
+router.get("/trade/shipments", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  res.json({
+    shipments: DEMO_TRADE_SHIPMENTS,
+    total: DEMO_TRADE_SHIPMENTS.length,
+  });
+});
+
+/**
+ * POST /api/v1/trade/shipments/dispatch - Dispatch Order from Warehouse
+ */
+router.post("/trade/shipments/dispatch", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const { orderId, warehouseCode, assignedDriverName, vehicleRegistration, deliveryNotes } = req.body ?? {};
+  if (!orderId || !assignedDriverName || !vehicleRegistration) {
+    res.status(400).json({ error: "orderId, assignedDriverName, and vehicleRegistration are required." });
+    return;
+  }
+
+  const order = DEMO_TRADE_ORDERS.find((o) => o.id === orderId || o.orderNumber === orderId);
+  if (!order) {
+    res.status(404).json({ error: "Order not found." });
+    return;
+  }
+
+  const wh = DEMO_TRADE_WAREHOUSES.find((w) => w.code === (warehouseCode || "WH-NBO-01")) ?? DEMO_TRADE_WAREHOUSES[0];
+
+  order.status = "dispatched";
+
+  const newShipment: DemoTradeShipment = {
+    id: `shp-${randomUUID().slice(0, 8)}`,
+    shipmentNumber: `SHP-2026-${String(DEMO_TRADE_SHIPMENTS.length + 43).padStart(4, "0")}`,
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    businessName: order.businessName,
+    warehouseCode: wh.code,
+    warehouseName: wh.name,
+    status: "dispatched",
+    assignedDriverName,
+    vehicleRegistration,
+    dispatchedAt: new Date().toISOString(),
+    deliveredAt: null,
+    recipientName: null,
+    deliveryNotes: deliveryNotes || "Consignment dispatched under formal bill of lading.",
+    totalCartons: order.items.reduce((s, i) => s + i.quantity, 0),
+  };
+
+  DEMO_TRADE_SHIPMENTS.unshift(newShipment);
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "TRADE_ORDER_DISPATCHED",
+    targetType: "trade_shipment",
+    targetId: newShipment.shipmentNumber,
+    summary: `Order ${order.orderNumber} dispatched from ${wh.name} via ${vehicleRegistration} (Driver: ${assignedDriverName}).`,
+    isDemo: true,
+  });
+
+  res.status(201).json({
+    message: "Consignment dispatched successfully.",
+    shipment: newShipment,
+    deliveryNoteUrl: `/api/trade/orders/${order.id}/delivery-note`,
+  });
+});
+
+/**
+ * POST /api/v1/trade/shipments/:id/deliver - Record Proof of Delivery
+ */
+router.post("/trade/shipments/:id/deliver", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const shipmentId = req.params.id;
+  const shipment = DEMO_TRADE_SHIPMENTS.find((s) => s.id === shipmentId || s.shipmentNumber === shipmentId);
+  if (!shipment) {
+    res.status(404).json({ error: "Shipment not found." });
+    return;
+  }
+
+  const { recipientName, recipientSignatureConfirmed } = req.body ?? {};
+  if (!recipientName) {
+    res.status(400).json({ error: "recipientName is required for proof of delivery." });
+    return;
+  }
+
+  shipment.status = "delivered";
+  shipment.deliveredAt = new Date().toISOString();
+  shipment.recipientName = recipientName;
+
+  const order = DEMO_TRADE_ORDERS.find((o) => o.id === shipment.orderId);
+  if (order) order.status = "delivered";
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "TRADE_SHIPMENT_DELIVERED",
+    targetType: "trade_shipment",
+    targetId: shipment.shipmentNumber,
+    summary: `Shipment ${shipment.shipmentNumber} delivered to ${recipientName}. Proof of delivery confirmed.`,
+    isDemo: true,
+  });
+
+  res.json({
+    message: "Proof of delivery recorded successfully.",
+    shipment,
+  });
+});
+
+/**
+ * GET /api/v1/trade/procurement/suppliers - Supplier Directory
+ */
+router.get("/trade/procurement/suppliers", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  res.json({
+    suppliers: DEMO_TRADE_SUPPLIERS,
+    total: DEMO_TRADE_SUPPLIERS.length,
+  });
+});
+
+/**
+ * GET /api/v1/trade/procurement/materials - Raw Materials Inventory
+ */
+router.get("/trade/procurement/materials", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  res.json({
+    materials: DEMO_TRADE_RAW_MATERIALS,
+    total: DEMO_TRADE_RAW_MATERIALS.length,
+    lowStockCount: DEMO_TRADE_RAW_MATERIALS.filter((m) => m.status === "low_stock" || m.status === "critical").length,
+  });
+});
+
+/**
+ * GET /api/v1/trade/procurement/orders - Supplier Purchase Orders
+ */
+router.get("/trade/procurement/orders", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  res.json({
+    purchaseOrders: DEMO_TRADE_PURCHASE_ORDERS,
+    total: DEMO_TRADE_PURCHASE_ORDERS.length,
+  });
+});
+
+/**
+ * POST /api/v1/trade/procurement/orders - Issue Purchase Order to Supplier
+ */
+router.post("/trade/procurement/orders", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const { supplierId, warehouseCode, expectedDeliveryDate, deliveryNotes, items } = req.body ?? {};
+  if (!supplierId || !Array.isArray(items) || !items.length) {
+    res.status(400).json({ error: "supplierId and items array are required." });
+    return;
+  }
+
+  const supplier = DEMO_TRADE_SUPPLIERS.find((s) => s.id === supplierId || s.code === supplierId);
+  if (!supplier) {
+    res.status(404).json({ error: "Supplier not found." });
+    return;
+  }
+
+  let totalCents = 0;
+  const lineItems = items.map((item: any) => {
+    const mat = DEMO_TRADE_RAW_MATERIALS.find((m) => m.id === item.materialId || m.code === item.materialId);
+    const unitPrice = typeof item.unitPriceCents === "number" ? item.unitPriceCents : (mat?.unitCostCents || 1000);
+    const lineTotal = unitPrice * item.quantity;
+    totalCents += lineTotal;
+
+    return {
+      materialId: mat?.id ?? item.materialId,
+      code: mat?.code ?? "RM-GEN",
+      materialName: mat?.name ?? "Raw Material",
+      quantityOrdered: item.quantity,
+      quantityReceived: 0,
+      unitPriceCents: unitPrice,
+      totalCents: lineTotal,
+    };
+  });
+
+  const newPO: DemoTradePurchaseOrder = {
+    id: `po-sup-${randomUUID().slice(0, 8)}`,
+    poNumber: `PO-SUP-2026-${String(DEMO_TRADE_PURCHASE_ORDERS.length + 13).padStart(4, "0")}`,
+    supplierId: supplier.id,
+    supplierName: supplier.name,
+    warehouseCode: warehouseCode || "WH-NBO-01",
+    status: "issued",
+    totalCents,
+    currency: "KES",
+    expectedDeliveryDate: expectedDeliveryDate || new Date(Date.now() + 14 * 86400 * 1000).toISOString().slice(0, 10),
+    deliveryNotes: deliveryNotes || "Quality certificates must accompany delivery note.",
+    items: lineItems,
+    createdAt: new Date().toISOString(),
+  };
+
+  DEMO_TRADE_PURCHASE_ORDERS.unshift(newPO);
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "TRADE_PURCHASE_ORDER_ISSUED",
+    targetType: "trade_purchase_order",
+    targetId: newPO.poNumber,
+    summary: `Issued Purchase Order ${newPO.poNumber} to ${supplier.name} for KES ${Math.round(totalCents / 100).toLocaleString()}.`,
+    isDemo: true,
+  });
+
+  res.status(201).json({
+    message: "Purchase order issued to supplier successfully.",
+    purchaseOrder: newPO,
+  });
+});
+
+/**
+ * POST /api/v1/trade/procurement/orders/:id/receive - Goods Received Note (GRN)
+ */
+router.post("/trade/procurement/orders/:id/receive", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+
+  const poId = req.params.id;
+  const po = DEMO_TRADE_PURCHASE_ORDERS.find((p) => p.id === poId || p.poNumber === poId);
+  if (!po) {
+    res.status(404).json({ error: "Purchase order not found." });
+    return;
+  }
+
+  const { items } = req.body ?? {};
+  // If specific items passed, update them; otherwise receive full order
+  if (Array.isArray(items)) {
+    for (const recItem of items) {
+      const line = po.items.find((i) => i.materialId === recItem.materialId);
+      if (line) {
+        line.quantityReceived = Math.min(line.quantityOrdered, (line.quantityReceived || 0) + recItem.quantityReceived);
+        const mat = DEMO_TRADE_RAW_MATERIALS.find((m) => m.id === line.materialId);
+        if (mat) {
+          mat.stockOnHand += recItem.quantityReceived;
+          if (mat.stockOnHand >= mat.reorderLevel) mat.status = "in_stock";
+        }
+      }
+    }
+  } else {
+    for (const line of po.items) {
+      const remaining = line.quantityOrdered - line.quantityReceived;
+      line.quantityReceived = line.quantityOrdered;
+      const mat = DEMO_TRADE_RAW_MATERIALS.find((m) => m.id === line.materialId);
+      if (mat) {
+        mat.stockOnHand += remaining;
+        if (mat.stockOnHand >= mat.reorderLevel) mat.status = "in_stock";
+      }
+    }
+  }
+
+  const allReceived = po.items.every((i) => i.quantityReceived >= i.quantityOrdered);
+  po.status = allReceived ? "received" : "partially_received";
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "TRADE_GOODS_RECEIVED",
+    targetType: "trade_purchase_order",
+    targetId: po.poNumber,
+    summary: `Goods received against PO ${po.poNumber}. Status: ${po.status}. Raw material stock updated.`,
+    isDemo: true,
+  });
+
+  res.json({
+    message: "Goods received and raw material stock updated.",
+    purchaseOrder: po,
+  });
+});
+
 export default router;

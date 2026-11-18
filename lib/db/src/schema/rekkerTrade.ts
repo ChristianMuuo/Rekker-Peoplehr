@@ -322,6 +322,169 @@ export const tradeShipmentsTable = pgTable(
   ],
 );
 
+// ─── 5. Warehouses & Multi-Site Inventory Allocation ─────────────────────────
+
+export const tradeWarehousesTable = pgTable(
+  "trade_warehouses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull().unique(), // e.g. WH-NBO-01, WH-MSA-01, WH-KSM-01, WH-NKR-01
+    name: text("name").notNull(),
+    county: text("county").notNull(),
+    physicalAddress: text("physical_address").notNull(),
+    capacityCartons: integer("capacity_cartons").notNull().default(10000),
+    managerName: text("manager_name").notNull(),
+    contactPhone: text("contact_phone").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("trade_wh_code_idx").on(table.code),
+    index("trade_wh_county_idx").on(table.county),
+  ],
+);
+
+export const tradeWarehouseStockTable = pgTable(
+  "trade_warehouse_stock",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => tradeWarehousesTable.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => tradeProductsTable.id, { onDelete: "cascade" }),
+    stockOnHandCartons: integer("stock_on_hand_cartons").notNull().default(0),
+    allocatedStockCartons: integer("allocated_stock_cartons").notNull().default(0),
+    reorderThresholdCartons: integer("reorder_threshold_cartons").notNull().default(20),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("trade_wh_stock_wh_idx").on(table.warehouseId),
+    index("trade_wh_stock_prod_idx").on(table.productId),
+  ],
+);
+
+// ─── 6. Raw Materials & Supplier Procurement Desk ────────────────────────────
+
+export const tradeSuppliersTable = pgTable(
+  "trade_suppliers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull().unique(), // e.g. SUP-GLS-01, SUP-PLAS-01
+    name: text("name").notNull(),
+    category: text("category").notNull(), // packaging_glass | packaging_plastic | packaging_corrugated | raw_botanicals_oils | chemicals_surfactants
+    kraPin: text("kra_pin").notNull(),
+    primaryContact: text("primary_contact").notNull(),
+    phone: text("phone").notNull(),
+    email: text("email").notNull(),
+    physicalLocation: text("physical_location").notNull(),
+    paymentTerms: text("payment_terms").notNull().default("net_30"),
+    status: text("status").notNull().default("approved"), // approved | review | suspended
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("trade_sup_cat_idx").on(table.category),
+    index("trade_sup_code_idx").on(table.code),
+  ],
+);
+
+export const tradeRawMaterialsTable = pgTable(
+  "trade_raw_materials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull().unique(), // e.g. RM-GLS-100ML, RM-CAP-PUMP, RM-OIL-TEATREE
+    name: text("name").notNull(),
+    category: text("category").notNull(), // bottles | caps_pumps | essential_oils | active_ingredients | cartons_boxes
+    unitOfMeasure: text("unit_of_measure").notNull().default("piece"), // piece | kg | litre | bundle
+    stockOnHand: integer("stock_on_hand").notNull().default(0),
+    reorderLevel: integer("reorder_level").notNull().default(1000),
+    unitCostCents: integer("unit_cost_cents").notNull().default(0),
+    preferredSupplierId: uuid("preferred_supplier_id").references(() => tradeSuppliersTable.id),
+    compatibleBrand: text("compatible_brand"), // Saffron Milan | Bio Saff | Cornells | PetCare | All
+    status: text("status").notNull().default("in_stock"), // in_stock | low_stock | critical
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("trade_rm_cat_idx").on(table.category),
+    index("trade_rm_code_idx").on(table.code),
+  ],
+);
+
+export const tradePurchaseOrdersTable = pgTable(
+  "trade_purchase_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    poNumber: text("po_number").notNull().unique(), // e.g. PO-SUP-2026-0012
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => tradeSuppliersTable.id, { onDelete: "restrict" }),
+    warehouseId: uuid("warehouse_id").references(() => tradeWarehousesTable.id),
+    status: text("status").notNull().default("draft"), // draft | issued | partially_received | received | cancelled
+    totalCents: integer("total_cents").notNull(),
+    currency: text("currency").notNull().default("KES"),
+    expectedDeliveryDate: date("expected_delivery_date", { mode: "string" }).notNull(),
+    deliveryNotes: text("delivery_notes"),
+    approvedByUserId: text("approved_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("trade_po_sup_idx").on(table.supplierId),
+    index("trade_po_status_idx").on(table.status),
+  ],
+);
+
+export const tradePurchaseOrderItemsTable = pgTable(
+  "trade_purchase_order_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    purchaseOrderId: uuid("purchase_order_id")
+      .notNull()
+      .references(() => tradePurchaseOrdersTable.id, { onDelete: "cascade" }),
+    rawMaterialId: uuid("raw_material_id")
+      .notNull()
+      .references(() => tradeRawMaterialsTable.id, { onDelete: "restrict" }),
+    quantityOrdered: integer("quantity_ordered").notNull(),
+    quantityReceived: integer("quantity_received").notNull().default(0),
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    totalCents: integer("total_cents").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trade_poi_order_idx").on(table.purchaseOrderId),
+    index("trade_poi_rm_idx").on(table.rawMaterialId),
+  ],
+);
+
 // Type inference exports
 export type TradeBusinessRecord = typeof tradeBusinessesTable.$inferSelect;
 export type TradeBranchRecord = typeof tradeBranchesTable.$inferSelect;
@@ -333,3 +496,9 @@ export type TradeQuotationRecord = typeof tradeQuotationsTable.$inferSelect;
 export type TradeInvoiceRecord = typeof tradeInvoicesTable.$inferSelect;
 export type TradePaymentRecord = typeof tradePaymentsTable.$inferSelect;
 export type TradeShipmentRecord = typeof tradeShipmentsTable.$inferSelect;
+export type TradeWarehouseRecord = typeof tradeWarehousesTable.$inferSelect;
+export type TradeWarehouseStockRecord = typeof tradeWarehouseStockTable.$inferSelect;
+export type TradeSupplierRecord = typeof tradeSuppliersTable.$inferSelect;
+export type TradeRawMaterialRecord = typeof tradeRawMaterialsTable.$inferSelect;
+export type TradePurchaseOrderRecord = typeof tradePurchaseOrdersTable.$inferSelect;
+export type TradePurchaseOrderItemRecord = typeof tradePurchaseOrderItemsTable.$inferSelect;

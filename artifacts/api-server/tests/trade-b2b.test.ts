@@ -289,4 +289,153 @@ test("Rekker Trade B2B Platform Test Suite (trade.rekker.co.ke)", async (t) => {
       assert.ok(aiStockData.insights.length >= 2);
     });
   });
+
+  await t.test("9. GET /api/trade/invoices/:id/print & /delivery-note generate formal KRA eTIMS & dispatch docs", async () => {
+    await withServer(async (baseUrl) => {
+      // 1. KRA eTIMS Tax Invoice
+      const invRes = await fetch(`${baseUrl}/api/trade/invoices/inv-001/print`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+
+      assert.equal(invRes.status, 200);
+      const invData: any = await invRes.json();
+      assert.equal(invData.documentType, "TAX INVOICE");
+      assert.equal(invData.seller.kraPin, "P051234567X");
+      assert.ok(invData.invoiceDetails.etimsControlCode.startsWith("KRA-ETIMS-"));
+      assert.ok(invData.taxSummary.rate16VatAmountKes > 0);
+      assert.ok(Array.isArray(invData.lineItems));
+
+      // 2. Consignment Delivery Note
+      const dnRes = await fetch(`${baseUrl}/api/trade/orders/ord-001/delivery-note`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+
+      assert.equal(dnRes.status, 200);
+      const dnData: any = await dnRes.json();
+      assert.ok(dnData.deliveryNoteNumber.startsWith("DN-"));
+      assert.ok(dnData.carrier.vehicleRegistration.includes("Isuzu"));
+      assert.ok(dnData.totalCartonsDispatched > 0);
+      assert.ok(dnData.totalGrossWeightKg > 0);
+      assert.ok(dnData.dualSignoff.dispatchedBy);
+    });
+  });
+
+  await t.test("10. Multi-Warehouse Stock Allocation & Driver Dispatch", async () => {
+    await withServer(async (baseUrl) => {
+      // 1. List Regional Warehouses
+      const whRes = await fetch(`${baseUrl}/api/trade/warehouses`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+
+      assert.equal(whRes.status, 200);
+      const whData: any = await whRes.json();
+      assert.equal(whData.warehouses.length, 4, "Must have 4 regional warehouses");
+      const whCodes = whData.warehouses.map((w: any) => w.code);
+      assert.ok(whCodes.includes("WH-NBO-01"));
+      assert.ok(whCodes.includes("WH-MSA-01"));
+
+      // 2. Dispatch Order with assigned driver & vehicle
+      const dispatchRes = await fetch(`${baseUrl}/api/trade/shipments/dispatch`, {
+        method: "POST",
+        headers: {
+          ...adminHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          orderId: "ord-001",
+          warehouseCode: "WH-NBO-01",
+          assignedDriverName: "Juma Omondi",
+          vehicleRegistration: "KDF 492B (Isuzu FRR 10-Tonne)",
+          deliveryNotes: "Deliver to Baba Dogo Central Logistics depot.",
+        }),
+      });
+
+      assert.equal(dispatchRes.status, 201);
+      const dispatchData: any = await dispatchRes.json();
+      assert.ok(dispatchData.shipment.shipmentNumber.startsWith("SHP-2026-"));
+      assert.equal(dispatchData.shipment.status, "dispatched");
+      assert.equal(dispatchData.shipment.assignedDriverName, "Juma Omondi");
+    });
+  });
+
+  await t.test("11. Carrier Proof of Delivery confirmation", async () => {
+    await withServer(async (baseUrl) => {
+      const deliverRes = await fetch(`${baseUrl}/api/trade/shipments/shp-001/deliver`, {
+        method: "POST",
+        headers: {
+          ...adminHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          recipientName: "Francis Mutua (Receiving Supervisor)",
+          recipientSignatureConfirmed: true,
+        }),
+      });
+
+      assert.equal(deliverRes.status, 200);
+      const deliverData: any = await deliverRes.json();
+      assert.equal(deliverData.shipment.status, "delivered");
+      assert.equal(deliverData.shipment.recipientName, "Francis Mutua (Receiving Supervisor)");
+      assert.ok(deliverData.shipment.deliveredAt);
+    });
+  });
+
+  await t.test("12. Supplier Procurement Desk: Raw Materials PO & GRN Receipt", async () => {
+    await withServer(async (baseUrl) => {
+      // 1. Check raw materials catalogue
+      const matRes = await fetch(`${baseUrl}/api/trade/procurement/materials`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+
+      assert.equal(matRes.status, 200);
+      const matData: any = await matRes.json();
+      assert.ok(matData.materials.length >= 5);
+
+      // 2. Issue Purchase Order to Supplier
+      const poRes = await fetch(`${baseUrl}/api/trade/procurement/orders`, {
+        method: "POST",
+        headers: {
+          ...adminHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          supplierId: "sup-003", // Nzoia Botanicals
+          warehouseCode: "WH-NBO-01",
+          expectedDeliveryDate: "2026-03-28",
+          items: [
+            {
+              materialId: "rm-003", // Tea Tree essential oil
+              quantity: 100,
+              unitPriceCents: 280000,
+            },
+          ],
+        }),
+      });
+
+      assert.equal(poRes.status, 201);
+      const poData: any = await poRes.json();
+      assert.ok(poData.purchaseOrder.poNumber.startsWith("PO-SUP-2026-"));
+      assert.equal(poData.purchaseOrder.status, "issued");
+      assert.equal(poData.purchaseOrder.totalCents, 28000000); // KES 280,000
+
+      // 3. Receive Goods against Purchase Order (GRN)
+      const grnRes = await fetch(`${baseUrl}/api/trade/procurement/orders/${poData.purchaseOrder.id}/receive`, {
+        method: "POST",
+        headers: {
+          ...adminHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      assert.equal(grnRes.status, 200);
+      const grnData: any = await grnRes.json();
+      assert.equal(grnData.purchaseOrder.status, "received");
+      assert.equal(grnData.purchaseOrder.items[0].quantityReceived, 100);
+    });
+  });
 });

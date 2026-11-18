@@ -11,6 +11,7 @@ import {
   Box,
   Check,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   CreditCard,
   DollarSign,
@@ -19,8 +20,10 @@ import {
   FileText,
   Filter,
   Layers,
+  MapPin,
   Package,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Send,
@@ -42,7 +45,7 @@ import { apiGet, apiPost } from '../lib/api';
 export function TradePage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'catalog' | 'bulk_order' | 'orders' | 'quotations' | 'businesses' | 'copilot'
+    'overview' | 'catalog' | 'bulk_order' | 'orders' | 'dispatch' | 'procurement' | 'quotations' | 'businesses' | 'copilot'
   >('overview');
 
   // Brand filter
@@ -63,6 +66,31 @@ export function TradePage() {
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [mpesaPhone, setMpesaPhone] = useState('+254712345678');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Dispatch Modal State
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [dispatchOrderId, setDispatchOrderId] = useState('');
+  const [dispatchWarehouse, setDispatchWarehouse] = useState('WH-NBO-01');
+  const [dispatchDriver, setDispatchDriver] = useState('');
+  const [dispatchVehicle, setDispatchVehicle] = useState('');
+  const [dispatchNotes, setDispatchNotes] = useState('');
+
+  // POD Modal State
+  const [showPodModal, setShowPodModal] = useState(false);
+  const [podShipmentId, setPodShipmentId] = useState('');
+  const [podRecipient, setPodRecipient] = useState('');
+
+  // Procurement / New PO Modal State
+  const [showNewPoModal, setShowNewPoModal] = useState(false);
+  const [poSupplierId, setPoSupplierId] = useState('');
+  const [poWarehouseCode, setPoWarehouseCode] = useState('WH-NBO-01');
+  const [poExpectedDate, setPoExpectedDate] = useState('');
+  const [poLineItems, setPoLineItems] = useState<
+    Array<{ materialId: string; quantity: number; unitPriceCents: number }>
+  >([{ materialId: '', quantity: 0, unitPriceCents: 0 }]);
+
+  // Print Invoice View
+  const [printInvoiceData, setPrintInvoiceData] = useState<any | null>(null);
 
   // New Business Form State
   const [newBizLegalName, setNewBizLegalName] = useState('');
@@ -122,6 +150,32 @@ export function TradePage() {
   const invoicesQuery = useQuery({
     queryKey: ['trade-invoices'],
     queryFn: () => apiGet<any>('/api/trade/invoices'),
+  });
+
+  // New Phase-1 queries
+  const warehousesQuery = useQuery({
+    queryKey: ['trade-warehouses'],
+    queryFn: () => apiGet<any>('/api/trade/warehouses'),
+  });
+
+  const shipmentsQuery = useQuery({
+    queryKey: ['trade-shipments'],
+    queryFn: () => apiGet<any>('/api/trade/shipments'),
+  });
+
+  const suppliersQuery = useQuery({
+    queryKey: ['trade-suppliers'],
+    queryFn: () => apiGet<any>('/api/trade/procurement/suppliers'),
+  });
+
+  const materialsQuery = useQuery({
+    queryKey: ['trade-materials'],
+    queryFn: () => apiGet<any>('/api/trade/procurement/materials'),
+  });
+
+  const procurementOrdersQuery = useQuery({
+    queryKey: ['trade-procurement-orders'],
+    queryFn: () => apiGet<any>('/api/trade/procurement/orders'),
   });
 
   // Calculate live pricing for items in Cart
@@ -280,6 +334,133 @@ export function TradePage() {
     }
   };
 
+  // Dispatch Shipment Handler
+  const handleDispatchOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dispatchOrderId) {
+      setBanner({ type: 'error', message: 'Order ID is required for dispatch.' });
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const res = await apiPost<any>('/api/trade/shipments/dispatch', {
+        orderId: dispatchOrderId,
+        warehouseCode: dispatchWarehouse,
+        assignedDriverName: dispatchDriver.trim() || 'John Mwangi (Rekker Fleet)',
+        vehicleRegistration: dispatchVehicle.trim() || 'KDM 482B',
+        deliveryNotes: dispatchNotes.trim() || undefined,
+      });
+      setBanner({
+        type: 'success',
+        message: `Shipment ${res.shipment?.consignmentNumber} dispatched via ${res.shipment?.assignedDriverName} (${res.shipment?.vehicleRegistration}) from ${res.shipment?.warehouseCode}!`,
+      });
+      setShowDispatchModal(false);
+      setDispatchOrderId('');
+      setDispatchNotes('');
+      qc.invalidateQueries({ queryKey: ['trade-shipments'] });
+      qc.invalidateQueries({ queryKey: ['trade-orders'] });
+      qc.invalidateQueries({ queryKey: ['trade-overview'] });
+    } catch (err: any) {
+      setBanner({ type: 'error', message: err.message || 'Dispatch allocation failed.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Proof of Delivery (POD) Handler
+  const handleConfirmPod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!podShipmentId) return;
+    try {
+      setIsSubmitting(true);
+      const res = await apiPost<any>(`/api/trade/shipments/${podShipmentId}/deliver`, {
+        recipientName: podRecipient.trim() || 'Store Receiving Manager',
+      });
+      setBanner({
+        type: 'success',
+        message: `Proof of Delivery recorded for ${res.shipment?.consignmentNumber}. Recipient: ${res.shipment?.podRecipientName}. Status: DELIVERED.`,
+      });
+      setShowPodModal(false);
+      setPodShipmentId('');
+      setPodRecipient('');
+      qc.invalidateQueries({ queryKey: ['trade-shipments'] });
+      qc.invalidateQueries({ queryKey: ['trade-orders'] });
+      qc.invalidateQueries({ queryKey: ['trade-overview'] });
+    } catch (err: any) {
+      setBanner({ type: 'error', message: err.message || 'POD recording failed.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Printable Tax Invoice Fetcher
+  const handleFetchPrintInvoice = async (invoiceId: string) => {
+    try {
+      const data = await apiGet<any>(`/api/trade/invoices/${invoiceId}/print`);
+      setPrintInvoiceData(data);
+    } catch (err: any) {
+      setBanner({ type: 'error', message: err.message || 'Could not load printable tax invoice.' });
+    }
+  };
+
+  // Create Supplier Purchase Order
+  const handleCreatePo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!poSupplierId) {
+      setBanner({ type: 'error', message: 'Please select a supplier.' });
+      return;
+    }
+    const validLines = poLineItems.filter((line) => line.materialId && line.quantity > 0);
+    if (validLines.length === 0) {
+      setBanner({ type: 'error', message: 'Please specify at least one raw material line item.' });
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const res = await apiPost<any>('/api/trade/procurement/orders', {
+        supplierId: poSupplierId,
+        warehouseCode: poWarehouseCode,
+        expectedDeliveryDate: poExpectedDate || new Date(Date.now() + 5 * 86400000).toISOString(),
+        items: validLines,
+      });
+      setBanner({
+        type: 'success',
+        message: `Purchase Order ${res.purchaseOrder?.poNumber} successfully issued to ${res.purchaseOrder?.supplierName}! Total: ${formatKes(res.purchaseOrder?.totalCostCents)}.`,
+      });
+      setShowNewPoModal(false);
+      setPoSupplierId('');
+      setPoLineItems([{ materialId: '', quantity: 0, unitPriceCents: 0 }]);
+      qc.invalidateQueries({ queryKey: ['trade-procurement-orders'] });
+      qc.invalidateQueries({ queryKey: ['trade-materials'] });
+      qc.invalidateQueries({ queryKey: ['trade-overview'] });
+    } catch (err: any) {
+      setBanner({ type: 'error', message: err.message || 'Failed to issue Purchase Order.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Receive Goods / GRN
+  const handleReceivePo = async (poId: string) => {
+    try {
+      setIsSubmitting(true);
+      const res = await apiPost<any>(`/api/trade/procurement/orders/${poId}/receive`, {
+        receivedBy: 'Operations Procurement Specialist',
+      });
+      setBanner({
+        type: 'success',
+        message: `Goods Received Note (GRN) confirmed for PO ${res.purchaseOrder?.poNumber}. Raw materials inventory credited!`,
+      });
+      qc.invalidateQueries({ queryKey: ['trade-procurement-orders'] });
+      qc.invalidateQueries({ queryKey: ['trade-materials'] });
+      qc.invalidateQueries({ queryKey: ['trade-warehouses'] });
+    } catch (err: any) {
+      setBanner({ type: 'error', message: err.message || 'Failed to process GRN receipt.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Copilot Chat
   const handleSendCopilot = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -346,6 +527,13 @@ export function TradePage() {
   const quotations = quotationsQuery.data?.items || [];
   const invoices = invoicesQuery.data?.items || [];
   const pricingPreview = pricingQuery.data;
+
+  // New Phase-1 datasets
+  const warehouses = warehousesQuery.data?.warehouses || [];
+  const shipments = shipmentsQuery.data?.shipments || [];
+  const suppliers = suppliersQuery.data?.suppliers || [];
+  const materials = materialsQuery.data?.materials || [];
+  const procurementOrders = procurementOrdersQuery.data?.purchaseOrders || [];
 
   return (
     <div className="space-y-6 pb-16">
@@ -427,6 +615,8 @@ export function TradePage() {
             { id: 'catalog', label: 'B2B Products & Brands', icon: Package },
             { id: 'bulk_order', label: 'Rapid Bulk Order', icon: ShoppingCart },
             { id: 'orders', label: 'Orders & Fulfilment', icon: Truck },
+            { id: 'dispatch', label: 'Dispatch & Warehouses', icon: Warehouse },
+            { id: 'procurement', label: 'Procurement Desk', icon: Layers },
             { id: 'quotations', label: 'Quotations & RFQs', icon: FileSpreadsheet },
             { id: 'businesses', label: 'Buyers & Credit', icon: Building2 },
             { id: 'copilot', label: 'Trade AI Agents', icon: Sparkles },
@@ -1046,8 +1236,8 @@ export function TradePage() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-right mr-2">
                         <p className="text-sm font-extrabold text-[#C71D1D]">
                           {formatKes(o.totalCents)}
                         </p>
@@ -1055,6 +1245,33 @@ export function TradePage() {
                           {o.items?.length || 0} product lines
                         </p>
                       </div>
+
+                      {/* Tax Invoice Print */}
+                      <button
+                        onClick={() => {
+                          const inv = invoices.find((i: any) => i.orderId === o.id) || { id: 'inv-001' };
+                          handleFetchPrintInvoice(inv.id);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-xl border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                        title="Print KRA eTIMS Tax Invoice"
+                      >
+                        <Printer className="h-3.5 w-3.5 text-stone-500" />
+                        Tax Invoice
+                      </button>
+
+                      {/* Dispatch Action if not yet delivered */}
+                      {o.status !== 'delivered' && (
+                        <button
+                          onClick={() => {
+                            setDispatchOrderId(o.id);
+                            setShowDispatchModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                        >
+                          <Truck className="h-3.5 w-3.5" />
+                          Dispatch Fleet
+                        </button>
+                      )}
 
                       {/* Payment Action if pending */}
                       {o.paymentStatus !== 'paid' && (
@@ -1093,6 +1310,397 @@ export function TradePage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB: DISPATCH & MULTI-WAREHOUSE LOGISTICS
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'dispatch' && (
+        <div className="space-y-6">
+          {/* Warehouse Distribution Network */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Regional Warehouse Distribution Hubs</h3>
+                <p className="text-xs text-stone-500">
+                  Kenya-wide multi-depot stock allocation, vehicle loading, and regional fulfillment
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (orders.length > 0) {
+                    setDispatchOrderId(orders[0].id);
+                  }
+                  setShowDispatchModal(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#C71D1D] px-3 py-2 text-xs font-bold text-white shadow hover:bg-red-800"
+              >
+                <Truck className="h-4 w-4" />
+                Dispatch New Consignment
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {warehouses.map((wh: any) => {
+                const utilizationPct = Math.min(
+                  100,
+                  Math.round(((wh.currentStockCartons || 1000) / (wh.capacityCartons || 20000)) * 100)
+                );
+                return (
+                  <div
+                    key={wh.id}
+                    className="flex flex-col justify-between rounded-xl border border-stone-200 bg-stone-50/60 p-4 transition hover:border-stone-300 hover:bg-white"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[11px] font-bold text-[#C71D1D]">
+                          {wh.code}
+                        </span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">
+                          {wh.status || 'Active'}
+                        </span>
+                      </div>
+                      <h4 className="mt-2 text-sm font-bold text-stone-900">{wh.name}</h4>
+                      <p className="flex items-center gap-1 text-xs text-stone-500 mt-0.5">
+                        <MapPin className="h-3 w-3 text-stone-400" />
+                        {wh.city}, {wh.county}
+                      </p>
+                      <p className="text-[11px] text-stone-400 mt-1">{wh.address}</p>
+                    </div>
+
+                    <div className="mt-4 border-t border-stone-200/60 pt-3">
+                      <div className="flex items-center justify-between text-xs text-stone-600 mb-1">
+                        <span>Carton Utilization:</span>
+                        <span className="font-bold text-stone-900">
+                          {wh.currentStockCartons?.toLocaleString() || '18,400'} / {wh.capacityCartons?.toLocaleString() || '25,000'}
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-stone-200 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            utilizationPct > 85
+                              ? 'bg-amber-500'
+                              : utilizationPct > 95
+                              ? 'bg-red-500'
+                              : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${utilizationPct}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-stone-500">
+                        <span>Manager: {wh.managerName}</span>
+                        <span>{wh.managerPhone}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Active Fleet Dispatches & Consignments */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Fleet Dispatches & Consignments</h3>
+                <p className="text-xs text-stone-500">
+                  End-to-end driver assignment, vehicle registration, and Proof of Delivery (POD) confirmations
+                </p>
+              </div>
+              <span className="rounded-md bg-stone-100 px-2.5 py-1 text-xs font-bold text-stone-600">
+                {shipments.length} Active Movements
+              </span>
+            </div>
+
+            <div className="mt-4 divide-y divide-stone-100">
+              {shipments.map((s: any) => (
+                <div key={s.id} className="py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-stone-900">
+                          {s.consignmentNumber}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            s.status === 'delivered'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : s.status === 'in_transit'
+                              ? 'bg-blue-100 text-blue-800'
+                              : s.status === 'dispatched'
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-stone-100 text-stone-700'
+                          }`}
+                        >
+                          {s.status}
+                        </span>
+                        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-stone-600">
+                          Hub: {s.warehouseCode}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-stone-800 font-medium">
+                        Order #{s.orderNumber || s.orderId} ·{' '}
+                        <span className="text-stone-500">Carrier: {s.carrierName || 'Rekker Internal Logistics'}</span>
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-stone-500">
+                        <span>Driver: <strong className="text-stone-700">{s.assignedDriverName || 'Assigned Driver'}</strong></span>
+                        <span>Vehicle Reg: <strong className="text-stone-700">{s.vehicleRegistration || 'KDM 482B'}</strong></span>
+                        {s.deliveryNotes && <span>Notes: {s.deliveryNotes}</span>}
+                      </div>
+                      {s.podRecipientName && (
+                        <p className="mt-1 text-[11px] text-emerald-700 font-medium">
+                          POD Confirmed by: {s.podRecipientName} ({s.podConfirmedAt ? new Date(s.podConfirmedAt).toLocaleString('en-KE') : 'Verified'})
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {s.status !== 'delivered' && (
+                        <button
+                          onClick={() => {
+                            setPodShipmentId(s.id);
+                            setShowPodModal(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-700"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Confirm POD
+                        </button>
+                      )}
+
+                      <button
+                        onClick={async () => {
+                          try {
+                            const note = await apiGet<any>(`/api/trade/orders/${s.orderId}/delivery-note`);
+                            alert(
+                              `REKKER CONSIGNMENT DELIVERY NOTE\n` +
+                              `----------------------------------------\n` +
+                              `Note #: ${note.deliveryNoteNumber}\n` +
+                              `Order #: ${note.orderNumber}\n` +
+                              `Consignment: ${note.consignmentNumber}\n` +
+                              `Customer: ${note.customerName}\n` +
+                              `Destination: ${note.deliveryAddress}\n` +
+                              `Driver: ${note.driverName} (${note.vehicleRegistration})\n` +
+                              `Total Cartons: ${note.totalCartons}\n` +
+                              `Dispatched: ${note.dispatchTimestamp ? new Date(note.dispatchTimestamp).toLocaleString('en-KE') : 'Today'}\n` +
+                              `Sign-Off: ${note.requiresDualSignature ? 'Dual Driver & Store Receiver signatures verified' : 'Standard'}`
+                            );
+                          } catch (err: any) {
+                            setBanner({ type: 'error', message: err.message || 'Could not fetch delivery note.' });
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-xl border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-stone-500" />
+                        Delivery Note
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB: PROCUREMENT DESK & RAW MATERIALS
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'procurement' && (
+        <div className="space-y-6">
+          {/* Procurement Action Bar */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Procurement & Raw Materials Desk</h3>
+                <p className="text-xs text-stone-500">
+                  Approved supplier directory, raw ingredient stock levels, and Goods Received Notes (GRN)
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (suppliers.length > 0) {
+                    setPoSupplierId(suppliers[0].id);
+                  }
+                  if (materials.length > 0) {
+                    setPoLineItems([
+                      {
+                        materialId: materials[0].id,
+                        quantity: 1000,
+                        unitPriceCents: materials[0].unitCostCents || 45000,
+                      },
+                    ]);
+                  }
+                  setShowNewPoModal(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#C71D1D] px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-red-800"
+              >
+                <Plus className="h-4 w-4" />
+                Issue Supplier Purchase Order
+              </button>
+            </div>
+
+            {/* Raw Materials Inventory Matrix */}
+            <div className="mt-6">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-3">
+                Factory Raw Materials & Component Inventory
+              </h4>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {materials.map((mat: any) => {
+                  const isCritical = mat.status === 'critical';
+                  const isLow = mat.status === 'low_stock';
+                  return (
+                    <div
+                      key={mat.id}
+                      className={`rounded-xl border p-4 transition ${
+                        isCritical
+                          ? 'border-red-300 bg-red-50/40'
+                          : isLow
+                          ? 'border-amber-300 bg-amber-50/40'
+                          : 'border-stone-200 bg-stone-50/50 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[11px] font-bold text-stone-600">
+                          {mat.skuCode}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            isCritical
+                              ? 'bg-red-100 text-red-800'
+                              : isLow
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {mat.status === 'low_stock' ? 'Low Stock' : mat.status}
+                        </span>
+                      </div>
+                      <h5 className="mt-2 text-sm font-bold text-stone-900">{mat.name}</h5>
+                      <p className="text-xs text-stone-500 capitalize">{mat.category}</p>
+
+                      <div className="mt-3 flex items-center justify-between border-t border-stone-200/60 pt-2 text-xs">
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-stone-400">On Hand</p>
+                          <p className="font-mono font-bold text-stone-900">
+                            {mat.currentStock?.toLocaleString()} {mat.unitOfMeasure}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-stone-400">Reorder Level</p>
+                          <p className="font-mono text-stone-600">
+                            {mat.reorderPoint?.toLocaleString()} {mat.unitOfMeasure}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-bold text-stone-400">Unit Cost</p>
+                          <p className="font-mono text-stone-700">{formatKes(mat.unitCostCents)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Approved Suppliers Directory */}
+            <div className="mt-8">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-3">
+                Approved Raw Material Suppliers
+              </h4>
+              <div className="overflow-x-auto rounded-xl border border-stone-200">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-stone-50 text-stone-700 border-b border-stone-200 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="p-3">Code / Name</th>
+                      <th className="p-3">Category</th>
+                      <th className="p-3">KRA PIN</th>
+                      <th className="p-3">Credit Terms</th>
+                      <th className="p-3">Lead Time</th>
+                      <th className="p-3">Contact</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {suppliers.map((sup: any) => (
+                      <tr key={sup.id} className="hover:bg-stone-50/60">
+                        <td className="p-3 font-medium text-stone-900">
+                          <span className="font-mono text-stone-500 mr-2">{sup.code}</span>
+                          <strong>{sup.name}</strong>
+                        </td>
+                        <td className="p-3 text-stone-600 capitalize">{sup.category}</td>
+                        <td className="p-3 font-mono text-stone-600">{sup.kraPin}</td>
+                        <td className="p-3 font-semibold uppercase text-stone-700">
+                          {sup.paymentTerms}
+                        </td>
+                        <td className="p-3 text-stone-600">{sup.leadTimeDays} days</td>
+                        <td className="p-3 text-stone-500">
+                          {sup.contactPerson} · {sup.email}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Purchase Orders Stream */}
+            <div className="mt-8">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-3">
+                Supplier Purchase Orders & GRN Stream
+              </h4>
+              <div className="divide-y divide-stone-100 rounded-xl border border-stone-200">
+                {procurementOrders.map((po: any) => (
+                  <div key={po.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-stone-900">{po.poNumber}</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            po.status === 'received'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : po.status === 'issued'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {po.status}
+                        </span>
+                        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] text-stone-600">
+                          Dest: {po.warehouseCode}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs font-semibold text-stone-800">
+                        Supplier: {po.supplierName}
+                      </p>
+                      <p className="text-[11px] text-stone-400">
+                        Expected Delivery: {new Date(po.expectedDeliveryDate).toLocaleDateString('en-KE')} · Line items: {po.items?.length || 1}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-extrabold text-[#C71D1D]">
+                          {formatKes(po.totalCostCents)}
+                        </p>
+                        <p className="text-[11px] text-stone-400">Net Cost Ex-Works</p>
+                      </div>
+
+                      {po.status === 'issued' && (
+                        <button
+                          onClick={() => handleReceivePo(po.id)}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-emerald-700"
+                        >
+                          <ClipboardCheck className="h-3.5 w-3.5" />
+                          Receive Goods (GRN)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1607,6 +2215,478 @@ export function TradePage() {
                   {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                   Authorize STK Push
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 3: DISPATCH ORDER ALLOCATION
+      ───────────────────────────────────────────────────────────── */}
+      {showDispatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-red-100 p-2 text-[#C71D1D]">
+                  <Truck className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">Fleet Dispatch Allocation</h3>
+                  <p className="text-[11px] text-stone-500">Assign warehouse origin, driver, and vehicle</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDispatchModal(false)}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDispatchOrder} className="mt-4 space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-700">Order to Dispatch</label>
+                <select
+                  value={dispatchOrderId}
+                  onChange={(e) => setDispatchOrderId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs font-mono outline-none focus:border-red-500 focus:bg-white"
+                >
+                  <option value="">-- Select Order --</option>
+                  {orders.map((o: any) => (
+                    <option key={o.id} value={o.id}>
+                      {o.orderNumber} - {o.businessName} ({formatKes(o.totalCents)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Origin Warehouse Hub</label>
+                  <select
+                    value={dispatchWarehouse}
+                    onChange={(e) => setDispatchWarehouse(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    {warehouses.map((wh: any) => (
+                      <option key={wh.id} value={wh.code}>
+                        {wh.code} - {wh.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Vehicle Registration</label>
+                  <input
+                    type="text"
+                    value={dispatchVehicle}
+                    onChange={(e) => setDispatchVehicle(e.target.value)}
+                    placeholder="e.g. KDM 482B"
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs font-mono outline-none focus:border-red-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700">Assigned Driver Name</label>
+                <input
+                  type="text"
+                  value={dispatchDriver}
+                  onChange={(e) => setDispatchDriver(e.target.value)}
+                  placeholder="e.g. John Mwangi (Rekker Fleet)"
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700">Consignment Dispatch Notes</label>
+                <textarea
+                  value={dispatchNotes}
+                  onChange={(e) => setDispatchNotes(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Fragile glass bottles, deliver to bay 3 receiver"
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDispatchModal(false)}
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1.5 rounded-xl bg-[#C71D1D] px-4 py-2 text-xs font-bold text-white shadow hover:bg-red-800 disabled:opacity-50"
+                >
+                  {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                  Generate Consignment & Dispatch
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 4: PROOF OF DELIVERY (POD) CONFIRMATION
+      ───────────────────────────────────────────────────────────── */}
+      {showPodModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                  <CheckCircle2 className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">Proof of Delivery (POD)</h3>
+                  <p className="text-[11px] text-stone-500">Record recipient confirmation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPodModal(false)}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmPod} className="mt-4 space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-700">Recipient / Receiving Manager</label>
+                <input
+                  type="text"
+                  value={podRecipient}
+                  onChange={(e) => setPodRecipient(e.target.value)}
+                  placeholder="e.g. Grace Auma (Store Operations Mgr)"
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 text-xs text-emerald-800">
+                <p className="font-semibold">Statutory Delivery Acknowledgement</p>
+                <p className="mt-0.5 text-[11px] text-emerald-700">
+                  Recording POD marks this consignment as fulfilled in ERP and triggers automatic invoice clearance if paid.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPodModal(false)}
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                  Sign Off Delivery
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 5: ISSUE PURCHASE ORDER TO SUPPLIER
+      ───────────────────────────────────────────────────────────── */}
+      {showNewPoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-stone-900 p-2 text-white">
+                  <Plus className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">Issue Raw Materials Purchase Order</h3>
+                  <p className="text-[11px] text-stone-500">Contracted supplier requisition</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowNewPoModal(false)}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreatePo} className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Contracted Supplier</label>
+                  <select
+                    value={poSupplierId}
+                    onChange={(e) => setPoSupplierId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    {suppliers.map((s: any) => (
+                      <option key={s.id} value={s.id}>
+                        {s.code} - {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Destination Hub</label>
+                  <select
+                    value={poWarehouseCode}
+                    onChange={(e) => setPoWarehouseCode(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    {warehouses.map((wh: any) => (
+                      <option key={wh.id} value={wh.code}>
+                        {wh.code} - {wh.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700">Raw Material Requirement</label>
+                <div className="mt-1 space-y-2">
+                  {poLineItems.map((line, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={line.materialId}
+                        onChange={(e) => {
+                          const mat = materials.find((m: any) => m.id === e.target.value);
+                          const next = [...poLineItems];
+                          next[idx] = {
+                            ...next[idx],
+                            materialId: e.target.value,
+                            unitPriceCents: mat?.unitCostCents || 45000,
+                          };
+                          setPoLineItems(next);
+                        }}
+                        className="flex-1 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                      >
+                        <option value="">-- Select Ingredient / Packaging --</option>
+                        {materials.map((m: any) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.skuCode}) - {formatKes(m.unitCostCents)}/{m.unitOfMeasure}
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="number"
+                        min="1"
+                        value={line.quantity || ''}
+                        onChange={(e) => {
+                          const next = [...poLineItems];
+                          next[idx] = { ...next[idx], quantity: parseInt(e.target.value) || 0 };
+                          setPoLineItems(next);
+                        }}
+                        placeholder="Quantity"
+                        className="w-28 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs font-mono outline-none focus:border-red-500 focus:bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700">Expected Delivery Date</label>
+                <input
+                  type="date"
+                  value={poExpectedDate}
+                  onChange={(e) => setPoExpectedDate(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowNewPoModal(false)}
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1.5 rounded-xl bg-[#C71D1D] px-4 py-2 text-xs font-bold text-white shadow hover:bg-red-800 disabled:opacity-50"
+                >
+                  {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                  Issue Official Requisition PO
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 6: PRINTABLE KRA eTIMS TAX INVOICE
+      ───────────────────────────────────────────────────────────── */}
+      {printInvoiceData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-8 shadow-2xl my-8">
+            {/* Action Bar */}
+            <div className="flex items-center justify-between border-b border-stone-200 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-red-100 p-2 text-[#C71D1D]">
+                  <Printer className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">
+                    KRA eTIMS Commercial Tax Invoice
+                  </h3>
+                  <p className="font-mono text-xs text-stone-500">
+                    Control Code: {printInvoiceData.taxAuthority?.etimsControlCode}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-stone-900 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-stone-800"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print Document
+                </button>
+                <button
+                  onClick={() => setPrintInvoiceData(null)}
+                  className="rounded-xl border border-stone-200 p-2 text-stone-400 hover:text-stone-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Invoice Document Body */}
+            <div className="mt-6 space-y-6 text-xs text-stone-800">
+              {/* Header Grid */}
+              <div className="flex justify-between border-b border-stone-100 pb-6">
+                <div>
+                  <h2 className="text-xl font-black uppercase tracking-tight text-[#C71D1D]">
+                    {printInvoiceData.seller?.legalName || 'REKKER LIMITED'}
+                  </h2>
+                  <p className="font-medium text-stone-600">{printInvoiceData.seller?.tradingName}</p>
+                  <p className="text-stone-500">{printInvoiceData.seller?.physicalAddress}</p>
+                  <p className="mt-1 font-mono text-[11px] text-stone-700">
+                    KRA PIN: <strong>{printInvoiceData.seller?.kraPin}</strong> · VAT Reg: {printInvoiceData.seller?.vatRegistrationNumber}
+                  </p>
+                  <p className="text-stone-500">{printInvoiceData.seller?.email} · {printInvoiceData.seller?.phone}</p>
+                </div>
+
+                <div className="text-right">
+                  <span className="inline-block rounded-md bg-stone-900 px-3 py-1 font-mono text-xs font-bold uppercase text-white">
+                    TAX INVOICE
+                  </span>
+                  <p className="mt-2 font-mono font-bold text-stone-900 text-sm">
+                    {printInvoiceData.invoiceNumber}
+                  </p>
+                  <p className="text-stone-500">Date: {new Date(printInvoiceData.issueDate).toLocaleDateString('en-KE')}</p>
+                  <p className="text-stone-500">Due: {new Date(printInvoiceData.dueDate).toLocaleDateString('en-KE')}</p>
+                  <p className="font-semibold text-stone-700 uppercase mt-1">Terms: {printInvoiceData.paymentTerms}</p>
+                </div>
+              </div>
+
+              {/* Bill To & Ship To */}
+              <div className="grid grid-cols-2 gap-4 rounded-xl border border-stone-100 bg-stone-50/70 p-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Bill To Customer</p>
+                  <p className="mt-1 font-bold text-stone-900">{printInvoiceData.buyer?.legalName}</p>
+                  <p className="text-stone-600 font-mono text-[11px]">KRA PIN: {printInvoiceData.buyer?.kraPin}</p>
+                  <p className="text-stone-500">{printInvoiceData.buyer?.contactPerson}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Consignment Destination</p>
+                  <p className="mt-1 text-stone-700">{printInvoiceData.buyer?.deliveryAddress}</p>
+                  <p className="text-stone-500 text-[11px]">Dispatch Hub: {printInvoiceData.buyer?.branchName}</p>
+                </div>
+              </div>
+
+              {/* Line Items Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="border-b border-stone-200 font-bold uppercase tracking-wider text-[10px] text-stone-500">
+                    <tr>
+                      <th className="py-2">Item Description</th>
+                      <th className="py-2 text-right">Cartons</th>
+                      <th className="py-2 text-right">Unit Price</th>
+                      <th className="py-2 text-right">Gross</th>
+                      <th className="py-2 text-right">Discount</th>
+                      <th className="py-2 text-right">16% VAT</th>
+                      <th className="py-2 text-right">Total (KES)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 font-mono text-xs">
+                    {printInvoiceData.lineItems?.map((li: any, idx: number) => (
+                      <tr key={idx}>
+                        <td className="py-2 font-sans font-medium text-stone-900">{li.productName}</td>
+                        <td className="py-2 text-right">{li.quantityCartons}</td>
+                        <td className="py-2 text-right">{formatKes(li.unitPriceCents)}</td>
+                        <td className="py-2 text-right">{formatKes(li.grossAmountCents)}</td>
+                        <td className="py-2 text-right text-emerald-700">-{formatKes(li.discountAmountCents)}</td>
+                        <td className="py-2 text-right">{formatKes(li.taxAmountCents)}</td>
+                        <td className="py-2 text-right font-bold text-stone-900">{formatKes(li.netAmountCents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals Summary */}
+              <div className="flex justify-end border-t border-stone-200 pt-4">
+                <div className="w-72 space-y-2 font-mono text-xs">
+                  <div className="flex justify-between text-stone-600">
+                    <span className="font-sans">Subtotal (Ex-VAT):</span>
+                    <span>{formatKes(printInvoiceData.financials?.subtotalCents)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-700">
+                    <span className="font-sans">Discount:</span>
+                    <span>-{formatKes(printInvoiceData.financials?.discountCents)}</span>
+                  </div>
+                  <div className="flex justify-between text-stone-600">
+                    <span className="font-sans">VAT (16% Kenya):</span>
+                    <span>+{formatKes(printInvoiceData.financials?.vatCents)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-stone-200 pt-2 text-sm font-extrabold text-[#C71D1D]">
+                    <span className="font-sans">Total Due:</span>
+                    <span>{formatKes(printInvoiceData.financials?.totalCents)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Settlement Banking & Statutory Declaration */}
+              <div className="grid grid-cols-2 gap-4 border-t border-stone-200 pt-4 text-[11px] text-stone-600">
+                <div className="rounded-xl border border-stone-100 bg-stone-50 p-3">
+                  <p className="font-bold text-stone-800 uppercase text-[10px]">Settlement Banking Details</p>
+                  <p className="mt-1 font-semibold">{printInvoiceData.paymentDetails?.bankName}</p>
+                  <p className="font-mono">Account: {printInvoiceData.paymentDetails?.accountNumber}</p>
+                  <p className="font-mono">Branch / Sort: {printInvoiceData.paymentDetails?.branch} ({printInvoiceData.paymentDetails?.swiftCode})</p>
+                  <p className="font-mono mt-1 text-emerald-700">
+                    M-Pesa Paybill: <strong>{printInvoiceData.paymentDetails?.mpesaPaybill}</strong> (Acc: {printInvoiceData.invoiceNumber})
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-stone-100 bg-stone-50 p-3">
+                  <p className="font-bold text-stone-800 uppercase text-[10px]">eTIMS Compliance Verification</p>
+                  <p className="mt-1 font-mono text-[10px] break-all text-stone-600">
+                    QR: {printInvoiceData.taxAuthority?.qrCodeUrl}
+                  </p>
+                  <p className="mt-2 text-[10px] text-stone-400">
+                    This is an authoritative electronic tax invoice issued pursuant to the Kenya Tax Procedures Act and VAT Act 2013 regulations.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
