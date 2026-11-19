@@ -485,6 +485,83 @@ export const tradePurchaseOrderItemsTable = pgTable(
   ],
 );
 
+// ─── 8. B2B CRM, Sales Representatives & Territory Management ─────────────────
+
+export const tradeSalesRepsTable = pgTable(
+  "trade_sales_reps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull().unique(), // e.g. SR-NBO-01
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone").notNull(),
+    assignedTerritory: text("assigned_territory").notNull(), // Nairobi County, Mombasa Coastal, Western/Lake, Rift Valley
+    monthlyTargetCents: integer("monthly_target_cents").notNull().default(500000000), // KES 5M in cents
+    commissionRatePct: integer("commission_rate_pct").notNull().default(2), // 2% of collected revenue
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trade_rep_territory_idx").on(table.assignedTerritory),
+  ],
+);
+
+export const tradeCustomerInteractionsTable = pgTable(
+  "trade_customer_interactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => tradeBusinessesTable.id, { onDelete: "cascade" }),
+    salesRepId: uuid("sales_rep_id")
+      .references(() => tradeSalesRepsTable.id, { onDelete: "set null" }),
+    interactionType: text("interaction_type").notNull(), // site_visit | phone_call | pricing_review | payment_collection
+    summary: text("summary").notNull(),
+    outcome: text("outcome"), // positive | pending_quote | payment_promised | issue_raised
+    nextFollowUpDate: date("next_follow_up_date"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trade_int_biz_idx").on(table.businessId),
+    index("trade_int_rep_idx").on(table.salesRepId),
+  ],
+);
+
+// ─── 9. Financial Operations & Bank Reconciliations ───────────────────────────
+
+export const tradeBankReconciliationsTable = pgTable(
+  "trade_bank_reconciliations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => tradeInvoicesTable.id, { onDelete: "cascade" }),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => tradeBusinessesTable.id, { onDelete: "cascade" }),
+    paymentMethod: text("payment_method").notNull(), // rtgs_eft | mpesa_paybill | cheque | bank_transfer
+    bankName: text("bank_name").notNull().default("Stanbic Bank Kenya"),
+    referenceNumber: text("reference_number").notNull().unique(), // e.g. STAN-EFT-948291
+    amountCents: integer("amount_cents").notNull(),
+    status: text("status").notNull().default("verified"), // pending | verified | disputed
+    verifiedBy: text("verified_by").notNull(),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trade_recon_inv_idx").on(table.invoiceId),
+    index("trade_recon_biz_idx").on(table.businessId),
+  ],
+);
+
 // Type inference exports
 export type TradeBusinessRecord = typeof tradeBusinessesTable.$inferSelect;
 export type TradeBranchRecord = typeof tradeBranchesTable.$inferSelect;
@@ -502,3 +579,6 @@ export type TradeSupplierRecord = typeof tradeSuppliersTable.$inferSelect;
 export type TradeRawMaterialRecord = typeof tradeRawMaterialsTable.$inferSelect;
 export type TradePurchaseOrderRecord = typeof tradePurchaseOrdersTable.$inferSelect;
 export type TradePurchaseOrderItemRecord = typeof tradePurchaseOrderItemsTable.$inferSelect;
+export type TradeSalesRepRecord = typeof tradeSalesRepsTable.$inferSelect;
+export type TradeCustomerInteractionRecord = typeof tradeCustomerInteractionsTable.$inferSelect;
+export type TradeBankReconciliationRecord = typeof tradeBankReconciliationsTable.$inferSelect;

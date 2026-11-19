@@ -560,6 +560,30 @@ export const DEMO_TRADE_INVOICES: DemoTradeInvoice[] = [
   },
 ];
 
+export interface DemoTradePayment {
+  id: string;
+  invoiceId: string;
+  businessId: string;
+  amountCents: number;
+  paymentMethod: string;
+  transactionReference: string;
+  status: string;
+  createdAt: string;
+}
+
+export const DEMO_TRADE_PAYMENTS: DemoTradePayment[] = [
+  {
+    id: "pay-001",
+    invoiceId: "inv-001",
+    businessId: "biz-001",
+    amountCents: 46548480,
+    paymentMethod: "rtgs_eft",
+    transactionReference: "STAN-RTGS-928401",
+    status: "completed",
+    createdAt: "2026-03-05T14:30:00Z",
+  },
+];
+
 // ─── Centralized B2B Commercial Pricing Calculation Engine ────────────────────
 
 export interface CalculatePricingInput {
@@ -2188,6 +2212,462 @@ router.post("/trade/procurement/orders/:id/receive", async (req: Request, res: R
   res.json({
     message: "Goods received and raw material stock updated.",
     purchaseOrder: po,
+  });
+});
+
+// ─── 9. B2B Credit Management, Debtor Aging & Statement of Account ────────────
+
+export interface DemoTradeSalesRep {
+  id: string;
+  code: string;
+  name: string;
+  email: string;
+  phone: string;
+  assignedTerritory: string;
+  monthlyTargetCents: number;
+  actualSalesCents: number;
+  commissionRatePct: number;
+  active: boolean;
+}
+
+export interface DemoTradeInteraction {
+  id: string;
+  businessId: string;
+  businessName: string;
+  salesRepId: string;
+  salesRepName: string;
+  interactionType: "site_visit" | "phone_call" | "pricing_review" | "payment_collection";
+  summary: string;
+  outcome: "positive" | "pending_quote" | "payment_promised" | "issue_raised";
+  nextFollowUpDate: string;
+  createdAt: string;
+}
+
+export interface DemoTradeBankRecon {
+  id: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  businessId: string;
+  businessName: string;
+  paymentMethod: "rtgs_eft" | "mpesa_paybill" | "cheque" | "bank_transfer";
+  bankName: string;
+  referenceNumber: string;
+  amountCents: number;
+  status: "verified" | "pending" | "disputed";
+  verifiedBy: string;
+  reconciledAt: string;
+}
+
+const DEMO_TRADE_SALES_REPS: DemoTradeSalesRep[] = [
+  {
+    id: "rep-001",
+    code: "SR-NBO-01",
+    name: "Samuel Kilonzo",
+    email: "s.kilonzo@rekker.co.ke",
+    phone: "+254722100201",
+    assignedTerritory: "Nairobi County - Supermarkets & Tier 1 Wholesalers",
+    monthlyTargetCents: 800000000, // KES 8M
+    actualSalesCents: 645000000,  // KES 6.45M (80.6% target)
+    commissionRatePct: 2,
+    active: true,
+  },
+  {
+    id: "rep-002",
+    code: "SR-MSA-01",
+    name: "Fatuma Bakari",
+    email: "f.bakari@rekker.co.ke",
+    phone: "+254722100202",
+    assignedTerritory: "Coast & Mombasa Wholesale Distribution Hub",
+    monthlyTargetCents: 500000000, // KES 5M
+    actualSalesCents: 412000000,  // KES 4.12M (82.4% target)
+    commissionRatePct: 2,
+    active: true,
+  },
+  {
+    id: "rep-003",
+    code: "SR-WST-01",
+    name: "Collins Otieno",
+    email: "c.otieno@rekker.co.ke",
+    phone: "+254722100203",
+    assignedTerritory: "Western & Lake Victoria Basin (Kisumu, Kakamega, Bungoma)",
+    monthlyTargetCents: 450000000, // KES 4.5M
+    actualSalesCents: 388000000,  // KES 3.88M (86.2% target)
+    commissionRatePct: 2,
+    active: true,
+  },
+  {
+    id: "rep-004",
+    code: "SR-RFT-01",
+    name: "Mercy Chebet",
+    email: "m.chebet@rekker.co.ke",
+    phone: "+254722100204",
+    assignedTerritory: "Rift Valley & Central Highlands (Nakuru, Eldoret, Nyeri)",
+    monthlyTargetCents: 400000000, // KES 4.0M
+    actualSalesCents: 350000000,  // KES 3.50M (87.5% target)
+    commissionRatePct: 2,
+    active: true,
+  },
+];
+
+const DEMO_TRADE_INTERACTIONS: DemoTradeInteraction[] = [
+  {
+    id: "int-001",
+    businessId: "biz-001",
+    businessName: "Naivas Supermarkets Limited",
+    salesRepId: "rep-001",
+    salesRepName: "Samuel Kilonzo",
+    interactionType: "site_visit",
+    summary: "Quarterly shelf review at Naivas Headquarters. Discussed expansion of Saffron Milan lotion SKU facings across 40 express stores.",
+    outcome: "positive",
+    nextFollowUpDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+  {
+    id: "int-002",
+    businessId: "biz-002",
+    businessName: "Coast Wholesalers & Distributors",
+    salesRepId: "rep-002",
+    salesRepName: "Fatuma Bakari",
+    interactionType: "pricing_review",
+    summary: "Presented 50+ carton volume tier discount schedule for Bio Saff Antiseptic 500ml ahead of school opening season.",
+    outcome: "pending_quote",
+    nextFollowUpDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
+    createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+  },
+  {
+    id: "int-003",
+    businessId: "biz-003",
+    businessName: "Rift Agro-Vet Supplies",
+    salesRepId: "rep-004",
+    salesRepName: "Mercy Chebet",
+    interactionType: "payment_collection",
+    summary: "Reviewed outstanding Net 30 balance for PetCare Flea Spray shipment. Client scheduled RTGS transfer for Friday.",
+    outcome: "payment_promised",
+    nextFollowUpDate: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10),
+    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+  },
+];
+
+const DEMO_TRADE_BANK_RECONS: DemoTradeBankRecon[] = [
+  {
+    id: "recon-001",
+    invoiceId: "inv-001",
+    invoiceNumber: "INV-2026-0001",
+    businessId: "biz-001",
+    businessName: "Naivas Supermarkets Limited",
+    paymentMethod: "rtgs_eft",
+    bankName: "Stanbic Bank Kenya",
+    referenceNumber: "STAN-RTGS-928401",
+    amountCents: 44342400, // KES 443,424
+    status: "verified",
+    verifiedBy: "Finance Treasury Specialist",
+    reconciledAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+  },
+  {
+    id: "recon-002",
+    invoiceId: "inv-002",
+    invoiceNumber: "INV-2026-0002",
+    businessId: "biz-002",
+    businessName: "Coast Wholesalers & Distributors",
+    paymentMethod: "mpesa_paybill",
+    bankName: "Safaricom Daraja B2B Paybill 522522",
+    referenceNumber: "MP-PB-29402910A",
+    amountCents: 35000000, // KES 350,000
+    status: "verified",
+    verifiedBy: "Automated Daraja Webhook Reconciliation",
+    reconciledAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+  },
+];
+
+/**
+ * GET /api/trade/businesses/:id/statement
+ * Formal Debtor Statement of Account with 0-30, 31-60, 61-90, 90+ aging buckets
+ */
+router.get("/trade/businesses/:id/statement", async (req: Request, res: Response) => {
+  const bizId = req.params.id;
+  const biz = DEMO_TRADE_BUSINESSES.find((b) => b.id === bizId);
+  if (!biz) {
+    res.status(404).json({ error: "Business not found." });
+    return;
+  }
+
+  // Gather all invoices for this business
+  const bizInvoices = DEMO_TRADE_INVOICES.filter((inv) => inv.businessId === bizId);
+  const bizPayments = DEMO_TRADE_PAYMENTS.filter((p) => p.businessId === bizId);
+
+  // Compute aging buckets
+  const now = Date.now();
+  let current0To30Cents = 0;
+  let overdue31To60Cents = 0;
+  let overdue61To90Cents = 0;
+  let overdue90PlusCents = 0;
+  let totalOutstandingCents = 0;
+
+  const ledgerEntries: Array<{
+    date: string;
+    type: "INVOICE" | "PAYMENT";
+    reference: string;
+    description: string;
+    debitCents: number;
+    creditCents: number;
+    balanceCents: number;
+  }> = [];
+
+  let runningBalance = 0;
+
+  for (const inv of bizInvoices) {
+    const ageDays = Math.floor((now - new Date(inv.createdAt).getTime()) / 86400000);
+    const balanceDue = inv.balanceDueCents;
+
+    if (balanceDue > 0) {
+      totalOutstandingCents += balanceDue;
+      if (ageDays <= 30) current0To30Cents += balanceDue;
+      else if (ageDays <= 60) overdue31To60Cents += balanceDue;
+      else if (ageDays <= 90) overdue61To90Cents += balanceDue;
+      else overdue90PlusCents += balanceDue;
+    }
+
+    runningBalance += inv.totalCents;
+    ledgerEntries.push({
+      date: inv.createdAt,
+      type: "INVOICE",
+      reference: inv.invoiceNumber,
+      description: `Wholesale Consignment Invoice (eTIMS: ${inv.etimsControlCode})`,
+      debitCents: inv.totalCents,
+      creditCents: 0,
+      balanceCents: runningBalance,
+    });
+  }
+
+  for (const pay of bizPayments) {
+    runningBalance -= pay.amountCents;
+    ledgerEntries.push({
+      date: pay.createdAt,
+      type: "PAYMENT",
+      reference: pay.transactionReference,
+      description: `Settlement via ${pay.paymentMethod.toUpperCase()}`,
+      debitCents: 0,
+      creditCents: pay.amountCents,
+      balanceCents: runningBalance,
+    });
+  }
+
+  // Credit health assessment
+  let creditHealth: "healthy" | "warning" | "credit_hold" = "healthy";
+  if (overdue61To90Cents > 0 || overdue90PlusCents > 0) {
+    creditHealth = "credit_hold";
+  } else if (totalOutstandingCents > biz.creditLimit * 0.85) {
+    creditHealth = "warning";
+  }
+
+  const statement = {
+    statementDate: new Date().toISOString(),
+    business: {
+      id: biz.id,
+      legalName: biz.legalName,
+      tradingName: biz.tradingName,
+      kraPin: biz.kraPin,
+      primaryContact: biz.primaryContactName,
+      creditLimitCents: biz.creditLimit,
+      creditTerms: biz.creditTerms,
+      creditHealth,
+    },
+    agingSummary: {
+      current0To30Cents,
+      overdue31To60Cents,
+      overdue61To90Cents,
+      overdue90PlusCents,
+      totalOutstandingCents,
+      availableCreditCents: Math.max(0, biz.creditLimit - totalOutstandingCents),
+    },
+    ledger: ledgerEntries,
+    sellerBanking: {
+      bankName: "Stanbic Bank Kenya",
+      accountName: "Rekker Limited - Commercial B2B",
+      accountNumber: "0100092837482",
+      branch: "Kenyatta Avenue / Sort: SBICKENX",
+      mpesaPaybill: "522522",
+    },
+  };
+
+  res.json(statement);
+});
+
+/**
+ * GET /api/trade/reconciliations
+ * List verified and pending bank deposit & RTGS reconciliations
+ */
+router.get("/trade/reconciliations", async (req: Request, res: Response) => {
+  res.json({
+    count: DEMO_TRADE_BANK_RECONS.length,
+    reconciliations: DEMO_TRADE_BANK_RECONS,
+  });
+});
+
+/**
+ * POST /api/trade/reconciliations
+ * Record a verified bank payment (EFT, RTGS, Paybill) against an invoice
+ */
+router.post("/trade/reconciliations", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const { invoiceId, paymentMethod, referenceNumber, amountCents, bankName } = req.body || {};
+
+  if (!invoiceId || !referenceNumber || !amountCents) {
+    res.status(400).json({ error: "invoiceId, referenceNumber, and amountCents are required." });
+    return;
+  }
+
+  const inv = DEMO_TRADE_INVOICES.find((i) => i.id === invoiceId || i.invoiceNumber === invoiceId);
+  if (!inv) {
+    res.status(404).json({ error: "Invoice not found for reconciliation." });
+    return;
+  }
+
+  const existing = DEMO_TRADE_BANK_RECONS.find((r) => r.referenceNumber === referenceNumber);
+  if (existing) {
+    res.status(409).json({ error: "Reference number already reconciled." });
+    return;
+  }
+
+  const newRecon: DemoTradeBankRecon = {
+    id: `recon-${Date.now().toString(36)}`,
+    invoiceId: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    businessId: inv.businessId,
+    businessName: inv.businessName,
+    paymentMethod: paymentMethod || "rtgs_eft",
+    bankName: bankName || "Stanbic Bank Kenya",
+    referenceNumber,
+    amountCents: Number(amountCents),
+    status: "verified",
+    verifiedBy: membership.role || "Finance Treasury Analyst",
+    reconciledAt: new Date().toISOString(),
+  };
+
+  DEMO_TRADE_BANK_RECONS.unshift(newRecon);
+
+  // Update invoice balance
+  inv.paidCents += Number(amountCents);
+  inv.balanceDueCents = Math.max(0, inv.totalCents - inv.paidCents);
+  if (inv.balanceDueCents === 0) {
+    inv.status = "paid";
+  }
+
+  await recordAuditEvent({
+    organizationId: membership.organizationId,
+    actorUserId: membership.userId,
+    actor: membership.role,
+    action: "TRADE_BANK_PAYMENT_RECONCILED",
+    targetType: "trade_invoice",
+    targetId: inv.invoiceNumber,
+    summary: `Bank reconciliation recorded for ${inv.invoiceNumber}. Ref: ${referenceNumber}. Amount: KES ${Math.round(amountCents / 100).toLocaleString('en-KE')}.`,
+    isDemo: true,
+  });
+
+  res.status(201).json({
+    message: "Bank reconciliation verified successfully.",
+    reconciliation: newRecon,
+    invoice: inv,
+  });
+});
+
+/**
+ * GET /api/trade/crm/sales-reps
+ * Sales representatives directory with territory assignments and quotas
+ */
+router.get("/trade/crm/sales-reps", async (req: Request, res: Response) => {
+  res.json({
+    count: DEMO_TRADE_SALES_REPS.length,
+    salesReps: DEMO_TRADE_SALES_REPS,
+  });
+});
+
+/**
+ * GET /api/trade/crm/interactions
+ * Customer visit logs and field notes
+ */
+router.get("/trade/crm/interactions", async (req: Request, res: Response) => {
+  res.json({
+    count: DEMO_TRADE_INTERACTIONS.length,
+    interactions: DEMO_TRADE_INTERACTIONS,
+  });
+});
+
+/**
+ * POST /api/trade/crm/interactions
+ * Log a field sales customer visit or trade review
+ */
+router.post("/trade/crm/interactions", async (req: Request, res: Response) => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const { businessId, salesRepId, interactionType, summary, outcome, nextFollowUpDate } = req.body || {};
+
+  if (!businessId || !summary) {
+    res.status(400).json({ error: "businessId and summary are required." });
+    return;
+  }
+
+  const biz = DEMO_TRADE_BUSINESSES.find((b) => b.id === businessId);
+  const rep = DEMO_TRADE_SALES_REPS.find((r) => r.id === salesRepId) || DEMO_TRADE_SALES_REPS[0];
+
+  const newInteraction: DemoTradeInteraction = {
+    id: `int-${Date.now().toString(36)}`,
+    businessId,
+    businessName: biz?.legalName || "Valued B2B Customer",
+    salesRepId: rep.id,
+    salesRepName: rep.name,
+    interactionType: interactionType || "site_visit",
+    summary,
+    outcome: outcome || "positive",
+    nextFollowUpDate: nextFollowUpDate || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+    createdAt: new Date().toISOString(),
+  };
+
+  DEMO_TRADE_INTERACTIONS.unshift(newInteraction);
+
+  res.status(201).json({
+    message: "Trade customer interaction logged successfully.",
+    interaction: newInteraction,
+  });
+});
+
+/**
+ * GET /api/trade/analytics/commercial
+ * Executive commercial analytics: brand revenue distribution, regional performance & debtor DSO
+ */
+router.get("/trade/analytics/commercial", async (req: Request, res: Response) => {
+  // Brand distribution
+  const brandMetrics = [
+    { brand: "Saffron Milan", revenueCents: 184500000, marketSharePct: 41.5, cartonVelocity: 1420 },
+    { brand: "Bio Saff", revenueCents: 128900000, marketSharePct: 29.0, cartonVelocity: 980 },
+    { brand: "Cornells", revenueCents: 85200000, marketSharePct: 19.2, cartonVelocity: 640 },
+    { brand: "PetCare", revenueCents: 45600000, marketSharePct: 10.3, cartonVelocity: 310 },
+  ];
+
+  // County / Regional revenue
+  const regionalMetrics = [
+    { county: "Nairobi", hubs: "WH-NBO-01", revenueCents: 215000000, activeBuyers: 48, growthPct: 24.1 },
+    { county: "Mombasa & Coast", hubs: "WH-MSA-01", revenueCents: 112000000, activeBuyers: 26, growthPct: 18.5 },
+    { county: "Kisumu & Western", hubs: "WH-KSM-01", revenueCents: 74000000, activeBuyers: 19, growthPct: 29.3 },
+    { county: "Nakuru & Rift", hubs: "WH-NKR-01", revenueCents: 43200000, activeBuyers: 14, growthPct: 15.2 },
+  ];
+
+  // Financial health
+  const totalGrossCents = brandMetrics.reduce((acc, b) => acc + b.revenueCents, 0);
+  const totalOutstandingCents = DEMO_TRADE_INVOICES.reduce((acc, i) => acc + i.balanceDueCents, 0);
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    currency: "KES",
+    summary: {
+      totalGrossRevenueCents: totalGrossCents,
+      totalOutstandingReceivablesCents: totalOutstandingCents,
+      collectionEfficiencyPct: 91.4,
+      daysSalesOutstandingDSO: 28, // Healthy FMCG standard (< 30 days)
+    },
+    brands: brandMetrics,
+    regions: regionalMetrics,
   });
 });
 

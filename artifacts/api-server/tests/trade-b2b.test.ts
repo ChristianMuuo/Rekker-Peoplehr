@@ -438,4 +438,111 @@ test("Rekker Trade B2B Platform Test Suite (trade.rekker.co.ke)", async (t) => {
       assert.equal(grnData.purchaseOrder.items[0].quantityReceived, 100);
     });
   });
+
+  await t.test("13. Debtor Statement of Account with 0-30, 31-60, 61-90, 90+ Aging Analysis", async () => {
+    await withServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/trade/businesses/biz-001/statement`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+
+      assert.equal(res.status, 200);
+      const data: any = await res.json();
+
+      assert.equal(data.business.legalName, "Nairobi Mega Retail Distributors Limited");
+      assert.ok(data.agingSummary);
+      assert.ok(typeof data.agingSummary.totalOutstandingCents === "number");
+      assert.ok(typeof data.agingSummary.availableCreditCents === "number");
+      assert.ok(Array.isArray(data.ledger));
+      assert.equal(data.sellerBanking.bankName, "Stanbic Bank Kenya");
+    });
+  });
+
+  await t.test("14. Bank RTGS / EFT Reconciliation against Invoices", async () => {
+    await withServer(async (baseUrl) => {
+      // 1. List current reconciliations
+      const listRes = await fetch(`${baseUrl}/api/trade/reconciliations`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+      assert.equal(listRes.status, 200);
+      const listData: any = await listRes.json();
+      assert.ok(listData.reconciliations.length >= 2);
+
+      // 2. Record new bank reconciliation
+      const reconRef = `TEST-RTGS-${Date.now()}`;
+      const recRes = await fetch(`${baseUrl}/api/trade/reconciliations`, {
+        method: "POST",
+        headers: {
+          ...adminHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          invoiceId: "inv-001",
+          paymentMethod: "rtgs_eft",
+          bankName: "Stanbic Bank Kenya",
+          referenceNumber: reconRef,
+          amountCents: 15000000, // KES 150,000
+        }),
+      });
+
+      assert.equal(recRes.status, 201);
+      const recData: any = await recRes.json();
+      assert.equal(recData.reconciliation.referenceNumber, reconRef);
+      assert.equal(recData.reconciliation.status, "verified");
+    });
+  });
+
+  await t.test("15. B2B CRM: Sales Representative Directory & Field Interaction Logs", async () => {
+    await withServer(async (baseUrl) => {
+      // 1. List sales reps
+      const repRes = await fetch(`${baseUrl}/api/trade/crm/sales-reps`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+      assert.equal(repRes.status, 200);
+      const repData: any = await repRes.json();
+      assert.ok(repData.salesReps.length >= 4);
+      assert.equal(repData.salesReps[0].code, "SR-NBO-01");
+
+      // 2. Log customer interaction
+      const logRes = await fetch(`${baseUrl}/api/trade/crm/interactions`, {
+        method: "POST",
+        headers: {
+          ...adminHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          businessId: "biz-001",
+          salesRepId: "rep-001",
+          interactionType: "site_visit",
+          summary: "Conducted bi-weekly inventory audit at Naivas Eastgate branch.",
+          outcome: "positive",
+        }),
+      });
+
+      assert.equal(logRes.status, 201);
+      const logData: any = await logRes.json();
+      assert.equal(logData.interaction.businessId, "biz-001");
+      assert.equal(logData.interaction.outcome, "positive");
+    });
+  });
+
+  await t.test("16. Commercial Analytics: Brand Revenue Breakdown & County Distribution", async () => {
+    await withServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/trade/analytics/commercial`, {
+        method: "GET",
+        headers: adminHeaders,
+      });
+
+      assert.equal(res.status, 200);
+      const data: any = await res.json();
+      assert.equal(data.currency, "KES");
+      assert.ok(data.summary.totalGrossRevenueCents > 0);
+      assert.ok(data.brands.length >= 4);
+      assert.ok(data.regions.length >= 4);
+      assert.equal(data.brands[0].brand, "Saffron Milan");
+      assert.equal(data.regions[0].county, "Nairobi");
+    });
+  });
 });
