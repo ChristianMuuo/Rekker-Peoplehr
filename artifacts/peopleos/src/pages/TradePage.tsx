@@ -45,7 +45,7 @@ import { apiGet, apiPost } from '../lib/api';
 export function TradePage() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'catalog' | 'bulk_order' | 'orders' | 'dispatch' | 'procurement' | 'quotations' | 'businesses' | 'copilot'
+    'overview' | 'catalog' | 'bulk_order' | 'orders' | 'dispatch' | 'procurement' | 'reconciliations' | 'crm' | 'quotations' | 'businesses' | 'copilot'
   >('overview');
 
   // Brand filter
@@ -88,6 +88,27 @@ export function TradePage() {
   const [poLineItems, setPoLineItems] = useState<
     Array<{ materialId: string; quantity: number; unitPriceCents: number }>
   >([{ materialId: '', quantity: 0, unitPriceCents: 0 }]);
+
+  // Phase 2 Modals & State: Debtor Statement of Account
+  const [showStatementModal, setShowStatementModal] = useState(false);
+  const [selectedStatementBusinessId, setSelectedStatementBusinessId] = useState<string>('biz-001');
+
+  // Phase 2 Modals & State: Bank Reconciliation
+  const [showRecordReconModal, setShowRecordReconModal] = useState(false);
+  const [reconInvoiceId, setReconInvoiceId] = useState('');
+  const [reconPaymentMethod, setReconPaymentMethod] = useState<'rtgs_eft' | 'mpesa_paybill' | 'direct_deposit' | 'cheque'>('rtgs_eft');
+  const [reconBankName, setReconBankName] = useState('Stanbic Bank Kenya');
+  const [reconRefNumber, setReconRefNumber] = useState('');
+  const [reconAmountKes, setReconAmountKes] = useState('');
+
+  // Phase 2 Modals & State: Field CRM & Sales Rep Interactions
+  const [showLogInteractionModal, setShowLogInteractionModal] = useState(false);
+  const [interactionBizId, setInteractionBizId] = useState('biz-001');
+  const [interactionSalesRepId, setInteractionSalesRepId] = useState('rep-001');
+  const [interactionType, setInteractionType] = useState<'site_visit' | 'order_followup' | 'debt_collection' | 'complaint_resolution' | 'product_demo'>('site_visit');
+  const [interactionSummary, setInteractionSummary] = useState('');
+  const [interactionOutcome, setInteractionOutcome] = useState<'positive' | 'order_secured' | 'pending_decision' | 'followup_required'>('positive');
+  const [interactionFollowUpDate, setInteractionFollowUpDate] = useState('');
 
   // Print Invoice View
   const [printInvoiceData, setPrintInvoiceData] = useState<any | null>(null);
@@ -176,6 +197,33 @@ export function TradePage() {
   const procurementOrdersQuery = useQuery({
     queryKey: ['trade-procurement-orders'],
     queryFn: () => apiGet<any>('/api/trade/procurement/orders'),
+  });
+
+  // Phase 2 queries
+  const reconciliationsQuery = useQuery({
+    queryKey: ['trade-reconciliations'],
+    queryFn: () => apiGet<any>('/api/trade/reconciliations'),
+  });
+
+  const salesRepsQuery = useQuery({
+    queryKey: ['trade-sales-reps'],
+    queryFn: () => apiGet<any>('/api/trade/crm/sales-reps'),
+  });
+
+  const interactionsQuery = useQuery({
+    queryKey: ['trade-interactions'],
+    queryFn: () => apiGet<any>('/api/trade/crm/interactions'),
+  });
+
+  const commercialAnalyticsQuery = useQuery({
+    queryKey: ['trade-commercial-analytics'],
+    queryFn: () => apiGet<any>('/api/trade/analytics/commercial'),
+  });
+
+  const statementQuery = useQuery({
+    queryKey: ['trade-statement', selectedStatementBusinessId],
+    queryFn: () => apiGet<any>(`/api/trade/businesses/${selectedStatementBusinessId}/statement`),
+    enabled: Boolean(selectedStatementBusinessId) && showStatementModal,
   });
 
   // Calculate live pricing for items in Cart
@@ -519,6 +567,92 @@ export function TradePage() {
     });
   };
 
+  // Phase 2 Handlers: Statement of Account
+  const handleOpenStatement = (bizId: string) => {
+    setSelectedStatementBusinessId(bizId);
+    setShowStatementModal(true);
+  };
+
+  // Phase 2 Handlers: Bank Reconciliation
+  const handleRecordReconciliation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reconInvoiceId || !reconRefNumber.trim() || !reconAmountKes) {
+      setBanner({ type: 'error', message: 'Invoice, reference number, and amount are required.' });
+      return;
+    }
+    const amountCents = Math.round(Number(reconAmountKes) * 100);
+    if (isNaN(amountCents) || amountCents <= 0) {
+      setBanner({ type: 'error', message: 'Please enter a valid payment amount.' });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const res = await apiPost<any>('/api/trade/reconciliations', {
+        invoiceId: reconInvoiceId,
+        paymentMethod: reconPaymentMethod,
+        referenceNumber: reconRefNumber.trim(),
+        amountCents,
+        bankName: reconBankName,
+      });
+
+      setBanner({
+        type: 'success',
+        message: `Bank payment verified! Reference ${res.reconciliation?.referenceNumber} reconciled for ${res.reconciliation?.invoiceNumber}.`,
+      });
+      setShowRecordReconModal(false);
+      setReconInvoiceId('');
+      setReconRefNumber('');
+      setReconAmountKes('');
+      qc.invalidateQueries({ queryKey: ['trade-reconciliations'] });
+      qc.invalidateQueries({ queryKey: ['trade-invoices'] });
+      qc.invalidateQueries({ queryKey: ['trade-orders'] });
+      qc.invalidateQueries({ queryKey: ['trade-overview'] });
+      qc.invalidateQueries({ queryKey: ['trade-commercial-analytics'] });
+      if (selectedStatementBusinessId) {
+        qc.invalidateQueries({ queryKey: ['trade-statement', selectedStatementBusinessId] });
+      }
+    } catch (err: any) {
+      setBanner({ type: 'error', message: err.message || 'Failed to record bank reconciliation.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Phase 2 Handlers: Field CRM Interaction
+  const handleLogInteraction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!interactionBizId || !interactionSummary.trim()) {
+      setBanner({ type: 'error', message: 'Customer account and interaction summary are required.' });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const res = await apiPost<any>('/api/trade/crm/interactions', {
+        businessId: interactionBizId,
+        salesRepId: interactionSalesRepId,
+        interactionType,
+        summary: interactionSummary.trim(),
+        outcome: interactionOutcome,
+        nextFollowUpDate: interactionFollowUpDate || undefined,
+      });
+
+      setBanner({
+        type: 'success',
+        message: `Field visit notes logged for ${res.interaction?.businessName} by ${res.interaction?.salesRepName}.`,
+      });
+      setShowLogInteractionModal(false);
+      setInteractionSummary('');
+      setInteractionFollowUpDate('');
+      qc.invalidateQueries({ queryKey: ['trade-interactions'] });
+    } catch (err: any) {
+      setBanner({ type: 'error', message: err.message || 'Failed to log field interaction.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const overview = overviewQuery.data?.metrics;
   const brands = overviewQuery.data?.brands || [];
   const products = productsQuery.data?.products || [];
@@ -534,6 +668,13 @@ export function TradePage() {
   const suppliers = suppliersQuery.data?.suppliers || [];
   const materials = materialsQuery.data?.materials || [];
   const procurementOrders = procurementOrdersQuery.data?.purchaseOrders || [];
+
+  // Phase 2 datasets
+  const reconciliations = reconciliationsQuery.data?.reconciliations || [];
+  const salesReps = salesRepsQuery.data?.salesReps || [];
+  const interactions = interactionsQuery.data?.interactions || [];
+  const commercialAnalytics = commercialAnalyticsQuery.data;
+  const statement = statementQuery.data;
 
   return (
     <div className="space-y-6 pb-16">
@@ -617,6 +758,8 @@ export function TradePage() {
             { id: 'orders', label: 'Orders & Fulfilment', icon: Truck },
             { id: 'dispatch', label: 'Dispatch & Warehouses', icon: Warehouse },
             { id: 'procurement', label: 'Procurement Desk', icon: Layers },
+            { id: 'reconciliations', label: 'Treasury & Bank Recon', icon: CreditCard },
+            { id: 'crm', label: 'Field CRM & Reps', icon: Users },
             { id: 'quotations', label: 'Quotations & RFQs', icon: FileSpreadsheet },
             { id: 'businesses', label: 'Buyers & Credit', icon: Building2 },
             { id: 'copilot', label: 'Trade AI Agents', icon: Sparkles },
@@ -812,6 +955,112 @@ export function TradePage() {
                     Masked customer banking credentials and audited Maker-Checker approvals.
                   </p>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Executive Commercial Analytics & Debtor Health */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Left: Regional Fulfilment Distribution */}
+            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm lg:col-span-2">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">
+                    Regional Distribution & County Coverage
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Wholesale buyer penetration and fulfilment hub alignment across Kenya
+                  </p>
+                </div>
+                <span className="rounded-md bg-stone-100 px-2.5 py-1 text-xs font-bold text-stone-600">
+                  4 Regional Hubs
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {(commercialAnalytics?.regions || [
+                  { county: "Nairobi", hubs: "WH-NBO-01", revenueCents: 215000000, activeBuyers: 48, growthPct: 24.1 },
+                  { county: "Mombasa & Coast", hubs: "WH-MSA-01", revenueCents: 112000000, activeBuyers: 26, growthPct: 18.5 },
+                  { county: "Kisumu & Western", hubs: "WH-KSM-01", revenueCents: 74000000, activeBuyers: 19, growthPct: 29.3 },
+                  { county: "Nakuru & Rift", hubs: "WH-NKR-01", revenueCents: 43200000, activeBuyers: 14, growthPct: 15.2 },
+                ]).map((reg: any) => (
+                  <div key={reg.county} className="rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:border-red-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-[#C71D1D]" />
+                        <span className="text-xs font-bold text-stone-900">{reg.county}</span>
+                      </div>
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                        +{reg.growthPct}% YoY
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-baseline justify-between">
+                      <p className="text-base font-bold text-stone-900">{formatKes(reg.revenueCents)}</p>
+                      <span className="text-xs text-stone-500">{reg.activeBuyers} Retailers</span>
+                    </div>
+                    <div className="mt-2 text-[11px] text-stone-500">
+                      Fulfilled via <span className="font-mono font-semibold text-stone-700">{reg.hubs}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right: Treasury & DSO Health */}
+            <div className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-[#C71D1D]" />
+                  <h3 className="text-base font-bold text-stone-900">Treasury & Working Capital</h3>
+                </div>
+                <p className="mt-1 text-xs text-stone-500">
+                  Debtor recovery velocity and liquidity indicators
+                </p>
+
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-stone-600">Days Sales Outstanding (DSO)</span>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        HEALTHY
+                      </span>
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-stone-900">
+                      {commercialAnalytics?.summary?.daysSalesOutstandingDSO || 28} <span className="text-sm font-normal text-stone-500">Days</span>
+                    </p>
+                    <p className="mt-1 text-[11px] text-stone-500">
+                      FMCG industry benchmark &lt; 30 days. Average settlement window across trade accounts.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-stone-600">Collection Efficiency</span>
+                      <span className="text-xs font-bold text-emerald-700">
+                        {commercialAnalytics?.summary?.collectionEfficiencyPct || 91.4}%
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 w-full rounded-full bg-stone-200">
+                      <div
+                        className="h-2 rounded-full bg-emerald-600"
+                        style={{ width: `${commercialAnalytics?.summary?.collectionEfficiencyPct || 91.4}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] text-stone-500">
+                      Proportion of mature invoices settled within terms without disputes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 border-t border-stone-100 pt-4">
+                <button
+                  onClick={() => setActiveTab('reconciliations')}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-stone-900 py-2.5 text-xs font-bold text-white shadow hover:bg-stone-800"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  View Bank Reconciliations
+                </button>
               </div>
             </div>
           </div>
@@ -1275,20 +1524,37 @@ export function TradePage() {
 
                       {/* Payment Action if pending */}
                       {o.paymentStatus !== 'paid' && (
-                        <button
-                          onClick={() => {
-                            const inv = invoices.find((i: any) => i.orderId === o.id) || {
-                              id: `inv-${o.id}`,
-                              balanceDueCents: o.totalCents,
-                              invoiceNumber: `INV-${o.orderNumber}`,
-                            };
-                            setSelectedInvoice(inv);
-                            setShowMpesaModal(true);
-                          }}
-                          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-                        >
-                          Pay M-Pesa
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              const inv = invoices.find((i: any) => i.orderId === o.id) || {
+                                id: `inv-${o.id}`,
+                                balanceDueCents: o.totalCents,
+                                invoiceNumber: `INV-${o.orderNumber}`,
+                              };
+                              setSelectedInvoice(inv);
+                              setShowMpesaModal(true);
+                            }}
+                            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Pay M-Pesa
+                          </button>
+                          <button
+                            onClick={() => {
+                              const inv = invoices.find((i: any) => i.orderId === o.id) || {
+                                id: `inv-${o.id}`,
+                                balanceDueCents: o.totalCents,
+                                invoiceNumber: `INV-${o.orderNumber}`,
+                              };
+                              setReconInvoiceId(inv.id);
+                              setReconAmountKes(String(Math.round(inv.balanceDueCents / 100)));
+                              setShowRecordReconModal(true);
+                            }}
+                            className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100"
+                          >
+                            Bank Recon
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1822,7 +2088,7 @@ export function TradePage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <div className="text-right">
                       <p className="text-xs font-bold text-stone-800">
                         Credit Limit: KES {b.creditLimitKes?.toLocaleString()}
@@ -1831,6 +2097,14 @@ export function TradePage() {
                         Terms: {b.creditTerms} · Tier Discount: {b.tierDiscountPct}%
                       </p>
                     </div>
+
+                    <button
+                      onClick={() => handleOpenStatement(b.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-bold text-stone-700 shadow-sm hover:border-[#C71D1D] hover:text-[#C71D1D]"
+                    >
+                      <FileText className="h-3.5 w-3.5 text-stone-400" />
+                      Statement & Aging
+                    </button>
 
                     {b.status !== 'approved' && (
                       <button
@@ -1843,6 +2117,244 @@ export function TradePage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB: TREASURY & BANK RECONCILIATIONS
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'reconciliations' && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">
+                  Treasury & Bank Payment Reconciliations
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Direct bank settlements (RTGS, EFT, Paybill) reconciled against wholesale tax invoices with audit trail
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setReconInvoiceId(invoices[0]?.id || '');
+                  setReconAmountKes(String(Math.round((invoices[0]?.balanceDueCents || 0) / 100)));
+                  setShowRecordReconModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#C71D1D] px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-red-800"
+              >
+                <Plus className="h-4 w-4" />
+                Record Bank Payment
+              </button>
+            </div>
+
+            {/* Metrics Row */}
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
+                <span className="text-[11px] font-bold uppercase text-stone-500">Reconciliations Recorded</span>
+                <p className="mt-1 text-2xl font-bold text-stone-900">{reconciliations.length}</p>
+                <p className="mt-1 text-[11px] text-emerald-700">100% matched to invoice ledger</p>
+              </div>
+              <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
+                <span className="text-[11px] font-bold uppercase text-stone-500">Total Settled via RTGS / Bank</span>
+                <p className="mt-1 text-2xl font-bold text-stone-900">
+                  {formatKes(reconciliations.reduce((sum: number, r: any) => sum + (r.amountCents || 0), 0))}
+                </p>
+                <p className="mt-1 text-[11px] text-stone-500">Stanbic & KCB commercial accounts</p>
+              </div>
+              <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
+                <span className="text-[11px] font-bold uppercase text-stone-500">Reconciliation Verification</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <BadgeCheck className="h-5 w-5 text-emerald-600" />
+                  <span className="text-sm font-bold text-stone-800">Finance Treasury Analyst</span>
+                </div>
+                <p className="mt-1 text-[11px] text-stone-500">Immutable Maker-Checker compliance</p>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 text-stone-500">
+                    <th className="pb-3 font-semibold">Payment Ref & Method</th>
+                    <th className="pb-3 font-semibold">Target Invoice</th>
+                    <th className="pb-3 font-semibold">Customer Account</th>
+                    <th className="pb-3 font-semibold">Settlement Bank</th>
+                    <th className="pb-3 font-semibold text-right">Amount (KES)</th>
+                    <th className="pb-3 font-semibold text-center">Status</th>
+                    <th className="pb-3 font-semibold">Reconciled At</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {reconciliations.map((r: any) => (
+                    <tr key={r.id} className="hover:bg-stone-50 transition-colors">
+                      <td className="py-3">
+                        <div className="font-mono font-bold text-stone-900">{r.referenceNumber}</div>
+                        <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-stone-600">
+                          {r.paymentMethod?.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="py-3 font-mono font-bold text-[#C71D1D]">{r.invoiceNumber}</td>
+                      <td className="py-3 font-medium text-stone-800">{r.businessName}</td>
+                      <td className="py-3 text-stone-600">{r.bankName}</td>
+                      <td className="py-3 text-right font-mono font-bold text-stone-900">
+                        {formatKes(r.amountCents)}
+                      </td>
+                      <td className="py-3 text-center">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
+                          <Check className="h-3 w-3" />
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="py-3 text-stone-500">
+                        {new Date(r.reconciledAt).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}
+                      </td>
+                    </tr>
+                  ))}
+                  {reconciliations.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-stone-400">
+                        No bank reconciliations recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB: FIELD CRM & SALES REPS DIRECTORY
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'crm' && (
+        <div className="space-y-6">
+          {/* Top Card */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">
+                  Field Sales CRM & Customer Visit Logs
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Territory sales representatives, monthly quota pacing, and on-site buyer interaction journals
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setInteractionBizId(businesses[0]?.id || 'biz-001');
+                  setInteractionSalesRepId(salesReps[0]?.id || 'rep-001');
+                  setInteractionSummary('');
+                  setShowLogInteractionModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#C71D1D] px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-red-800"
+              >
+                <Plus className="h-4 w-4" />
+                Log Customer Visit
+              </button>
+            </div>
+
+            {/* Sales Rep Quotas */}
+            <div className="mt-6">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-3">
+                Sales Representatives & Territory Quotas
+              </h4>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {salesReps.map((rep: any) => {
+                  const pct = Math.min(100, Math.round((rep.achievedCents / rep.monthlyTargetCents) * 100));
+                  return (
+                    <div key={rep.id} className="rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:border-red-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-stone-900">{rep.name}</span>
+                        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-[#C71D1D]">
+                          {rep.commissionRatePct}% Comm.
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-stone-500 flex items-center gap-1">
+                        <MapPin className="h-3 w-3 text-stone-400" />
+                        {rep.territoryCounty}
+                      </p>
+
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-stone-500">MTD Pacing:</span>
+                          <span className="font-bold text-stone-900">{pct}%</span>
+                        </div>
+                        <div className="mt-1.5 h-2 w-full rounded-full bg-stone-200">
+                          <div
+                            className={`h-2 rounded-full ${pct >= 80 ? 'bg-emerald-600' : 'bg-[#C71D1D]'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="mt-2 flex justify-between text-[11px] text-stone-500">
+                          <span>{formatKes(rep.achievedCents)}</span>
+                          <span className="text-stone-400">/ {formatKes(rep.monthlyTargetCents)}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 pt-3 border-t border-stone-200/60 flex justify-between text-[11px] text-stone-500">
+                        <span>{rep.activeAccountsCount} Accounts</span>
+                        <span className="font-mono">{rep.phone}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Field Visit Logs */}
+            <div className="mt-8">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                  Recent Field Interaction Journals ({interactions.length})
+                </h4>
+              </div>
+
+              <div className="mt-4 divide-y divide-stone-100">
+                {interactions.map((it: any) => (
+                  <div key={it.id} className="py-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-stone-900">{it.businessName}</span>
+                        <span className="rounded bg-stone-100 px-2 py-0.5 text-[10px] font-bold uppercase text-stone-600">
+                          {it.interactionType?.replace('_', ' ')}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            it.outcome === 'order_secured'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : it.outcome === 'positive'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {it.outcome?.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-stone-700">{it.summary}</p>
+                      <div className="flex items-center gap-3 text-[11px] text-stone-500 pt-1">
+                        <span>Rep: <strong className="text-stone-700">{it.salesRepName}</strong></span>
+                        <span>·</span>
+                        <span>Next Follow-up: <strong className="text-stone-700">{it.nextFollowUpDate}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="text-right text-[11px] text-stone-400 whitespace-nowrap">
+                      {new Date(it.createdAt).toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' })}
+                    </div>
+                  </div>
+                ))}
+                {interactions.length === 0 && (
+                  <div className="py-8 text-center text-stone-400 text-xs">
+                    No field interactions logged yet.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -2525,6 +3037,495 @@ export function TradePage() {
                 >
                   {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                   Issue Official Requisition PO
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL: DEBTOR STATEMENT OF ACCOUNT & AGING ANALYSIS
+      ───────────────────────────────────────────────────────────── */}
+      {showStatementModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-4xl rounded-2xl bg-white p-6 shadow-2xl my-8 space-y-6">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-stone-200 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-lg bg-red-100 p-2 text-[#C71D1D]">
+                    <FileText className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-bold text-stone-900">
+                      Debtor Statement of Account
+                    </h3>
+                    <p className="text-xs text-stone-500">
+                      Formal statement with statutory aging schedule and settlement ledger
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-stone-600">
+                  <span className="font-bold text-stone-900">
+                    {statement?.business?.legalName || 'Valued Customer'}
+                  </span>
+                  <span>·</span>
+                  <span>KRA PIN: <strong className="font-mono">{statement?.business?.kraPin || 'N/A'}</strong></span>
+                  <span>·</span>
+                  <span>Contact: {statement?.business?.primaryContact}</span>
+                  <span>·</span>
+                  <span>Terms: <strong className="uppercase">{statement?.business?.creditTerms}</strong></span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                    statement?.business?.creditHealth === 'healthy'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : statement?.business?.creditHealth === 'warning'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}
+                >
+                  {statement?.business?.creditHealth === 'healthy'
+                    ? 'Healthy Credit'
+                    : statement?.business?.creditHealth === 'warning'
+                    ? 'Credit Warning'
+                    : 'Credit Hold'}
+                </span>
+                <button
+                  onClick={() => setShowStatementModal(false)}
+                  className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Aging Summary Buckets */}
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
+                Accounts Receivable Aging Analysis (KES)
+              </h4>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <span className="text-[10px] font-bold uppercase text-stone-500">0 - 30 Days (Current)</span>
+                  <p className="mt-1 font-mono text-sm font-bold text-stone-900">
+                    {formatKes(statement?.agingSummary?.current0To30Cents || 0)}
+                  </p>
+                  <span className="text-[10px] text-emerald-600 font-semibold">Standard Terms</span>
+                </div>
+
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <span className="text-[10px] font-bold uppercase text-stone-500">31 - 60 Days</span>
+                  <p className="mt-1 font-mono text-sm font-bold text-stone-900">
+                    {formatKes(statement?.agingSummary?.overdue31To60Cents || 0)}
+                  </p>
+                  <span className="text-[10px] text-amber-600 font-semibold">Follow-up Due</span>
+                </div>
+
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <span className="text-[10px] font-bold uppercase text-stone-500">61 - 90 Days</span>
+                  <p className="mt-1 font-mono text-sm font-bold text-stone-900">
+                    {formatKes(statement?.agingSummary?.overdue61To90Cents || 0)}
+                  </p>
+                  <span className="text-[10px] text-red-600 font-semibold">Escalated</span>
+                </div>
+
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <span className="text-[10px] font-bold uppercase text-stone-500">90+ Days (Default)</span>
+                  <p className="mt-1 font-mono text-sm font-bold text-stone-900">
+                    {formatKes(statement?.agingSummary?.overdue90PlusCents || 0)}
+                  </p>
+                  <span className="text-[10px] text-red-700 font-semibold">Critical Overdue</span>
+                </div>
+
+                <div className="rounded-xl border border-red-200 bg-red-50/50 p-3">
+                  <span className="text-[10px] font-bold uppercase text-[#C71D1D]">Total Outstanding</span>
+                  <p className="mt-1 font-mono text-sm font-extrabold text-[#C71D1D]">
+                    {formatKes(statement?.agingSummary?.totalOutstandingCents || 0)}
+                  </p>
+                  <span className="text-[10px] text-stone-500">
+                    Limit: {formatKes(statement?.business?.creditLimitCents || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Chronological Statement Ledger */}
+            <div>
+              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                  Running Transaction Ledger ({statement?.ledger?.length || 0} Entries)
+                </h4>
+                <span className="text-[11px] text-stone-400">Amounts in Kenya Shillings</span>
+              </div>
+
+              <div className="mt-3 max-h-60 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b border-stone-200 text-stone-500">
+                      <th className="pb-2 font-semibold">Date</th>
+                      <th className="pb-2 font-semibold">Type</th>
+                      <th className="pb-2 font-semibold">Reference</th>
+                      <th className="pb-2 font-semibold">Description</th>
+                      <th className="pb-2 font-semibold text-right">Debit</th>
+                      <th className="pb-2 font-semibold text-right">Credit</th>
+                      <th className="pb-2 font-semibold text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 font-mono">
+                    {statement?.ledger?.map((entry: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-stone-50">
+                        <td className="py-2.5 text-stone-500 text-[11px]">{entry.date?.slice(0, 10)}</td>
+                        <td className="py-2.5">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase font-sans ${
+                              entry.type === 'INVOICE'
+                                ? 'bg-red-50 text-[#C71D1D]'
+                                : 'bg-emerald-50 text-emerald-800'
+                            }`}
+                          >
+                            {entry.type}
+                          </span>
+                        </td>
+                        <td className="py-2.5 font-bold text-stone-900">{entry.reference}</td>
+                        <td className="py-2.5 font-sans text-stone-600 text-[11px]">{entry.description}</td>
+                        <td className="py-2.5 text-right font-medium text-stone-900">
+                          {entry.debitCents > 0 ? formatKes(entry.debitCents) : '-'}
+                        </td>
+                        <td className="py-2.5 text-right font-medium text-emerald-700">
+                          {entry.creditCents > 0 ? formatKes(entry.creditCents) : '-'}
+                        </td>
+                        <td className="py-2.5 text-right font-bold text-stone-900">
+                          {formatKes(entry.balanceCents)}
+                        </td>
+                      </tr>
+                    ))}
+                    {(!statement?.ledger || statement.ledger.length === 0) && (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-stone-400 font-sans">
+                          No transactions found on this account.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Settlement Banking & Action Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-stone-200 pt-4">
+              <div className="rounded-xl border border-stone-100 bg-stone-50 p-3 text-[11px] text-stone-600 sm:max-w-md">
+                <p className="font-bold text-stone-800 uppercase text-[10px]">Settlement Remittance Details</p>
+                <p className="mt-0.5">
+                  Bank: <strong>{statement?.sellerBanking?.bankName}</strong> · Acc: <strong className="font-mono">{statement?.sellerBanking?.accountNumber}</strong>
+                </p>
+                <p className="mt-0.5 text-emerald-700">
+                  M-Pesa Business Paybill: <strong>{statement?.sellerBanking?.mpesaPaybill}</strong>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-bold text-stone-700 shadow-sm hover:bg-stone-50"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print Statement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStatementModal(false);
+                    const matchingInv = invoices.find((i: any) => i.businessId === selectedStatementBusinessId && i.balanceDueCents > 0) || invoices[0];
+                    if (matchingInv) {
+                      setReconInvoiceId(matchingInv.id);
+                      setReconAmountKes(String(Math.round(matchingInv.balanceDueCents / 100)));
+                    }
+                    setShowRecordReconModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#C71D1D] px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-red-800"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Record Bank Settlement
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL: RECORD BANK PAYMENT RECONCILIATION
+      ───────────────────────────────────────────────────────────── */}
+      {showRecordReconModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-red-100 p-2 text-[#C71D1D]">
+                  <CreditCard className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">
+                    Record Bank Reconciliation
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Verify RTGS, EFT or Paybill deposit against outstanding wholesale invoice
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRecordReconModal(false)}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordReconciliation} className="mt-4 space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-700">Target Tax Invoice</label>
+                <select
+                  value={reconInvoiceId}
+                  onChange={(e) => {
+                    setReconInvoiceId(e.target.value);
+                    const target = invoices.find((i: any) => i.id === e.target.value);
+                    if (target) {
+                      setReconAmountKes(String(Math.round(target.balanceDueCents / 100)));
+                    }
+                  }}
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs font-mono outline-none focus:border-red-500 focus:bg-white"
+                >
+                  <option value="">-- Select Invoice to Reconcile --</option>
+                  {invoices.map((inv: any) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoiceNumber} - {inv.businessName} (Due: {formatKes(inv.balanceDueCents)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Settlement Method</label>
+                  <select
+                    value={reconPaymentMethod}
+                    onChange={(e: any) => setReconPaymentMethod(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    <option value="rtgs_eft">RTGS / EFT Bank Transfer</option>
+                    <option value="mpesa_paybill">M-Pesa Business Paybill (522522)</option>
+                    <option value="direct_deposit">Direct Cash / Branch Deposit</option>
+                    <option value="cheque">Banker’s / Corporate Cheque</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Receiving Bank</label>
+                  <select
+                    value={reconBankName}
+                    onChange={(e) => setReconBankName(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    <option value="Stanbic Bank Kenya">Stanbic Bank Kenya (Main Commercial)</option>
+                    <option value="KCB Bank Kenya">KCB Bank Kenya</option>
+                    <option value="Equity Bank Kenya">Equity Bank Kenya</option>
+                    <option value="NCBA Bank Kenya">NCBA Bank Kenya</option>
+                    <option value="Co-operative Bank">Co-operative Bank of Kenya</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Transaction Reference Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={reconRefNumber}
+                    onChange={(e) => setReconRefNumber(e.target.value)}
+                    placeholder="e.g. RTGS-2026-99182 / FT260481"
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs font-mono outline-none focus:border-red-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Amount to Settle (KES)</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={reconAmountKes}
+                    onChange={(e) => setReconAmountKes(e.target.value)}
+                    placeholder="Amount in KES"
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs font-mono font-bold outline-none focus:border-red-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-800">
+                <p className="font-semibold">Maker-Checker Treasury Control</p>
+                <p className="mt-0.5 text-[11px] text-blue-700">
+                  Submitting will credit the buyer’s ledger, decrement the invoice balance, and generate an audited reconciliation event.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRecordReconModal(false)}
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1.5 rounded-xl bg-[#C71D1D] px-4 py-2 text-xs font-bold text-white shadow hover:bg-red-800 disabled:opacity-50"
+                >
+                  {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                  Verify & Clear Invoice
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL: LOG FIELD SALES CUSTOMER VISIT
+      ───────────────────────────────────────────────────────────── */}
+      {showLogInteractionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-red-100 p-2 text-[#C71D1D]">
+                  <Users className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">
+                    Log Customer Field Interaction
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Capture territory visit notes, reorder intent, and trade credit health
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLogInteractionModal(false)}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleLogInteraction} className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Customer Account</label>
+                  <select
+                    value={interactionBizId}
+                    onChange={(e) => setInteractionBizId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    {businesses.map((b: any) => (
+                      <option key={b.id} value={b.id}>
+                        {b.legalName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Sales Representative</label>
+                  <select
+                    value={interactionSalesRepId}
+                    onChange={(e) => setInteractionSalesRepId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    {salesReps.map((r: any) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.territoryCounty})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Interaction Type</label>
+                  <select
+                    value={interactionType}
+                    onChange={(e: any) => setInteractionType(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    <option value="site_visit">On-site Retailer Store Visit</option>
+                    <option value="order_followup">Wholesale Reorder Follow-up</option>
+                    <option value="debt_collection">Debtor Collection & Recon</option>
+                    <option value="complaint_resolution">Complaint / Returns Resolution</option>
+                    <option value="product_demo">New SKU Sampling & Demo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700">Visit Outcome</label>
+                  <select
+                    value={interactionOutcome}
+                    onChange={(e: any) => setInteractionOutcome(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                  >
+                    <option value="positive">Positive / Account Healthy</option>
+                    <option value="order_secured">Immediate Bulk Order Placed</option>
+                    <option value="pending_decision">Pending Procurement Decision</option>
+                    <option value="followup_required">Action Required / Overdue</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700">Field Notes & Commercial Summary</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={interactionSummary}
+                  onChange={(e) => setInteractionSummary(e.target.value)}
+                  placeholder="e.g. Conducted stock audit at Nairobi West branch. Shelf velocity high on Saffron Milan lotion. Customer confirmed 50 carton reorder for month-end."
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs outline-none focus:border-red-500 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700">Next Planned Follow-up</label>
+                <input
+                  type="date"
+                  value={interactionFollowUpDate}
+                  onChange={(e) => setInteractionFollowUpDate(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs font-mono outline-none focus:border-red-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLogInteractionModal(false)}
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-1.5 rounded-xl bg-[#C71D1D] px-4 py-2 text-xs font-bold text-white shadow hover:bg-red-800 disabled:opacity-50"
+                >
+                  {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                  Log Field Visit
                 </button>
               </div>
             </form>
