@@ -12,6 +12,7 @@ import {
 } from '../data/aiAgents';
 import { apiGet, apiPost } from '../lib/api';
 import { useGetAuthContext } from '@workspace/api-client-react';
+import { FEATURE_REGISTRY, featureStatusLabel } from '../data/featureRegistry';
 
 export function AgentHubPage() {
   const [activeTab, setActiveTab] = useState<'chat' | 'approvals' | 'telemetry'>('chat');
@@ -129,7 +130,7 @@ export function AgentHubPage() {
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">AI agent concepts</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">{FEATURE_REGISTRY['/agent-hub'].label} · {featureStatusLabel(FEATURE_REGISTRY['/agent-hub'].status)}</p>
           <h1 className="font-display text-2xl font-semibold tracking-[-.03em] text-stone-900">
             Rekker AI Agent Hub & Governance
           </h1>
