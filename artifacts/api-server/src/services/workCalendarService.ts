@@ -211,6 +211,7 @@ export async function upsertWorkCalendar(params: {
     location: params.location ? sanitizeText(params.location, 120) : null,
     timezone: params.timezone,
     workdaysJson: JSON.stringify(cleanWorkdays),
+    halfWorkdaysJson: JSON.stringify(cleanHalfWorkdays),
     holidaysJson: JSON.stringify(params.holidays),
     shiftStartTime: params.shiftStartTime,
     shiftEndTime: params.shiftEndTime,
