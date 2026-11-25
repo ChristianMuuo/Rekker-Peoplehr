@@ -931,6 +931,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
   if (!membership) return;
   const isOrganizationAdmin = adminRoles.includes(membership.role);
   const year = query.data.year ?? new Date().getUTCFullYear();
+  await ensureKenyaDefaultPolicies(membership.organizationId);
 
   if (!process.env.DATABASE_URL) {
     let permittedDemoEmployees = isOrganizationAdmin
@@ -993,7 +994,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
               ),
             0,
           );
-        const accruedDays = accruedDaysForYear(policy, year, new Date());
+        const accruedDays = accruedDaysForYear(policy, year, new Date(), employee.startDate);
         return {
           employeeId: employee.id,
           employeeName: `${employee.firstName} ${employee.lastName}`,
@@ -1018,6 +1019,8 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
     id: string;
     firstName: string;
     lastName: string;
+    startDate: string;
+    isDemo: boolean;
   }[] = [];
 
   if (isOrganizationAdmin) {
@@ -1032,6 +1035,8 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
         id: employeesTable.id,
         firstName: employeesTable.firstName,
         lastName: employeesTable.lastName,
+        startDate: employeesTable.startDate,
+        isDemo: employeesTable.isDemo,
       })
       .from(employeesTable)
       .where(and(...conditions));
@@ -1065,6 +1070,8 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
         id: employeesTable.id,
         firstName: employeesTable.firstName,
         lastName: employeesTable.lastName,
+        startDate: employeesTable.startDate,
+        isDemo: employeesTable.isDemo,
       })
       .from(employeesTable)
       .where(and(...conditions));
@@ -1074,6 +1081,8 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
         id: employeesTable.id,
         firstName: employeesTable.firstName,
         lastName: employeesTable.lastName,
+        startDate: employeesTable.startDate,
+        isDemo: employeesTable.isDemo,
       })
       .from(employeesTable)
       .where(
@@ -1118,6 +1127,28 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
         ),
       ),
   ]);
+
+  // Materialize accrual entries once using unique source keys. The ledger,
+  // not a mutable balance field or a request-table sum, is authoritative.
+  await Promise.all(
+    permittedEmployees.flatMap((employee) =>
+      policies.map((policy) =>
+        ensureAccrualLedgerEntries(employee, policy, new Date()),
+      ),
+    ),
+  );
+
+  const ledgerEntries = await db
+    .select()
+    .from(leaveLedgerTable)
+    .where(
+      and(
+        eq(leaveLedgerTable.organizationId, membership.organizationId),
+        inArray(leaveLedgerTable.employeeId, employeeIds),
+        eq(leaveLedgerTable.leaveYear, year),
+      ),
+    );
+
   const employeesById = new Map(
     permittedEmployees.map((employee) => [
       employee.id,
@@ -1129,23 +1160,30 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
       const relevantRequests = requests.filter(
         (request) =>
           request.employeeId === employee.id &&
-          request.leaveType === policy.code,
+          request.leaveType === policy.code &&
+          request.status === "pending",
       );
-      const usedDays = relevantRequests
-        .filter((request) => request.status === "approved")
-        .reduce(
-          (total, request) =>
-            total + businessDaysForYear(request.startDate, request.endDate, year),
-          0,
-        );
-      const pendingDays = relevantRequests
-        .filter((request) => request.status === "pending")
-        .reduce(
-          (total, request) =>
-            total + businessDaysForYear(request.startDate, request.endDate, year),
-          0,
-        );
-      const accruedDays = accruedDaysForYear(policy, year, new Date());
+      const pendingDays = relevantRequests.reduce(
+        (total, request) =>
+          total +
+          businessDaysForYear(request.startDate, request.endDate, year) -
+          (request.halfDay ? 0.5 : 0),
+        0,
+      );
+      const relevantLedger = ledgerEntries.filter(
+        (entry) =>
+          entry.employeeId === employee.id &&
+          entry.leaveType === policy.code,
+      );
+      const accrualEntries = relevantLedger.filter(
+        (entry) => entry.entryType !== "deduction" && entry.entryType !== "reversal",
+      );
+      const usageEntries = relevantLedger.filter(
+        (entry) => entry.entryType === "deduction" || entry.entryType === "reversal",
+      );
+      const accruedDays = sumLeaveLedgerDays(accrualEntries);
+      const usedDays = Math.max(0, -sumLeaveLedgerDays(usageEntries));
+      const ledgerBalance = sumLeaveLedgerDays(relevantLedger);
       return {
         employeeId: employee.id,
         employeeName: employeesById.get(employee.id) ?? "Employee",
@@ -1156,7 +1194,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
         accruedDays,
         usedDays,
         pendingDays,
-        remainingDays: accruedDays - usedDays - pendingDays,
+        remainingDays: Math.round((ledgerBalance - pendingDays) * 100) / 100,
         accrualMethod: policy.accrualMethod,
         active: policy.active,
       };
