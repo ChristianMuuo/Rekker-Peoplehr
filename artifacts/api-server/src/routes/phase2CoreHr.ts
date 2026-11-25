@@ -586,8 +586,10 @@ router.post("/peopleos/work-calendars", async (req, res): Promise<void> => {
     typeof b.name !== "string" ||
     b.name.trim().length < 2 ||
     typeof b.timezone !== "string" ||
-    !Array.isArray(b.workdays) ||
-    b.workdays.length === 0 ||
+    (!Array.isArray(b.workdays) &&
+      (typeof b.workdayWeights !== "object" || b.workdayWeights === null || Array.isArray(b.workdayWeights))) ||
+    (Array.isArray(b.workdays) && b.workdays.length === 0 &&
+      (typeof b.workdayWeights !== "object" || b.workdayWeights === null || Array.isArray(b.workdayWeights))) ||
     typeof b.shiftStartTime !== "string" ||
     typeof b.shiftEndTime !== "string"
   ) {
@@ -605,7 +607,15 @@ router.post("/peopleos/work-calendars", async (req, res): Promise<void> => {
       name: b.name,
       location: typeof b.location === "string" ? b.location : null,
       timezone: b.timezone,
-      workdays: b.workdays.map(Number),
+      workdays: Array.isArray(b.workdays)
+        ? b.workdays.map(Number)
+        : Object.keys(b.workdayWeights as Record<string, unknown>).map(Number),
+      workdayWeights:
+        typeof b.workdayWeights === "object" && b.workdayWeights !== null && !Array.isArray(b.workdayWeights)
+          ? Object.fromEntries(
+              Object.entries(b.workdayWeights as Record<string, unknown>).map(([day, weight]) => [Number(day), Number(weight)]),
+            )
+          : undefined,
       holidays: Array.isArray(b.holidays) ? b.holidays : [],
       shiftStartTime: b.shiftStartTime,
       shiftEndTime: b.shiftEndTime,
