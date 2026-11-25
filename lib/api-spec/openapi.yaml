@@ -809,6 +809,8 @@ components:
         targetType: { type: string }
         targetId: { type: string }
         summary: { type: string }
+        prevHash: { type: [ "string", "null" ] }
+        hash: { type: [ "string", "null" ] }
         isDemo: { type: boolean }
     AgentProviderStatus:
       type: object
