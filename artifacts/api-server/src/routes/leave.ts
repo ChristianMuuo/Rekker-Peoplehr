@@ -28,6 +28,7 @@ import {
   leaveLedgerTable,
   leaveApprovalsTable,
   leavePolicyVersionsTable,
+  publicHolidaysTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
 import {
@@ -123,6 +124,23 @@ const DEFAULT_KENYA_LEAVE_POLICIES = [
     policyMetadataJson: JSON.stringify({ section: "29A", verifyCurrentConsolidatedText: true }),
   },
 ];
+
+interface DemoPublicHoliday {
+  id: string;
+  organizationId: string;
+  date: string;
+  name: string;
+  sourceUrl: string | null;
+  isGazetted: boolean;
+}
+
+const DEMO_PUBLIC_HOLIDAYS: DemoPublicHoliday[] = [];
+
+function isValidIsoDate(value: string): boolean {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
 
 export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] =
   DEFAULT_KENYA_LEAVE_POLICIES.map((policy, index) => ({
@@ -569,6 +587,296 @@ async function canManageRequest(
     .limit(1);
   return Boolean(employee && employee.managerId === managerEmployeeId);
 }
+
+router.get("/leave/public-holidays", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const from = typeof req.query.from === "string" ? req.query.from : undefined;
+  const to = typeof req.query.to === "string" ? req.query.to : undefined;
+  if ((from && !isValidIsoDate(from)) || (to && !isValidIsoDate(to))) {
+    res.status(400).json({ error: "Holiday range must use valid YYYY-MM-DD dates." });
+    return;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    const items = DEMO_PUBLIC_HOLIDAYS
+      .filter((holiday) => holiday.organizationId === membership.organizationId)
+      .filter((holiday) => !from || holiday.date >= from)
+      .filter((holiday) => !to || holiday.date <= to)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    res.json(items);
+    return;
+  }
+
+  const conditions = [eq(publicHolidaysTable.organizationId, membership.organizationId)];
+  if (from) conditions.push(gte(publicHolidaysTable.holidayDate, from));
+  if (to) conditions.push(lte(publicHolidaysTable.holidayDate, to));
+  const rows = await db
+    .select()
+    .from(publicHolidaysTable)
+    .where(and(...conditions))
+    .orderBy(publicHolidaysTable.holidayDate);
+  res.json(rows.map((row) => ({
+    id: row.id,
+    date: row.holidayDate,
+    name: row.name,
+    sourceUrl: row.sourceUrl,
+    isGazetted: row.isGazetted,
+  })));
+});
+
+router.post("/leave/public-holidays", async (req, res): Promise<void> => {
+  const membership = await requireRoles(req, res, adminRoles);
+  if (!membership) return;
+  const body = req.body as {
+    date?: unknown;
+    name?: unknown;
+    sourceUrl?: unknown;
+    isGazetted?: unknown;
+    note?: unknown;
+  };
+  const date = typeof body.date === "string" ? body.date : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : null;
+  const isGazetted = body.isGazetted === true;
+  if (!isValidIsoDate(date) || !name || name.length > 160) {
+    res.status(400).json({ error: "Provide a valid holiday date and a name of 1 to 160 characters." });
+    return;
+  }
+  if (sourceUrl && !/^https:\/\//i.test(sourceUrl)) {
+    res.status(400).json({ error: "Holiday source URL must use HTTPS." });
+    return;
+  }
+
+  if (!process.env.DATABASE_URL) {
+    const existing = DEMO_PUBLIC_HOLIDAYS.find(
+      (item) => item.organizationId === membership.organizationId && item.date === date,
+    );
+    if (existing) {
+      res.status(409).json({ error: "A holiday is already configured for this date." });
+      return;
+    }
+    const created: DemoPublicHoliday = {
+      id: `holiday-${crypto.randomUUID()}`,
+      organizationId: membership.organizationId,
+      date,
+      name,
+      sourceUrl,
+      isGazetted,
+    };
+    DEMO_PUBLIC_HOLIDAYS.push(created);
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "public_holiday.created",
+      targetType: "public_holiday",
+      targetId: created.id,
+      summary: `Configured public holiday '${created.name}' for ${created.date}.`,
+      after: created,
+      isDemo: true,
+    });
+    res.status(201).json(created);
+    return;
+  }
+
+  const [created] = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(publicHolidaysTable)
+      .values({
+        organizationId: membership.organizationId,
+        holidayDate: date,
+        name,
+        jurisdiction: "KE",
+        sourceUrl,
+        isGazetted,
+        note: typeof body.note === "string" ? body.note.slice(0, 500) : null,
+        createdByUserId: membership.userId,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!row) return [null];
+    await tx.insert(auditEventsTable).values({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "public_holiday.created",
+      targetType: "public_holiday",
+      targetId: row.id,
+      summary: `Configured public holiday '${row.name}' for ${row.holidayDate}.`,
+      afterJson: JSON.stringify({ date: row.holidayDate, name: row.name, isGazetted: row.isGazetted }),
+      requestId: req.correlationId ?? null,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") ?? null,
+      isDemo: false,
+    });
+    return [row];
+  });
+  if (!created) {
+    res.status(409).json({ error: "A holiday is already configured for this date." });
+    return;
+  }
+  res.status(201).json({
+    id: created.id,
+    date: created.holidayDate,
+    name: created.name,
+    sourceUrl: created.sourceUrl,
+    isGazetted: created.isGazetted,
+  });
+});
+
+router.patch("/leave/public-holidays/:holidayId", async (req, res): Promise<void> => {
+  const membership = await requireRoles(req, res, adminRoles);
+  if (!membership) return;
+  const holidayId = typeof req.params.holidayId === "string" ? req.params.holidayId : "";
+  const body = req.body as { date?: unknown; name?: unknown; sourceUrl?: unknown; isGazetted?: unknown; note?: unknown };
+  const date = typeof body.date === "string" ? body.date : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const sourceUrl = typeof body.sourceUrl === "string" ? body.sourceUrl.trim() : null;
+  if (!holidayId || !isValidIsoDate(date) || !name || name.length > 160) {
+    res.status(400).json({ error: "Provide a valid holiday ID, date and name." });
+    return;
+  }
+  if (sourceUrl && !/^https:\/\//i.test(sourceUrl)) {
+    res.status(400).json({ error: "Holiday source URL must use HTTPS." });
+    return;
+  }
+  if (!process.env.DATABASE_URL) {
+    const target = DEMO_PUBLIC_HOLIDAYS.find(
+      (item) => item.id === holidayId && item.organizationId === membership.organizationId,
+    );
+    if (!target) {
+      res.status(404).json({ error: "Public holiday not found." });
+      return;
+    }
+    const duplicate = DEMO_PUBLIC_HOLIDAYS.some(
+      (item) => item.id !== holidayId && item.organizationId === membership.organizationId && item.date === date,
+    );
+    if (duplicate) {
+      res.status(409).json({ error: "Another holiday is already configured for this date." });
+      return;
+    }
+    const before = { ...target };
+    target.date = date;
+    target.name = name;
+    target.sourceUrl = sourceUrl;
+    target.isGazetted = body.isGazetted === true;
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "public_holiday.updated",
+      targetType: "public_holiday",
+      targetId: target.id,
+      summary: `Updated public holiday '${target.name}' for ${target.date}.`,
+      before,
+      after: target,
+      isDemo: true,
+    });
+    res.json(target);
+    return;
+  }
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(publicHolidaysTable)
+      .set({
+        holidayDate: date,
+        name,
+        sourceUrl,
+        isGazetted: body.isGazetted === true,
+        note: typeof body.note === "string" ? body.note.slice(0, 500) : null,
+      })
+      .where(and(
+        eq(publicHolidaysTable.id, holidayId),
+        eq(publicHolidaysTable.organizationId, membership.organizationId),
+      ))
+      .returning();
+    if (!row) return null;
+    await tx.insert(auditEventsTable).values({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "public_holiday.updated",
+      targetType: "public_holiday",
+      targetId: row.id,
+      summary: `Updated public holiday '${row.name}' for ${row.holidayDate}.`,
+      afterJson: JSON.stringify({ date: row.holidayDate, name: row.name, isGazetted: row.isGazetted }),
+      requestId: req.correlationId ?? null,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") ?? null,
+      isDemo: false,
+    });
+    return row;
+  });
+  if (!updated) {
+    res.status(404).json({ error: "Public holiday not found." });
+    return;
+  }
+  res.json({ id: updated.id, date: updated.holidayDate, name: updated.name, sourceUrl: updated.sourceUrl, isGazetted: updated.isGazetted });
+});
+
+router.delete("/leave/public-holidays/:holidayId", async (req, res): Promise<void> => {
+  const membership = await requireRoles(req, res, adminRoles);
+  if (!membership) return;
+  const holidayId = typeof req.params.holidayId === "string" ? req.params.holidayId : "";
+  if (!holidayId) {
+    res.status(400).json({ error: "Public holiday ID is required." });
+    return;
+  }
+  if (!process.env.DATABASE_URL) {
+    const index = DEMO_PUBLIC_HOLIDAYS.findIndex(
+      (item) => item.id === holidayId && item.organizationId === membership.organizationId,
+    );
+    if (index < 0) {
+      res.status(404).json({ error: "Public holiday not found." });
+      return;
+    }
+    const [removed] = DEMO_PUBLIC_HOLIDAYS.splice(index, 1);
+    await recordAuditEvent({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "public_holiday.deleted",
+      targetType: "public_holiday",
+      targetId: holidayId,
+      summary: `Removed public holiday '${removed?.name ?? holidayId}'.`,
+      before: removed,
+      isDemo: true,
+    });
+    res.status(204).send();
+    return;
+  }
+  const removed = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .delete(publicHolidaysTable)
+      .where(and(
+        eq(publicHolidaysTable.id, holidayId),
+        eq(publicHolidaysTable.organizationId, membership.organizationId),
+      ))
+      .returning();
+    if (!row) return null;
+    await tx.insert(auditEventsTable).values({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "public_holiday.deleted",
+      targetType: "public_holiday",
+      targetId: row.id,
+      summary: `Removed public holiday '${row.name}'.`,
+      beforeJson: JSON.stringify({ date: row.holidayDate, name: row.name }),
+      requestId: req.correlationId ?? null,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") ?? null,
+      isDemo: false,
+    });
+    return row;
+  });
+  if (!removed) {
+    res.status(404).json({ error: "Public holiday not found." });
+    return;
+  }
+  res.status(204).send();
+});
 
 router.get("/leave-requests", async (req, res): Promise<void> => {
   const query = ListLeaveRequestsQueryParams.safeParse(req.query);
