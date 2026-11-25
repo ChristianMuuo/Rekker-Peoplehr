@@ -361,6 +361,11 @@ export interface LeaveRequest {
   recommendationStatus?: 'not_assessed' | 'recommended' | 'not_recommended';
   /** @nullable */
   recommendationComment?: string | null;
+  /** @nullable */
+  recommendationByUserId?: string | null;
+  /** @nullable */
+  recommendationAt?: string | null;
+  halfDay?: boolean;
 }
 
 export interface LeaveRequestInput {
