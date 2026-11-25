@@ -473,6 +473,8 @@ async function serializeRequests(
     isDemo: request.isDemo,
     recommendationStatus: (request.recommendationStatus ?? "not_assessed") as "not_assessed" | "recommended" | "not_recommended",
     recommendationComment: request.recommendationComment,
+    recommendationByUserId: request.recommendationByUserId ?? null,
+    recommendationAt: request.recommendationAt?.toISOString() ?? null,
     halfDay: request.halfDay ?? false,
   }));
 }
