@@ -25,8 +25,14 @@ import {
   employeesTable,
   leavePoliciesTable,
   leaveRequestsTable,
+  leaveLedgerTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
+import {
+  entitlementToCalendarDays,
+  recommendLeave,
+  validateKenyaStatutoryFloor,
+} from "../services/leaveEngine";
 import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "./peopleos";
 import {
   countCalendarWorkingDays,
@@ -49,10 +55,120 @@ export interface DemoLeavePolicyItem {
   entitlementDays: number;
   accrualMethod: "annual" | "monthly";
   active: boolean;
+  entitlementQuantity?: number;
+  entitlementUnit?: "days" | "weeks" | "months";
+  needsLegalReview?: boolean;
+  sourceUrl?: string | null;
 }
 
-// Per-organization leave policies start empty by design (never prefilled with statutory amounts).
-export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] = [];
+const KENYA_EMPLOYMENT_ACT_SOURCE =
+  "https://new.kenyalaw.org/akn/ke/act/2007/11/eng%402007-11-09/source.pdf";
+
+const DEFAULT_KENYA_LEAVE_POLICIES = [
+  {
+    code: "annual",
+    name: "Annual Leave",
+    entitlementDays: 21,
+    entitlementQuantity: 21,
+    entitlementUnit: "days" as const,
+    accrualMethod: "monthly" as const,
+    needsLegalReview: true,
+    sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
+    policyMetadataJson: JSON.stringify({ section: "28", note: "At least 21 working days with full pay per 12 consecutive months." }),
+  },
+  {
+    code: "sick",
+    name: "Sick Leave (7 full-pay + 7 half-pay days)",
+    entitlementDays: 14,
+    entitlementQuantity: 14,
+    entitlementUnit: "days" as const,
+    accrualMethod: "annual" as const,
+    needsLegalReview: true,
+    sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
+    policyMetadataJson: JSON.stringify({ section: "30", minimumServiceMonths: 2, fullPayDays: 7, halfPayDays: 7 }),
+  },
+  {
+    code: "maternity",
+    name: "Maternity Leave (3 months)",
+    entitlementDays: 90,
+    entitlementQuantity: 3,
+    entitlementUnit: "months" as const,
+    accrualMethod: "annual" as const,
+    needsLegalReview: true,
+    sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
+    policyMetadataJson: JSON.stringify({ section: "29", paidPercentage: 100 }),
+  },
+  {
+    code: "paternity",
+    name: "Paternity Leave (2 weeks / 14 calendar days)",
+    entitlementDays: 14,
+    entitlementQuantity: 2,
+    entitlementUnit: "weeks" as const,
+    accrualMethod: "annual" as const,
+    needsLegalReview: true,
+    sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
+    policyMetadataJson: JSON.stringify({ section: "29(8)", statutoryUnit: "weeks", calendarDays: 14, workingDayConversionNeedsLegalReview: true }),
+  },
+  {
+    code: "pre-adoptive",
+    name: "Pre-adoptive Leave (1 month)",
+    entitlementDays: 30,
+    entitlementQuantity: 1,
+    entitlementUnit: "months" as const,
+    accrualMethod: "annual" as const,
+    needsLegalReview: true,
+    sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
+    policyMetadataJson: JSON.stringify({ section: "29A", verifyCurrentConsolidatedText: true }),
+  },
+];
+
+export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] =
+  DEFAULT_KENYA_LEAVE_POLICIES.map((policy, index) => ({
+    id: `demo-leave-policy-${index + 1}`,
+    organizationId: "rekker-demo",
+    ...policy,
+    active: true,
+  }));
+
+async function ensureKenyaDefaultPolicies(organizationId: string): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    if (!DEMO_LEAVE_POLICIES.some((policy) => policy.organizationId === organizationId)) {
+      DEMO_LEAVE_POLICIES.push(...DEFAULT_KENYA_LEAVE_POLICIES.map((policy, index) => ({
+        id: `demo-${organizationId}-leave-policy-${index + 1}`,
+        organizationId,
+        ...policy,
+        active: true,
+      })));
+    }
+    return;
+  }
+
+  const existing = await db
+    .select({ id: leavePoliciesTable.id })
+    .from(leavePoliciesTable)
+    .where(eq(leavePoliciesTable.organizationId, organizationId))
+    .limit(1);
+  if (existing.length) return;
+
+  await db.insert(leavePoliciesTable).values(
+    DEFAULT_KENYA_LEAVE_POLICIES.map((policy) => ({
+      organizationId,
+      code: policy.code,
+      name: policy.name,
+      entitlementDays: policy.entitlementDays,
+      entitlementQuantity: policy.entitlementQuantity,
+      entitlementUnit: policy.entitlementUnit,
+      jurisdiction: "KE",
+      effectiveFrom: new Date().toISOString().slice(0, 10),
+      sourceUrl: policy.sourceUrl,
+      needsLegalReview: policy.needsLegalReview,
+      policyMetadataJson: policy.policyMetadataJson,
+      accrualMethod: policy.accrualMethod,
+      active: true,
+      createdByUserId: "system:kenya-default-policy-pack",
+    })),
+  ).onConflictDoNothing();
+}
 const approverRoles = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrManager,
@@ -80,6 +196,16 @@ export interface DemoLeaveItem {
   submittedAt: Date;
   decidedAt: Date | null;
   isDemo: boolean;
+  recommendationStatus?: "not_assessed" | "recommended" | "not_recommended";
+  recommendationComment?: string | null;
+  halfDay?: boolean;
+}
+
+function demoDateOffset(offsetDays: number, hour = 9): Date {
+  const value = new Date();
+  value.setUTCHours(hour, 0, 0, 0);
+  value.setUTCDate(value.getUTCDate() + offsetDays);
+  return value;
 }
 
 export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
@@ -88,15 +214,15 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     employeeId: "10000000-0000-4000-8000-000000000004",
     employeeName: "Wanjiku Kimani",
     leaveType: "annual",
-    startDate: new Date("2026-03-02"),
-    endDate: new Date("2026-03-13"),
+    startDate: demoDateOffset(-60),
+    endDate: demoDateOffset(-49),
     days: 10,
     reason: "Annual rest and family leave",
     status: "approved",
     approverId: "10000000-0000-4000-8000-000000000007",
     decisionComment: "Approved. Fleet coverage confirmed.",
-    submittedAt: new Date("2026-02-15T08:30:00Z"),
-    decidedAt: new Date("2026-02-16T10:00:00Z"),
+    submittedAt: demoDateOffset(-75, 8),
+    decidedAt: demoDateOffset(-74, 10),
     isDemo: true,
   },
   {
@@ -104,14 +230,14 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     employeeId: "10000000-0000-4000-8000-000000000006",
     employeeName: "Brian Kiprotich",
     leaveType: "annual",
-    startDate: new Date("2026-03-20"),
-    endDate: new Date("2026-03-27"),
+    startDate: demoDateOffset(14),
+    endDate: demoDateOffset(21),
     days: 6,
     reason: "Professional certification exam study period",
     status: "pending",
     approverId: null,
     decisionComment: null,
-    submittedAt: new Date("2026-03-01T11:45:00Z"),
+    submittedAt: demoDateOffset(-3, 11),
     decidedAt: null,
     isDemo: true,
   },
@@ -119,15 +245,15 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     id: "leave-003",
     employeeId: "10000000-0000-4000-8000-000000000002",
     employeeName: "Mwangi Kariuki",
-    leaveType: "parental",
-    startDate: new Date("2026-04-06"),
-    endDate: new Date("2026-04-17"),
+    leaveType: "paternity",
+    startDate: demoDateOffset(30),
+    endDate: demoDateOffset(43),
     days: 10,
-    reason: "Paternity leave under Employment Act 2007",
+    reason: "Paternity leave: statutory entitlement is 2 weeks (14 calendar days); work-schedule conversion is subject to legal review.",
     status: "pending",
     approverId: null,
     decisionComment: null,
-    submittedAt: new Date("2026-03-04T09:15:00Z"),
+    submittedAt: demoDateOffset(-2, 9),
     decidedAt: null,
     isDemo: true,
   },
@@ -237,6 +363,8 @@ async function serializeRequests(
     submittedAt: request.submittedAt.toISOString(),
     decidedAt: request.decidedAt?.toISOString() ?? null,
     isDemo: request.isDemo,
+    recommendationStatus: (request.recommendationStatus ?? "not_assessed") as "not_assessed" | "recommended" | "not_recommended",
+    recommendationComment: request.recommendationComment,
   }));
 }
 
