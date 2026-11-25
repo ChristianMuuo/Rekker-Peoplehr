@@ -1263,17 +1263,17 @@ function SettingsPage() {
   const securityQuery = useQuery({
     queryKey: ['security-status'],
     queryFn: () => apiGet<any>('/api/security/status'),
-    enabled: canInspectDiagnostics,
+    enabled: canInspectDiagnostics && !isDiagnosticsView,
   });
   const readyzQuery = useQuery({
     queryKey: ['system-readyz'],
     queryFn: () => apiGet<ReadyzPayload>('/api/readyz'),
-    enabled: canInspectDiagnostics,
+    enabled: canInspectDiagnostics && isDiagnosticsView,
   });
   const diagnosticsQuery = useQuery({
     queryKey: ['admin-diagnostics'],
     queryFn: () => apiGet<AdminDiagnosticsPayload>('/api/admin/diagnostics'),
-    enabled: canInspectDiagnostics,
+    enabled: canInspectDiagnostics && isDiagnosticsView,
   });
 
   if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading configuration and diagnostics" />;
@@ -1292,7 +1292,7 @@ function SettingsPage() {
       eyebrow={isDiagnosticsView ? 'Operations / System health' : 'Workspace / Configuration'}
       title={isDiagnosticsView ? 'System Diagnostics' : 'Workspace Settings'}
       description={isDiagnosticsView ? 'Live API, database, authentication and integration health checks for administrators.' : 'Review your workspace access profile, security posture and connected service configuration.'}
-      action={canInspectDiagnostics ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
+      action={canInspectDiagnostics && isDiagnosticsView ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
     />
     {!canInspectDiagnostics ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect workspace configuration and system diagnostics." /></div> : <>
       {isDiagnosticsView && <section className="surface p-5 md:p-7" data-testid="section-system-diagnostics">
