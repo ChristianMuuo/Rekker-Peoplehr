@@ -1143,6 +1143,196 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
   res.json(ListLeaveBalancesResponse.parse(balances));
 });
 
+router.get("/leave-preview", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const employeeId = queryText(req.query.employeeId, 80);
+  const leaveType = queryText(req.query.leaveType, 64);
+  const startDate = queryText(req.query.startDate, 10);
+  const endDate = queryText(req.query.endDate, 10);
+  const halfDay = req.query.halfDay === "true";
+  const validDate = (value: string | undefined) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)));
+  if (!employeeId || !leaveType || !validDate(startDate) || !validDate(endDate)) {
+    res.status(400).json({ error: "employeeId, leaveType, startDate and endDate are required; dates must use YYYY-MM-DD." });
+    return;
+  }
+  if (endDate! < startDate!) {
+    res.status(400).json({ error: "End date must be on or after the start date." });
+    return;
+  }
+
+  let employee: { id: string; firstName: string; lastName: string; startDate: string; managerId?: string | null; departmentId?: string | null } | undefined;
+  let policy: {
+    code: string;
+    name: string;
+    entitlementDays: number;
+    entitlementWeeks: number;
+    entitlementMonths: number;
+    minimumServiceMonths: number;
+    certificateRequired: boolean;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+    active: boolean;
+  } | undefined;
+
+  if (!process.env.DATABASE_URL) {
+    ensureDemoKenyaDefaultPolicies(membership.organizationId);
+    ensureDemoLeaveLedger(membership.organizationId);
+    const record = DEMO_EMPLOYEES_LIST.find((item) => item.id === employeeId);
+    if (record) employee = { ...record, id: record.id };
+    const found = DEMO_LEAVE_POLICIES.find((item) =>
+      item.organizationId === membership.organizationId && item.code === leaveType && item.active);
+    if (found) policy = found;
+  } else {
+    const [record] = await db.select({
+      id: employeesTable.id,
+      firstName: employeesTable.firstName,
+      lastName: employeesTable.lastName,
+      startDate: employeesTable.startDate,
+      managerId: employeesTable.managerId,
+      departmentId: employeesTable.departmentId,
+    }).from(employeesTable).where(and(
+      eq(employeesTable.id, employeeId),
+      eq(employeesTable.organizationId, membership.organizationId),
+    )).limit(1);
+    if (record) employee = record;
+    const [found] = await db.select({
+      code: leavePoliciesTable.code,
+      name: leavePoliciesTable.name,
+      entitlementDays: leavePoliciesTable.entitlementDays,
+      entitlementWeeks: leavePoliciesTable.entitlementWeeks,
+      entitlementMonths: leavePoliciesTable.entitlementMonths,
+      minimumServiceMonths: leavePoliciesTable.minimumServiceMonths,
+      certificateRequired: leavePoliciesTable.certificateRequired,
+      effectiveFrom: leavePoliciesTable.effectiveFrom,
+      effectiveTo: leavePoliciesTable.effectiveTo,
+      active: leavePoliciesTable.active,
+    }).from(leavePoliciesTable).where(and(
+      eq(leavePoliciesTable.organizationId, membership.organizationId),
+      eq(leavePoliciesTable.code, leaveType),
+      eq(leavePoliciesTable.active, true),
+      lte(leavePoliciesTable.effectiveFrom, startDate!),
+      or(isNull(leavePoliciesTable.effectiveTo), gte(leavePoliciesTable.effectiveTo, startDate!)),
+    )).limit(1);
+    if (found) policy = found;
+  }
+
+  if (!employee) {
+    res.status(404).json({ error: "Employee not found in this organization." });
+    return;
+  }
+  if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId !== employee.id) {
+    res.status(403).json({ error: "Employees may only preview leave for themselves." });
+    return;
+  }
+  if (membership.role === PEOPLEOS_ROLES.departmentManager &&
+    membership.employeeId !== employee.id &&
+    membership.employeeId !== employee.managerId) {
+    res.status(403).json({ error: "Managers may only preview leave for themselves or direct reports." });
+    return;
+  }
+  if (!policy) {
+    res.status(400).json({ error: "No active policy is effective for the selected leave start date." });
+    return;
+  }
+
+  const calendar = await resolveEffectiveWorkCalendar(membership.organizationId);
+  const computed = countCalendarWorkingDays(startDate!, endDate!, calendar);
+  if (computed.workingDays < 1) {
+    res.status(422).json({ error: "The selected date range contains no scheduled working days." });
+    return;
+  }
+  let quarterDays: number;
+  try {
+    quarterDays = requestQuarterDays(computed.workingDays, halfDay);
+  } catch (error) {
+    res.status(422).json({ error: error instanceof Error ? error.message : "Invalid leave duration." });
+    return;
+  }
+  const requestedDays = daysFromQuarterDays(quarterDays);
+  const serviceMonths = completedServiceMonths(dateOnly(employee.startDate), startDate!);
+  const eligible = serviceMonths >= policy.minimumServiceMonths;
+  const statutoryUnit = policy.entitlementWeeks > 0 ? "weeks" : policy.entitlementMonths > 0 ? "months" : "days";
+  const statutoryEntitlementLabel = policy.entitlementWeeks > 0
+    ? `${policy.entitlementWeeks} weeks (14 calendar days)`
+    : policy.entitlementMonths > 0
+      ? `${policy.entitlementMonths} month(s)`
+      : `${policy.entitlementDays} working days`;
+  const warnings: string[] = [];
+  if (!eligible) warnings.push(`${policy.name} requires ${policy.minimumServiceMonths} completed month(s) of service.`);
+  if (policy.certificateRequired) warnings.push("A certificate reference is required before submission.");
+  if (policy.code === "paternity") {
+    const max = paternityWorkingDayEquivalent(policy.entitlementWeeks, calendar.workdays.length);
+    if (requestedDays > max) warnings.push(`This exceeds 2 weeks (${max} working days on the configured schedule). The conversion is subject to legal review.`);
+    warnings.push("Statutory entitlement is stored in weeks; working-day conversion is flagged for legal review.");
+  }
+
+  let availableDays: number | null = null;
+  if (policy.code === "annual") {
+    const year = Number(startDate!.slice(0, 4));
+    if (!process.env.DATABASE_URL) {
+      const quarterBalance = DEMO_LEAVE_LEDGER.filter((entry) =>
+        entry.organizationId === membership.organizationId &&
+        entry.employeeId === employee!.id &&
+        entry.leaveType === policy!.code &&
+        entry.effectiveDate >= `${year}-01-01` &&
+        entry.effectiveDate <= `${year}-12-31`)
+        .reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+      const reserved = DEMO_LEAVE_STORE.filter((request) =>
+        request.employeeId === employee!.id &&
+        request.leaveType === policy!.code &&
+        ["pending", "recommended"].includes(request.status) &&
+        request.startDate.getUTCFullYear() === year)
+        .reduce((total, request) => total + Math.round((request.halfDay ? 0.5 : request.days) * 4), 0);
+      availableDays = daysFromQuarterDays(quarterBalance - reserved);
+    } else {
+      const [stored] = await db.select({ quantity: leaveLedgerTable.quantityQuarterDays })
+        .from(leaveLedgerTable).where(and(
+          eq(leaveLedgerTable.organizationId, membership.organizationId),
+          eq(leaveLedgerTable.employeeId, employee.id),
+          eq(leaveLedgerTable.leaveType, policy.code),
+          gte(leaveLedgerTable.effectiveDate, `${year}-01-01`),
+          lte(leaveLedgerTable.effectiveDate, `${year}-12-31`),
+        )).then(async (rows) => [{ quantity: rows.reduce((total, row) => total + row.quantity, 0) }]);
+      const pendingRows = await db.select({
+        days: leaveRequestsTable.days,
+        halfDay: leaveRequestsTable.halfDay,
+      }).from(leaveRequestsTable).where(and(
+        eq(leaveRequestsTable.organizationId, membership.organizationId),
+        eq(leaveRequestsTable.employeeId, employee.id),
+        eq(leaveRequestsTable.leaveType, policy.code),
+        inArray(leaveRequestsTable.status, ["pending", "recommended"]),
+        gte(leaveRequestsTable.startDate, `${year}-01-01`),
+        lte(leaveRequestsTable.startDate, `${year}-12-31`),
+      ));
+      const reservedQuarterDays = pendingRows.reduce((total, row) => total + (row.halfDay ? 2 : row.days * 4), 0);
+      availableDays = daysFromQuarterDays(stored?.quantity ?? 0 - reservedQuarterDays);
+    }
+    if (availableDays < requestedDays) warnings.push(`Only ${Math.max(0, availableDays)} annual leave day(s) are available before this request.`);
+  }
+
+  res.json({
+    employeeId: employee.id,
+    leaveType: policy.code,
+    leaveTypeName: policy.name,
+    startDate,
+    endDate,
+    workingDays: computed.workingDays,
+    excludedPublicHolidays: computed.excludedHolidayCount,
+    halfDay,
+    requestedDays,
+    statutoryUnit,
+    statutoryEntitlementLabel,
+    availableDays,
+    eligible,
+    serviceMonths,
+    minimumServiceMonths: policy.minimumServiceMonths,
+    certificateRequired: policy.certificateRequired,
+    warnings,
+    needsLegalReview: true,
+  });
+});
+
 router.post("/leave-requests", async (req, res): Promise<void> => {
   const body = CreateLeaveRequestBody.safeParse(req.body);
   if (!body.success) {
