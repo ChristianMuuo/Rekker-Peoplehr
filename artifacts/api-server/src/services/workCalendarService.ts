@@ -90,6 +90,8 @@ export async function resolveEffectiveWorkCalendar(
       name: def.name,
       timezone: def.timezone || DEFAULT_ORG_TIMEZONE,
       workdays: JSON.parse(def.workdaysJson || "[1,2,3,4,5]") as number[],
+      halfWorkdays: JSON.parse(def.halfWorkdaysJson || "[]") as number[],
+      weeklyWorkdays: (JSON.parse(def.workdaysJson || "[1,2,3,4,5]") as number[]).length - (JSON.parse(def.halfWorkdaysJson || "[]") as number[]).length * 0.5,
       holidays: JSON.parse(def.holidaysJson || "[]") as Array<{
         date: string;
         name: string;
@@ -114,6 +116,8 @@ export async function resolveEffectiveWorkCalendar(
     name: "Organization Default Calendar",
     timezone: orgTz,
     workdays: [1, 2, 3, 4, 5],
+    halfWorkdays: [] as number[],
+    weeklyWorkdays: 5,
     holidays: [] as Array<{ date: string; name: string }>,
     shiftStartTime: "08:00",
     shiftEndTime: "17:00",
@@ -128,6 +132,7 @@ export async function upsertWorkCalendar(params: {
   location?: string | null;
   timezone: string;
   workdays: number[];
+  halfWorkdays?: number[];
   holidays: Array<{ date: string; name: string }>;
   shiftStartTime: string;
   shiftEndTime: string;
@@ -142,6 +147,9 @@ export async function upsertWorkCalendar(params: {
 
   const cleanWorkdays = [...new Set(params.workdays)].filter(
     (d) => Number.isInteger(d) && d >= 0 && d <= 6,
+  );
+  const cleanHalfWorkdays = [...new Set(params.halfWorkdays ?? [])].filter(
+    (d) => Number.isInteger(d) && d >= 0 && d <= 6 && cleanWorkdays.includes(d),
   );
   if (cleanWorkdays.length === 0) {
     throw new Error("At least one working day of the week must be configured.");
@@ -164,6 +172,7 @@ export async function upsertWorkCalendar(params: {
           location: params.location ? sanitizeText(params.location, 120) : null,
           timezone: params.timezone,
           workdaysJson: JSON.stringify(cleanWorkdays),
+          halfWorkdaysJson: JSON.stringify(cleanHalfWorkdays),
           holidaysJson: JSON.stringify(params.holidays),
           shiftStartTime: params.shiftStartTime,
           shiftEndTime: params.shiftEndTime,
