@@ -27,7 +27,7 @@ export interface LeaveAdvisory {
 }
 
 const STATUTORY_SOURCE =
-  "https://new.kenyalaw.org/akn/ke/act/2007/11/eng%402007-11-09/source.pdf";
+  "https://new.kenyalaw.org/akn/ke/act/2007/11/eng%402024-04-26/source.pdf";
 
 /**
  * Entitlements are stored in their statutory unit. This helper only converts
@@ -142,6 +142,19 @@ export function recommendLeave(input: LeaveAdvisoryInput): LeaveAdvisory {
     inputs: { ...input },
     label: "Rule-based advisory",
   };
+}
+
+/**
+ * Employment Act, 2007 section 28(1)(b): on termination after at least
+ * two consecutive completed months in the leave-earning period, annual leave
+ * is prorated at 1.75 days for each completed month in that period.
+ */
+export function calculateAnnualLeaveProRataOnExit(completedMonthsInLeavePeriod: number): number {
+  if (!Number.isInteger(completedMonthsInLeavePeriod) || completedMonthsInLeavePeriod < 0) {
+    throw new RangeError("Completed leave-earning months must be a non-negative integer.");
+  }
+  if (completedMonthsInLeavePeriod < 2) return 0;
+  return Math.round(completedMonthsInLeavePeriod * 1.75 * 100) / 100;
 }
 
 export function sumLeaveLedgerDays(entries: readonly { quantityDays: number }[]): number {
