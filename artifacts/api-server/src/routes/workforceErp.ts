@@ -478,7 +478,10 @@ router.get("/workforce-erp/sales-force", async (req: Request, res: Response) => 
   const membership = await requireRoles(req, res, erpOpsReaders);
   if (!membership) return;
 
-  const period = typeof req.query.period === "string" ? req.query.period : "2026-03";
+  const now = new Date();
+  const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const currentDefaultPeriod = `${previousMonth.getUTCFullYear()}-${String(previousMonth.getUTCMonth() + 1).padStart(2, "0")}`;
+  const period = typeof req.query.period === "string" ? req.query.period : currentDefaultPeriod;
   const result = await listSalesForce(membership.organizationId, period);
   res.json(result);
 });
