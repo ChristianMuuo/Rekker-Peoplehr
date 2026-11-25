@@ -42,6 +42,9 @@ export const OrganizationRole = {
 } as const;
 
 export interface AuthContext {
+  userId: string;
+  /** @nullable */
+  employeeId?: string | null;
   role: OrganizationRole;
   displayName: string;
   organizationName: string;
