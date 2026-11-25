@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Link, Redirect, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { FEATURE_REGISTRY, featureStatusLabel, type FeatureId } from '@/data/featureRegistry';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
@@ -193,31 +194,40 @@ function Home() {
   </div>;
 }
 
-type NavItem = { label: string; href: string; icon: typeof Users; permission?: 'canViewAudit' | 'canViewPayroll' | 'canManageSettings' };
+type NavItem = {
+  label: string;
+  href: string;
+  icon: typeof Users;
+  featureId: FeatureId;
+  permission?: 'canViewAudit' | 'canViewPayroll' | 'canManageSettings';
+};
 const primaryNav: NavItem[] = [
-  { label: 'Overview', href: '/overview', icon: LayoutDashboard },
-  { label: 'My workspace', href: '/self-service', icon: UserCheck },
-  { label: 'People', href: '/people', icon: Users },
-  { label: 'Organization', href: '/organization', icon: GitBranch },
-  { label: 'Leave', href: '/leave', icon: CalendarDays },
-  { label: 'Approvals', href: '/approvals', icon: BadgeCheck },
+  { label: FEATURE_REGISTRY.overview.label, href: '/overview', icon: LayoutDashboard, featureId: 'overview' },
+  { label: FEATURE_REGISTRY.selfService.label, href: '/self-service', icon: UserCheck, featureId: 'selfService' },
+  { label: FEATURE_REGISTRY.people.label, href: '/people', icon: Users, featureId: 'people' },
+  { label: FEATURE_REGISTRY.organization.label, href: '/organization', icon: GitBranch, featureId: 'organization' },
+  { label: FEATURE_REGISTRY.leave.label, href: '/leave', icon: CalendarDays, featureId: 'leave' },
+  { label: FEATURE_REGISTRY.approvals.label, href: '/approvals', icon: BadgeCheck, featureId: 'approvals' },
 ];
 const workNav: NavItem[] = [
-  { label: 'Recruitment', href: '/recruitment', icon: BriefcaseBusiness },
-  { label: 'Onboarding', href: '/onboarding', icon: ArrowRight },
-  { label: 'Attendance', href: '/attendance', icon: Clock3 },
-  { label: 'Payroll', href: '/payroll', icon: Activity, permission: 'canViewPayroll' },
-  { label: 'Expenses', href: '/expenses', icon: Receipt },
-  { label: 'Company assets', href: '/assets', icon: Laptop },
-  { label: 'Performance', href: '/performance', icon: ArrowUpRight },
-  { label: 'Learning', href: '/learning', icon: FileText },
-  { label: 'Documents', href: '/documents', icon: FileText },
-  { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
-  { label: 'Reports & Analytics', href: '/reports', icon: ArrowDownRight },
+  { label: FEATURE_REGISTRY.recruitment.label, href: '/recruitment', icon: BriefcaseBusiness, featureId: 'recruitment' },
+  { label: FEATURE_REGISTRY.onboarding.label, href: '/onboarding', icon: ArrowRight, featureId: 'onboarding' },
+  { label: FEATURE_REGISTRY.attendance.label, href: '/attendance', icon: Clock3, featureId: 'attendance' },
+  { label: FEATURE_REGISTRY.payroll.label, href: '/payroll', icon: Activity, featureId: 'payroll', permission: 'canViewPayroll' },
+  { label: FEATURE_REGISTRY.expenses.label, href: '/expenses', icon: Receipt, featureId: 'expenses' },
+  { label: FEATURE_REGISTRY.assets.label, href: '/assets', icon: Laptop, featureId: 'assets' },
+  { label: FEATURE_REGISTRY.performance.label, href: '/performance', icon: ArrowUpRight, featureId: 'performance' },
+  { label: FEATURE_REGISTRY.learning.label, href: '/learning', icon: FileText, featureId: 'learning' },
+  { label: FEATURE_REGISTRY.documents.label, href: '/documents', icon: FileText, featureId: 'documents' },
+  { label: FEATURE_REGISTRY.reports.label, href: '/reports', icon: ArrowDownRight, featureId: 'reports' },
 ];
 const workforceErpNav: NavItem[] = [
-  { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
-  { label: 'HR Cases', href: '/hr-cases', icon: ShieldAlert },
+  { label: FEATURE_REGISTRY.hrCases.label, href: '/hr-cases', icon: ShieldAlert, featureId: 'hrCases' },
+];
+const roadmapNav: NavItem[] = [
+  { label: FEATURE_REGISTRY.workforceErp.label, href: '/workforce-erp', icon: Factory, featureId: 'workforceErp' },
+  { label: FEATURE_REGISTRY.mlIntelligence.label, href: '/ml', icon: BrainCircuit, featureId: 'mlIntelligence' },
+  { label: FEATURE_REGISTRY.agentHub.label, href: '/agent-hub', icon: Sparkles, featureId: 'agentHub' },
 ];
 
 function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
@@ -276,7 +286,15 @@ function AppFrame() {
   // On Vercel static deployments, the placeholder fills in immediately.
   if (!auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
   const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings || auth.canViewAudit ? [{ label: 'Diagnostics', href: '/diagnostics', icon: Activity }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const nav: NavItem[] = [
+    ...primaryNav,
+    ...visibleWorkNav,
+    ...workforceErpNav,
+    ...roadmapNav,
+    ...(auth.canViewAudit ? [{ label: FEATURE_REGISTRY.audit.label, href: '/audit', icon: ShieldCheck, featureId: 'audit' as const, permission: 'canViewAudit' as const }] : []),
+    ...(auth.canManageSettings || auth.canViewAudit ? [{ label: FEATURE_REGISTRY.diagnostics.label, href: '/diagnostics', icon: Activity, featureId: 'diagnostics' as const }] : []),
+    ...(auth.canManageSettings ? [{ label: FEATURE_REGISTRY.settings.label, href: '/settings', icon: Settings2, featureId: 'settings' as const, permission: 'canManageSettings' as const }] : []),
+  ];
 
   const pendingApprovals = Array.isArray(approvalsQuery.data) ? approvalsQuery.data : [];
   const pendingAiApprovals = (aiApprovalsQuery.data?.items ?? []).filter(a => a.status === 'pending');
@@ -288,10 +306,14 @@ function AppFrame() {
 
   const renderNav = (items: NavItem[]) => items.map(item => {
     const Icon = item.icon;
+    const feature = FEATURE_REGISTRY[item.featureId];
+    const active = location === item.href || (item.href === '/people' && location.startsWith('/people/'));
     return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} data-testid={`link-nav-${item.href.slice(1)}`}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${location === item.href || (item.href === '/people' && location.startsWith('/people/')) ? 'bg-[#f9e9e6] text-[#a91919]' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950'}`}>
-      <Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>
-      {item.href === '/approvals' && <span className="ml-auto rounded-full bg-[#f5d8d4] px-2 py-0.5 text-[10px] text-[#a91919]" data-testid="badge-approvals-nav">{notificationCount > 0 ? notificationCount : 'Open'}</span>}
+      title={feature.description}
+      className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${active ? 'bg-[#f9e9e6] text-[#a91919]' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950'}`}>
+      <Icon size={17} strokeWidth={1.8} /><span className="min-w-0 flex-1">{item.label}</span>
+      <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-stone-500" data-testid={`badge-feature-${item.featureId}`}>{featureStatusLabel(feature.status)}</span>
+      {item.href === '/approvals' && <span className="rounded-full bg-[#f5d8d4] px-2 py-0.5 text-[10px] text-[#a91919]" data-testid="badge-approvals-nav">{notificationCount > 0 ? notificationCount : 'Open'}</span>}
     </Link>;
   });
   return <div className="app-shell">
@@ -310,8 +332,9 @@ function AppFrame() {
         </div>
         <div className="mt-6 flex-1 overflow-y-auto px-3">
           <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">People operations</div>{renderNav(visibleWorkNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workforce ERP &amp; Relations</div>{renderNav(workforceErpNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length))}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workforce &amp; Relations</div>{renderNav(workforceErpNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Roadmap previews</div>{renderNav(roadmapNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length + roadmapNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
           <div className="mb-2 grid grid-cols-2 gap-1.5">
