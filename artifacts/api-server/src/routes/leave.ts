@@ -2214,6 +2214,151 @@ router.post(
   },
 );
 
+router.post(
+  "/leave-requests/:requestId/cancel",
+  async (req, res): Promise<void> => {
+    const params = DecideLeaveRequestParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const membership = await ensureMembership(req, res);
+    if (!membership) return;
+    const isHrAdmin = adminRoles.includes(membership.role);
+
+    if (!process.env.DATABASE_URL) {
+      const request = DEMO_LEAVE_STORE.find((item) => item.id === params.data.requestId);
+      if (!request) {
+        res.status(404).json({ error: "Leave request not found." });
+        return;
+      }
+      if (request.status !== "pending" && request.status !== "approved") {
+        res.status(409).json({ error: "Only pending or approved leave can be cancelled." });
+        return;
+      }
+      if (
+        !isHrAdmin &&
+        request.createdByUserId !== membership.userId &&
+        request.employeeId !== membership.employeeId
+      ) {
+        res.status(403).json({ error: "You can only cancel your own leave request." });
+        return;
+      }
+      request.status = "cancelled";
+      request.decidedAt = new Date();
+      request.decisionComment = "Cancelled by employee or authorized HR user.";
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "leave_request_cancelled",
+        targetType: "leave_request",
+        targetId: request.id,
+        summary: "A leave request was cancelled; demo balances were restored.",
+        correlationId: req.correlationId,
+        critical: true,
+        isDemo: true,
+      });
+      res.json(DecideLeaveRequestResponse.parse(request));
+      return;
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [request] = await tx
+        .select()
+        .from(leaveRequestsTable)
+        .where(
+          and(
+            eq(leaveRequestsTable.id, params.data.requestId),
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!request) return { kind: "missing" as const };
+      if (request.status !== "pending" && request.status !== "approved") {
+        return { kind: "not_cancellable" as const };
+      }
+      if (
+        !isHrAdmin &&
+        request.createdByUserId !== membership.userId &&
+        request.employeeId !== membership.employeeId
+      ) {
+        return { kind: "forbidden" as const };
+      }
+
+      if (request.status === "approved") {
+        const yearlyDays = businessDaysByYear(request.startDate, request.endDate);
+        for (const [leaveYear, fullDays] of yearlyDays) {
+          const quantityDays =
+            fullDays - (request.halfDay && request.startDate.slice(0, 4) === String(leaveYear) ? 0.5 : 0);
+          if (quantityDays <= 0) continue;
+          await tx
+            .insert(leaveLedgerTable)
+            .values({
+              organizationId: membership.organizationId,
+              employeeId: request.employeeId,
+              leaveType: request.leaveType,
+              leaveYear,
+              leaveRequestId: request.id,
+              entryType: "reversal",
+              quantityDays,
+              sourceKey: `cancellation:${request.id}:${leaveYear}`,
+              description: `Reversal of approved leave deduction for ${leaveYear}`,
+              createdByUserId: membership.userId,
+              isDemo: request.isDemo,
+            })
+            .onConflictDoNothing();
+        }
+      }
+
+      const [updated] = await tx
+        .update(leaveRequestsTable)
+        .set({
+          status: "cancelled",
+          decidedAt: new Date(),
+          decisionComment: "Cancelled by employee or authorized HR user.",
+        })
+        .where(
+          and(
+            eq(leaveRequestsTable.id, request.id),
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
+            eq(leaveRequestsTable.status, request.status),
+          ),
+        )
+        .returning();
+      if (!updated) return { kind: "not_cancellable" as const };
+
+      await tx.insert(auditEventsTable).values({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "leave_request_cancelled",
+        targetType: "leave_request",
+        targetId: request.id,
+        summary: "A leave request was cancelled and any approved deduction was reversed.",
+        isDemo: request.isDemo,
+      });
+      return { kind: "cancelled" as const, request: updated };
+    });
+
+    if (result.kind === "missing") {
+      res.status(404).json({ error: "Leave request not found." });
+      return;
+    }
+    if (result.kind === "not_cancellable") {
+      res.status(409).json({ error: "Only pending or approved leave can be cancelled." });
+      return;
+    }
+    if (result.kind === "forbidden") {
+      res.status(403).json({ error: "You can only cancel your own leave request." });
+      return;
+    }
+    const [response] = await serializeRequests(membership.organizationId, [result.request]);
+    res.json(DecideLeaveRequestResponse.parse(response));
+  },
+);
+
 router.get("/leave/department-coverage", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
