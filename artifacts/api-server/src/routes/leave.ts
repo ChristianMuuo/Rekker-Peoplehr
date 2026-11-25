@@ -1231,8 +1231,14 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     endDate,
     effectiveCalendar,
   );
-  const days = calendarDaysResult.workingDays;
-  if (days < 1) {
+  if (input.halfDay && startDate !== endDate) {
+    res.status(400).json({ error: "Half-day leave must be requested for one working date only." });
+    return;
+  }
+  const days = Math.round(
+    (calendarDaysResult.workingDays - (input.halfDay ? 0.5 : 0)) * 100,
+  ) / 100;
+  if (calendarDaysResult.workingDays < 1 || days <= 0) {
     res.status(400).json({
       error:
         "Choose at least one working day (excluding configured rest days and public holidays).",
@@ -1318,6 +1324,9 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       submittedAt: new Date(),
       decidedAt: null,
       isDemo: true,
+      halfDay: input.halfDay ?? false,
+      recommendationStatus: "not_assessed",
+      recommendationComment: null,
     };
     DEMO_LEAVE_STORE.unshift(newReq);
     await recordAuditEvent({
@@ -1334,6 +1343,10 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     return;
   }
 
+  if (startDate < new Date().toISOString().slice(0, 10)) {
+    res.status(400).json({ error: "Leave requests cannot start in the past." });
+    return;
+  }
   const [employee] = await db
     .select()
     .from(employeesTable)
@@ -1368,6 +1381,32 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Leave requests in demo mode must use synthetic employee records." });
     return;
   }
+  const [preflightPolicy] = await db
+    .select()
+    .from(leavePoliciesTable)
+    .where(
+      and(
+        eq(leavePoliciesTable.organizationId, organization.id),
+        eq(leavePoliciesTable.code, input.leaveType),
+        eq(leavePoliciesTable.active, true),
+      ),
+    )
+    .limit(1);
+  if (!preflightPolicy) {
+    res.status(400).json({ error: "Choose an active leave type configured by your organization." });
+    return;
+  }
+  const completedMonths = completedServiceMonths(employee.startDate, new Date());
+  if (preflightPolicy.code === "sick" && completedMonths < 2) {
+    res.status(422).json({
+      error: "Sick leave under Employment Act, 2007 section 30 is available after two consecutive months of service.",
+      code: "SICK_LEAVE_MINIMUM_SERVICE_NOT_MET",
+      sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
+    });
+    return;
+  }
+  await ensureAccrualLedgerEntries(employee, preflightPolicy, new Date());
+
   const requestResult = await db.transaction(async (tx) => {
     const [lockedEmployee] = await tx
       .select({ id: employeesTable.id })
@@ -1425,24 +1464,54 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       );
     const requestYearDays = businessDaysByYear(startDate, endDate);
     for (const [year, requestDaysForYear] of requestYearDays) {
-      const leaveYearStart = `${year}-01-01`;
-      const now = new Date();
-      const requestedStart = new Date(`${startDate}T00:00:00.000Z`);
-      const asOf =
-        startDate.slice(0, 4) === String(year)
-          ? new Date(Math.max(requestedStart.getTime(), now.getTime()))
-          : new Date(`${leaveYearStart}T00:00:00.000Z`);
-      const accrued = accruedDaysForYear(policy, year, asOf);
-      const reservedDays = existingRequests.reduce(
+      const pendingReserved = existingRequests.reduce(
         (total, request) =>
-          total + businessDaysForYear(request.startDate, request.endDate, year),
+          total +
+          Math.max(
+            0,
+            businessDaysForYear(request.startDate, request.endDate, year) -
+              (request.halfDay && request.startDate.slice(0, 4) === String(year) ? 0.5 : 0),
+          ),
         0,
       );
-      if (reservedDays + requestDaysForYear > accrued) {
+
+      const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
+      let availableDays = 0;
+      if (eventBased) {
+        const usageEntries = await tx
+          .select({ quantityDays: leaveLedgerTable.quantityDays })
+          .from(leaveLedgerTable)
+          .where(
+            and(
+              eq(leaveLedgerTable.organizationId, organization.id),
+              eq(leaveLedgerTable.employeeId, employee.id),
+              eq(leaveLedgerTable.leaveType, policy.code),
+            ),
+          );
+        availableDays =
+          policy.entitlementDays -
+          Math.max(0, -sumLeaveLedgerDays(usageEntries));
+      } else {
+        const entries = await tx
+          .select({ quantityDays: leaveLedgerTable.quantityDays })
+          .from(leaveLedgerTable)
+          .where(
+            and(
+              eq(leaveLedgerTable.organizationId, organization.id),
+              eq(leaveLedgerTable.employeeId, employee.id),
+              eq(leaveLedgerTable.leaveType, policy.code),
+              eq(leaveLedgerTable.leaveYear, year),
+            ),
+          );
+        availableDays = sumLeaveLedgerDays(entries);
+      }
+
+      const remainingDays = Math.round((availableDays - pendingReserved) * 100) / 100;
+      if (pendingReserved + requestDaysForYear > availableDays || requestDaysForYear > policy.entitlementDays) {
         return {
           kind: "insufficient_balance" as const,
           year,
-          remainingDays: accrued - reservedDays,
+          remainingDays,
           leaveTypeName: policy.name,
         };
       }
@@ -1457,6 +1526,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         startDate,
         endDate,
         days,
+        halfDay: input.halfDay ?? false,
         reason: input.reason,
         status: "pending",
         createdByUserId: membership.userId,
