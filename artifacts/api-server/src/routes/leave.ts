@@ -70,6 +70,8 @@ export interface DemoLeavePolicyItem {
   certificateRequired: boolean;
   paidPercentage: number;
   jurisdiction: "KE";
+  effectiveFrom: string;
+  effectiveTo: string | null;
   sourceUrl: string;
   verifiedOn: string;
   needsLegalReview: boolean;
@@ -117,6 +119,8 @@ function ensureDemoKenyaDefaultPolicies(organizationId: string): void {
       certificateRequired: policy.certificateRequired,
       paidPercentage: policy.paidPercentage,
       jurisdiction: "KE",
+      effectiveFrom: `${new Date().getUTCFullYear()}-01-01`,
+      effectiveTo: null,
       sourceUrl: policy.sourceUrl,
       verifiedOn: policy.verifiedOn,
       needsLegalReview: policy.needsLegalReview,
