@@ -718,6 +718,9 @@ components:
         isDemo: { type: boolean }
         recommendationStatus: { type: string, enum: [not_assessed, recommended, not_recommended] }
         recommendationComment: { type: [ "string", "null" ] }
+        recommendationByUserId: { type: [ "string", "null" ] }
+        recommendationAt: { type: [ "string", "null" ], format: date-time }
+        halfDay: { type: boolean }
     LeaveRequestInput:
       type: object
       required: [employeeId, leaveType, startDate, endDate, reason]
