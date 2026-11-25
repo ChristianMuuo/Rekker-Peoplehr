@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useListEmployees } from '@workspace/api-client-react';
 import { apiGet, apiPost } from '../lib/api';
+import { FEATURE_REGISTRY, featureStatusLabel } from '../data/featureRegistry';
 
 export function WorkforceErpPage() {
   const qc = useQueryClient();
@@ -324,21 +325,23 @@ export function WorkforceErpPage() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950" role="status" data-testid="banner-workforce-erp-preview">
+        <strong>{featureStatusLabel(FEATURE_REGISTRY.workforceErp.status)}:</strong> {FEATURE_REGISTRY.workforceErp.description} External integrations remain separate and are not implicitly connected to Rekker's public website or shop.
+      </div>
       {/* Header */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#C71D1D]">
-              <Factory size={12} /> Phase 4 · Enterprise ERP
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+              <Factory size={12} /> {featureStatusLabel(FEATURE_REGISTRY.workforceErp.status)} · concept preview
             </span>
-            <span className="text-xs text-stone-400">Operational Scheduling &amp; Governance</span>
+            <span className="text-xs text-stone-400">Operational workflow prototypes</span>
           </div>
           <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-stone-900">
             Workforce ERP Operations
           </h1>
           <p className="mt-1 max-w-3xl text-xs text-stone-500">
-            Real-time synchronization between Employee Master records, Leave availability, Manufacturing lines,
-            Warehouse equipment authorizations, Distribution fleet licenses, Sales territories, and External adapters.
+            Preview of workforce scheduling, competency records, driver compliance and territory workflows. This is not a complete production ERP; each underlying API and integration must be verified before operational reliance.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
