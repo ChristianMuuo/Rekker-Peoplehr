@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  calculateAnnualLeaveProRataOnExit,
   entitlementToCalendarDays,
   recommendLeave,
   sumLeaveLedgerDays,
@@ -88,4 +89,14 @@ test("leave ledger sum supports fractional days and reversals", () => {
     ]),
     20.5,
   );
+});
+
+
+test("annual leave termination pro-rata follows Employment Act section 28(1)(b)", () => {
+  assert.equal(calculateAnnualLeaveProRataOnExit(1), 0);
+  assert.equal(calculateAnnualLeaveProRataOnExit(2), 3.5);
+  assert.equal(calculateAnnualLeaveProRataOnExit(6), 10.5);
+  assert.equal(calculateAnnualLeaveProRataOnExit(12), 21);
+  assert.throws(() => calculateAnnualLeaveProRataOnExit(-1), RangeError);
+  assert.throws(() => calculateAnnualLeaveProRataOnExit(1.5), RangeError);
 });
