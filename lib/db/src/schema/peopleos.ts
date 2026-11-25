@@ -240,6 +240,7 @@ export const leaveLedgerTable = pgTable(
       .notNull()
       .references(() => employeesTable.id, { onDelete: "restrict" }),
     leaveType: text("leave_type").notNull(),
+    leaveYear: integer("leave_year").notNull(),
     leaveRequestId: uuid("leave_request_id").references(() => leaveRequestsTable.id, {
       onDelete: "restrict",
     }),
