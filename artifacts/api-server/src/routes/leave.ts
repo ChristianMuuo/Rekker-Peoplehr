@@ -570,14 +570,27 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
   const membership = await requireRoles(req, res, adminRoles);
   if (!membership) return;
   const name = body.data.name.trim();
-  const code = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 64)
-    .replace(/-$/g, "");
+  const code = canonicalLeaveCode(name);
   if (!code) {
     res.status(400).json({ error: "Enter a leave type name with letters or numbers." });
+    return;
+  }
+  const raw = (req.body ?? {}) as Record<string, unknown>;
+  const statutory = policyStatutoryFields(
+    raw,
+    KENYA_LEAVE_POLICY_DEFAULTS.find((policy) => policy.code === code),
+  );
+  const floorError = statutoryFloorError(code, body.data.entitlementDays, statutory);
+  if (floorError) {
+    res.status(422).json({
+      error: floorError,
+      sourceUrl: KENYA_LEAVE_POLICY_DEFAULTS.find((policy) => policy.code === code)?.sourceUrl,
+      needsLegalReview: true,
+    });
+    return;
+  }
+  if (statutory.paidPercentage < 0 || statutory.paidPercentage > 100) {
+    res.status(400).json({ error: "Paid percentage must be between 0 and 100." });
     return;
   }
   const organization = await getPeopleOsOrganization(membership.organizationId);
@@ -585,9 +598,26 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
     return;
   }
+  const statutoryValues = {
+    entitlementWeeks: statutory.entitlementWeeks,
+    entitlementMonths: statutory.entitlementMonths,
+    sickFullPayDays: statutory.sickFullPayDays,
+    sickHalfPayDays: statutory.sickHalfPayDays,
+    minimumServiceMonths: statutory.minimumServiceMonths,
+    certificateRequired: statutory.certificateRequired,
+    paidPercentage: statutory.paidPercentage,
+    jurisdiction: "KE" as const,
+    effectiveFrom: statutory.effectiveFrom,
+    effectiveTo: statutory.effectiveTo,
+    sourceUrl: statutory.sourceUrl,
+    verifiedOn: statutory.verifiedOn,
+    needsLegalReview: statutory.needsLegalReview,
+  };
+
   if (!process.env.DATABASE_URL) {
+    ensureDemoKenyaDefaultPolicies(membership.organizationId);
     const existing = DEMO_LEAVE_POLICIES.find(
-      (p) => p.organizationId === membership.organizationId && p.code === code,
+      (policy) => policy.organizationId === membership.organizationId && policy.code === code,
     );
     if (existing) {
       res.status(409).json({ error: "A leave type with this name already exists." });
@@ -600,6 +630,7 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       name,
       entitlementDays: body.data.entitlementDays,
       accrualMethod: body.data.accrualMethod,
+      ...statutoryValues,
       active: true,
     };
     DEMO_LEAVE_POLICIES.push(created);
@@ -625,6 +656,7 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
     );
     return;
   }
+
   const [existing] = await db
     .select({ id: leavePoliciesTable.id })
     .from(leavePoliciesTable)
@@ -639,6 +671,7 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
     res.status(409).json({ error: "A leave type with this name already exists." });
     return;
   }
+
   const policy = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(leavePoliciesTable)
@@ -650,10 +683,11 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
         accrualMethod: body.data.accrualMethod,
         active: true,
         createdByUserId: membership.userId,
+        ...statutoryValues,
       })
       .returning();
     if (!created) return null;
-    await tx.insert(auditEventsTable).values({
+    await recordAuditEvent({
       organizationId: membership.organizationId,
       actorUserId: membership.userId,
       actor: membership.role,
@@ -662,6 +696,8 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       targetId: created.id,
       summary: `The ${name} leave policy was created.`,
       isDemo: organization.isDemo,
+      tx,
+      critical: true,
     });
     return created;
   });
