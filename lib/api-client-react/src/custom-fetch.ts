@@ -72,11 +72,13 @@ function getEnvVar(key: string): string | undefined {
 
 export function isStaticFallbackPermitted(): boolean {
   if (_testFallbackOverride !== null) return _testFallbackOverride;
+  const mode = getEnvVar("MODE") ?? getEnvVar("NODE_ENV");
+  // Production HR data paths must fail closed. Demo fallbacks are only for local
+  // development or explicit non-production preview deployments.
+  if (mode === "production") return false;
   if (getEnvVar("VITE_PEOPLEOS_STRICT_API") === "true") return false;
   if (getEnvVar("VITE_PEOPLEOS_DEMO_FALLBACK") === "true") return true;
   if (getEnvVar("VITE_API_BASE_URL")) return false;
-  // Static preview fallback allowed in browser SPA deployments when explicitly non-strict
-  const mode = getEnvVar("MODE") ?? getEnvVar("NODE_ENV");
   return mode !== "test";
 }
 
