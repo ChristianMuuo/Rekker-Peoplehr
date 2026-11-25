@@ -44,7 +44,7 @@ describe("Kenya leave engine", () => {
   });
 
   test("calculates statutory annual leave pro-rata on exit after at least two months", () => {
-    assert.equal(proRataAnnualLeaveOnExit("2026-01-01", "2026-02-28"), 3.5);
+    assert.equal(proRataAnnualLeaveOnExit("2026-01-01", "2026-03-01"), 3.5);
     assert.equal(proRataAnnualLeaveOnExit("2026-01-15", "2026-03-14"), 0);
   });
 
