@@ -33,14 +33,17 @@ import type {
   HealthStatus,
   LeaveBalance,
   LeaveDecisionInput,
+  LeaveLedgerEntry,
   LeavePolicy,
   LeavePolicyInput,
   LeavePolicyUpdate,
+  LeaveRecommendationInput,
   LeaveRequest,
   LeaveRequestInput,
   ListAuditEventsParams,
   ListEmployeesParams,
   ListLeaveBalancesParams,
+  ListLeaveLedgerParams,
   ListLeaveRequestsParams,
   PeopleOsOverview
 } from './api.schemas';
@@ -1217,6 +1220,253 @@ export function useListLeaveBalances<TData = Awaited<ReturnType<typeof listLeave
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListLeaveBalancesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRecommendLeaveRequestUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/leave-requests/${requestId}/recommendation`
+}
+
+/**
+ * @summary Record manager recommendation on a leave request
+ */
+export const recommendLeaveRequest = async (requestId: string,
+    leaveRecommendationInput: LeaveRecommendationInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getRecommendLeaveRequestUrl(requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(leaveRecommendationInput)
+  }
+);}
+
+
+
+
+
+export const getRecommendLeaveRequestMutationKey = () => ['recommendLeaveRequest'] as const;
+
+export const getRecommendLeaveRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendLeaveRequest>>, TError,RecommendLeaveRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recommendLeaveRequest>>, TError,RecommendLeaveRequestMutationVariables, TContext> => {
+
+const mutationKey = getRecommendLeaveRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recommendLeaveRequest>>, RecommendLeaveRequestMutationVariables> = (props) => {
+          const {requestId,data} = props ?? {};
+
+          return  recommendLeaveRequest(requestId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecommendLeaveRequestMutationResult = NonNullable<Awaited<ReturnType<typeof recommendLeaveRequest>>>
+    export type RecommendLeaveRequestMutationBody = BodyType<LeaveRecommendationInput>
+    export type RecommendLeaveRequestMutationError = ErrorType<void>
+    export type RecommendLeaveRequestMutationVariables = {requestId: string;data: BodyType<LeaveRecommendationInput>}
+
+    /**
+ * @summary Record manager recommendation on a leave request
+ */
+export const useRecommendLeaveRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recommendLeaveRequest>>, TError,RecommendLeaveRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recommendLeaveRequest>>,
+        TError,
+        RecommendLeaveRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRecommendLeaveRequestMutationOptions(options));
+    }
+
+export const getCancelLeaveRequestUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/leave-requests/${requestId}/cancel`
+}
+
+/**
+ * @summary Cancel an approved request and post a reversing ledger entry
+ */
+export const cancelLeaveRequest = async (requestId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getCancelLeaveRequestUrl(requestId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelLeaveRequestMutationKey = () => ['cancelLeaveRequest'] as const;
+
+export const getCancelLeaveRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelLeaveRequest>>, TError,CancelLeaveRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelLeaveRequest>>, TError,CancelLeaveRequestMutationVariables, TContext> => {
+
+const mutationKey = getCancelLeaveRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelLeaveRequest>>, CancelLeaveRequestMutationVariables> = (props) => {
+          const {requestId} = props ?? {};
+
+          return  cancelLeaveRequest(requestId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelLeaveRequestMutationResult = NonNullable<Awaited<ReturnType<typeof cancelLeaveRequest>>>
+
+    export type CancelLeaveRequestMutationError = ErrorType<void>
+    export type CancelLeaveRequestMutationVariables = {requestId: string}
+
+    /**
+ * @summary Cancel an approved request and post a reversing ledger entry
+ */
+export const useCancelLeaveRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelLeaveRequest>>, TError,CancelLeaveRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelLeaveRequest>>,
+        TError,
+        CancelLeaveRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCancelLeaveRequestMutationOptions(options));
+    }
+
+export const getListLeaveLedgerUrl = (params?: ListLeaveLedgerParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/leave-ledger?${stringifiedParams}` : `/api/leave-ledger`
+}
+
+/**
+ * @summary List signed leave ledger entries visible to the signed-in user
+ */
+export const listLeaveLedger = async (params?: ListLeaveLedgerParams, options?: Parameters<typeof customFetch>[1]): Promise<LeaveLedgerEntry[]> => {
+
+  return customFetch<LeaveLedgerEntry[]>(getListLeaveLedgerUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLeaveLedgerQueryKey = (params?: ListLeaveLedgerParams,) => {
+    return [
+    `/api/leave-ledger`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListLeaveLedgerQueryOptions = <TData = Awaited<ReturnType<typeof listLeaveLedger>>, TError = ErrorType<unknown>>(params?: ListLeaveLedgerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeaveLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLeaveLedgerQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLeaveLedger>>> = ({ signal }) => listLeaveLedger(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLeaveLedger>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLeaveLedgerQueryResult = NonNullable<Awaited<ReturnType<typeof listLeaveLedger>>>
+export type ListLeaveLedgerQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List signed leave ledger entries visible to the signed-in user
+ */
+
+export function useListLeaveLedger<TData = Awaited<ReturnType<typeof listLeaveLedger>>, TError = ErrorType<unknown>>(
+ params?: ListLeaveLedgerParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLeaveLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLeaveLedgerQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

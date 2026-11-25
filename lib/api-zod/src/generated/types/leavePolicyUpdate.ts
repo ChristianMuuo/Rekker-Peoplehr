@@ -18,6 +18,14 @@ export interface LeavePolicyUpdate {
      * @maximum 366
      */
   entitlementDays: number;
+  /** @minimum 0 */
+  entitlementWeeks?: number;
+  /** @minimum 0 */
+  entitlementMonths?: number;
+  /** @minimum 0 */
+  sickFullPayDays?: number;
+  /** @minimum 0 */
+  sickHalfPayDays?: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
 }

@@ -18,5 +18,27 @@ export interface LeavePolicyInput {
      * @maximum 366
      */
   entitlementDays: number;
+  /** @minimum 0 */
+  entitlementWeeks?: number;
+  /** @minimum 0 */
+  entitlementMonths?: number;
+  /** @minimum 0 */
+  sickFullPayDays?: number;
+  /** @minimum 0 */
+  sickHalfPayDays?: number;
   accrualMethod: LeaveAccrualMethod;
+  /** @minimum 0 */
+  minimumServiceMonths?: number;
+  certificateRequired?: boolean;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  paidPercentage?: number;
+  effectiveFrom?: Date;
+  /** @nullable */
+  effectiveTo?: Date | null;
+  sourceUrl?: string;
+  verifiedOn?: Date;
+  needsLegalReview?: boolean;
 }

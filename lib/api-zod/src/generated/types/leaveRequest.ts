@@ -15,8 +15,14 @@ export interface LeaveRequest {
   startDate: Date;
   endDate: Date;
   days: number;
+  halfDay?: boolean;
   reason: string;
   status: LeaveRequestStatus;
+  /** @nullable */
+  recommendationLabel?: string | null;
+  /** @nullable */
+  recommendationSuggestion?: string | null;
+  recommendationReasons?: string[];
   /** @nullable */
   approverId?: string | null;
   /** @nullable */

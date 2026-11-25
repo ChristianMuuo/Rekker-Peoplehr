@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LeaveAccrualMethod } from './leaveAccrualMethod';
+import type { LeaveBalanceStatutoryUnit } from './leaveBalanceStatutoryUnit';
 
 export interface LeaveBalance {
   employeeId: string;
@@ -14,10 +15,14 @@ export interface LeaveBalance {
   leaveTypeName: string;
   year: number;
   entitlementDays: number;
+  entitlementWeeks?: number;
   accruedDays: number;
   usedDays: number;
   pendingDays: number;
   remainingDays: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
+  statutoryUnit?: LeaveBalanceStatutoryUnit;
+  statutoryEntitlementLabel?: string;
+  ledgerEntryCount?: number;
 }

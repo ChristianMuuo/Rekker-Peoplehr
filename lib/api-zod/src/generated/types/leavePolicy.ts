@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LeaveAccrualMethod } from './leaveAccrualMethod';
+import type { LeavePolicyJurisdiction } from './leavePolicyJurisdiction';
 
 export interface LeavePolicy {
   id: string;
@@ -13,6 +14,29 @@ export interface LeavePolicy {
   name: string;
   /** @minimum 0 */
   entitlementDays: number;
+  /** @minimum 0 */
+  entitlementWeeks?: number;
+  /** @minimum 0 */
+  entitlementMonths?: number;
+  /** @minimum 0 */
+  sickFullPayDays?: number;
+  /** @minimum 0 */
+  sickHalfPayDays?: number;
   accrualMethod: LeaveAccrualMethod;
+  /** @minimum 0 */
+  minimumServiceMonths?: number;
+  certificateRequired?: boolean;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  paidPercentage?: number;
+  jurisdiction?: LeavePolicyJurisdiction;
+  effectiveFrom?: Date;
+  /** @nullable */
+  effectiveTo?: Date | null;
+  sourceUrl?: string;
+  verifiedOn?: Date;
+  needsLegalReview?: boolean;
   active: boolean;
 }

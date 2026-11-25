@@ -345,7 +345,7 @@ export const ListDepartmentsResponse = zod.array(ListDepartmentsResponseItem)
  * @summary List leave requests permitted to the signed-in user
  */
 export const ListLeaveRequestsQueryParams = zod.object({
-  "status": zod.enum(['pending', 'approved', 'rejected', 'cancelled']).optional(),
+  "status": zod.enum(['pending', 'recommended', 'approved', 'rejected', 'cancelled']).optional(),
   "employeeId": zod.coerce.string().optional()
 })
 
@@ -357,8 +357,12 @@ export const ListLeaveRequestsResponseItem = zod.object({
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date(),
   "days": zod.number(),
+  "halfDay": zod.boolean().optional(),
   "reason": zod.string(),
-  "status": zod.enum(['pending', 'approved', 'rejected', 'cancelled']),
+  "status": zod.enum(['pending', 'recommended', 'approved', 'rejected', 'cancelled']),
+  "recommendationLabel": zod.string().nullish(),
+  "recommendationSuggestion": zod.string().nullish(),
+  "recommendationReasons": zod.array(zod.string()).optional(),
   "approverId": zod.string().nullish(),
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),
@@ -376,6 +380,9 @@ export const createLeaveRequestBodyLeaveTypeMax = 64;
 export const createLeaveRequestBodyReasonMin = 3;
 export const createLeaveRequestBodyReasonMax = 1000;
 
+export const createLeaveRequestBodyHalfDayDefault = false;
+export const createLeaveRequestBodyCertificateReferenceMax = 300;
+
 
 
 export const CreateLeaveRequestBody = zod.object({
@@ -383,7 +390,9 @@ export const CreateLeaveRequestBody = zod.object({
   "leaveType": zod.string().min(1).max(createLeaveRequestBodyLeaveTypeMax),
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date(),
-  "reason": zod.string().min(createLeaveRequestBodyReasonMin).max(createLeaveRequestBodyReasonMax)
+  "reason": zod.string().min(createLeaveRequestBodyReasonMin).max(createLeaveRequestBodyReasonMax),
+  "halfDay": zod.boolean().default(createLeaveRequestBodyHalfDayDefault),
+  "certificateReference": zod.string().max(createLeaveRequestBodyCertificateReferenceMax).nullish()
 })
 
 export const CreateLeaveRequestResponse = zod.object({
@@ -394,8 +403,12 @@ export const CreateLeaveRequestResponse = zod.object({
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date(),
   "days": zod.number(),
+  "halfDay": zod.boolean().optional(),
   "reason": zod.string(),
-  "status": zod.enum(['pending', 'approved', 'rejected', 'cancelled']),
+  "status": zod.enum(['pending', 'recommended', 'approved', 'rejected', 'cancelled']),
+  "recommendationLabel": zod.string().nullish(),
+  "recommendationSuggestion": zod.string().nullish(),
+  "recommendationReasons": zod.array(zod.string()).optional(),
   "approverId": zod.string().nullish(),
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),
@@ -409,14 +422,40 @@ export const CreateLeaveRequestResponse = zod.object({
  */
 export const listLeavePoliciesResponseEntitlementDaysMin = 0;
 
+export const listLeavePoliciesResponseEntitlementWeeksMin = 0;
+
+export const listLeavePoliciesResponseEntitlementMonthsMin = 0;
+
+export const listLeavePoliciesResponseSickFullPayDaysMin = 0;
+
+export const listLeavePoliciesResponseSickHalfPayDaysMin = 0;
+
+export const listLeavePoliciesResponseMinimumServiceMonthsMin = 0;
+
+export const listLeavePoliciesResponsePaidPercentageMin = 0;
+export const listLeavePoliciesResponsePaidPercentageMax = 100;
+
 
 
 export const ListLeavePoliciesResponseItem = zod.object({
   "id": zod.string(),
   "code": zod.string(),
   "name": zod.string(),
-  "entitlementDays": zod.number().int().min(listLeavePoliciesResponseEntitlementDaysMin),
+  "entitlementDays": zod.number().min(listLeavePoliciesResponseEntitlementDaysMin),
+  "entitlementWeeks": zod.number().min(listLeavePoliciesResponseEntitlementWeeksMin).optional(),
+  "entitlementMonths": zod.number().min(listLeavePoliciesResponseEntitlementMonthsMin).optional(),
+  "sickFullPayDays": zod.number().int().min(listLeavePoliciesResponseSickFullPayDaysMin).optional(),
+  "sickHalfPayDays": zod.number().int().min(listLeavePoliciesResponseSickHalfPayDaysMin).optional(),
   "accrualMethod": zod.enum(['annual', 'monthly']),
+  "minimumServiceMonths": zod.number().int().min(listLeavePoliciesResponseMinimumServiceMonthsMin).optional(),
+  "certificateRequired": zod.boolean().optional(),
+  "paidPercentage": zod.number().int().min(listLeavePoliciesResponsePaidPercentageMin).max(listLeavePoliciesResponsePaidPercentageMax).optional(),
+  "jurisdiction": zod.enum(['KE']).optional(),
+  "effectiveFrom": zod.coerce.date().optional(),
+  "effectiveTo": zod.coerce.date().nullish(),
+  "sourceUrl": zod.string().optional(),
+  "verifiedOn": zod.coerce.date().optional(),
+  "needsLegalReview": zod.boolean().optional(),
   "active": zod.boolean()
 })
 export const ListLeavePoliciesResponse = zod.array(ListLeavePoliciesResponseItem)
@@ -430,15 +469,53 @@ export const createLeavePolicyBodyNameMax = 80;
 export const createLeavePolicyBodyEntitlementDaysMin = 0;
 export const createLeavePolicyBodyEntitlementDaysMax = 366;
 
+export const createLeavePolicyBodyEntitlementWeeksMin = 0;
+
+export const createLeavePolicyBodyEntitlementMonthsMin = 0;
+
+export const createLeavePolicyBodySickFullPayDaysMin = 0;
+
+export const createLeavePolicyBodySickHalfPayDaysMin = 0;
+
+export const createLeavePolicyBodyMinimumServiceMonthsMin = 0;
+
+export const createLeavePolicyBodyPaidPercentageMin = 0;
+export const createLeavePolicyBodyPaidPercentageMax = 100;
+
 
 
 export const CreateLeavePolicyBody = zod.object({
   "name": zod.string().min(1).max(createLeavePolicyBodyNameMax),
-  "entitlementDays": zod.number().int().min(createLeavePolicyBodyEntitlementDaysMin).max(createLeavePolicyBodyEntitlementDaysMax),
-  "accrualMethod": zod.enum(['annual', 'monthly'])
+  "entitlementDays": zod.number().min(createLeavePolicyBodyEntitlementDaysMin).max(createLeavePolicyBodyEntitlementDaysMax),
+  "entitlementWeeks": zod.number().min(createLeavePolicyBodyEntitlementWeeksMin).optional(),
+  "entitlementMonths": zod.number().min(createLeavePolicyBodyEntitlementMonthsMin).optional(),
+  "sickFullPayDays": zod.number().int().min(createLeavePolicyBodySickFullPayDaysMin).optional(),
+  "sickHalfPayDays": zod.number().int().min(createLeavePolicyBodySickHalfPayDaysMin).optional(),
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "minimumServiceMonths": zod.number().int().min(createLeavePolicyBodyMinimumServiceMonthsMin).optional(),
+  "certificateRequired": zod.boolean().optional(),
+  "paidPercentage": zod.number().int().min(createLeavePolicyBodyPaidPercentageMin).max(createLeavePolicyBodyPaidPercentageMax).optional(),
+  "effectiveFrom": zod.coerce.date().optional(),
+  "effectiveTo": zod.coerce.date().nullish(),
+  "sourceUrl": zod.string().optional(),
+  "verifiedOn": zod.coerce.date().optional(),
+  "needsLegalReview": zod.boolean().optional()
 })
 
 export const createLeavePolicyResponseEntitlementDaysMin = 0;
+
+export const createLeavePolicyResponseEntitlementWeeksMin = 0;
+
+export const createLeavePolicyResponseEntitlementMonthsMin = 0;
+
+export const createLeavePolicyResponseSickFullPayDaysMin = 0;
+
+export const createLeavePolicyResponseSickHalfPayDaysMin = 0;
+
+export const createLeavePolicyResponseMinimumServiceMonthsMin = 0;
+
+export const createLeavePolicyResponsePaidPercentageMin = 0;
+export const createLeavePolicyResponsePaidPercentageMax = 100;
 
 
 
@@ -446,8 +523,21 @@ export const CreateLeavePolicyResponse = zod.object({
   "id": zod.string(),
   "code": zod.string(),
   "name": zod.string(),
-  "entitlementDays": zod.number().int().min(createLeavePolicyResponseEntitlementDaysMin),
+  "entitlementDays": zod.number().min(createLeavePolicyResponseEntitlementDaysMin),
+  "entitlementWeeks": zod.number().min(createLeavePolicyResponseEntitlementWeeksMin).optional(),
+  "entitlementMonths": zod.number().min(createLeavePolicyResponseEntitlementMonthsMin).optional(),
+  "sickFullPayDays": zod.number().int().min(createLeavePolicyResponseSickFullPayDaysMin).optional(),
+  "sickHalfPayDays": zod.number().int().min(createLeavePolicyResponseSickHalfPayDaysMin).optional(),
   "accrualMethod": zod.enum(['annual', 'monthly']),
+  "minimumServiceMonths": zod.number().int().min(createLeavePolicyResponseMinimumServiceMonthsMin).optional(),
+  "certificateRequired": zod.boolean().optional(),
+  "paidPercentage": zod.number().int().min(createLeavePolicyResponsePaidPercentageMin).max(createLeavePolicyResponsePaidPercentageMax).optional(),
+  "jurisdiction": zod.enum(['KE']).optional(),
+  "effectiveFrom": zod.coerce.date().optional(),
+  "effectiveTo": zod.coerce.date().nullish(),
+  "sourceUrl": zod.string().optional(),
+  "verifiedOn": zod.coerce.date().optional(),
+  "needsLegalReview": zod.boolean().optional(),
   "active": zod.boolean()
 })
 
@@ -464,16 +554,41 @@ export const updateLeavePolicyBodyNameMax = 80;
 export const updateLeavePolicyBodyEntitlementDaysMin = 0;
 export const updateLeavePolicyBodyEntitlementDaysMax = 366;
 
+export const updateLeavePolicyBodyEntitlementWeeksMin = 0;
+
+export const updateLeavePolicyBodyEntitlementMonthsMin = 0;
+
+export const updateLeavePolicyBodySickFullPayDaysMin = 0;
+
+export const updateLeavePolicyBodySickHalfPayDaysMin = 0;
+
 
 
 export const UpdateLeavePolicyBody = zod.object({
   "name": zod.string().min(1).max(updateLeavePolicyBodyNameMax),
-  "entitlementDays": zod.number().int().min(updateLeavePolicyBodyEntitlementDaysMin).max(updateLeavePolicyBodyEntitlementDaysMax),
+  "entitlementDays": zod.number().min(updateLeavePolicyBodyEntitlementDaysMin).max(updateLeavePolicyBodyEntitlementDaysMax),
+  "entitlementWeeks": zod.number().min(updateLeavePolicyBodyEntitlementWeeksMin).optional(),
+  "entitlementMonths": zod.number().min(updateLeavePolicyBodyEntitlementMonthsMin).optional(),
+  "sickFullPayDays": zod.number().int().min(updateLeavePolicyBodySickFullPayDaysMin).optional(),
+  "sickHalfPayDays": zod.number().int().min(updateLeavePolicyBodySickHalfPayDaysMin).optional(),
   "accrualMethod": zod.enum(['annual', 'monthly']),
   "active": zod.boolean()
 })
 
 export const updateLeavePolicyResponseEntitlementDaysMin = 0;
+
+export const updateLeavePolicyResponseEntitlementWeeksMin = 0;
+
+export const updateLeavePolicyResponseEntitlementMonthsMin = 0;
+
+export const updateLeavePolicyResponseSickFullPayDaysMin = 0;
+
+export const updateLeavePolicyResponseSickHalfPayDaysMin = 0;
+
+export const updateLeavePolicyResponseMinimumServiceMonthsMin = 0;
+
+export const updateLeavePolicyResponsePaidPercentageMin = 0;
+export const updateLeavePolicyResponsePaidPercentageMax = 100;
 
 
 
@@ -481,8 +596,21 @@ export const UpdateLeavePolicyResponse = zod.object({
   "id": zod.string(),
   "code": zod.string(),
   "name": zod.string(),
-  "entitlementDays": zod.number().int().min(updateLeavePolicyResponseEntitlementDaysMin),
+  "entitlementDays": zod.number().min(updateLeavePolicyResponseEntitlementDaysMin),
+  "entitlementWeeks": zod.number().min(updateLeavePolicyResponseEntitlementWeeksMin).optional(),
+  "entitlementMonths": zod.number().min(updateLeavePolicyResponseEntitlementMonthsMin).optional(),
+  "sickFullPayDays": zod.number().int().min(updateLeavePolicyResponseSickFullPayDaysMin).optional(),
+  "sickHalfPayDays": zod.number().int().min(updateLeavePolicyResponseSickHalfPayDaysMin).optional(),
   "accrualMethod": zod.enum(['annual', 'monthly']),
+  "minimumServiceMonths": zod.number().int().min(updateLeavePolicyResponseMinimumServiceMonthsMin).optional(),
+  "certificateRequired": zod.boolean().optional(),
+  "paidPercentage": zod.number().int().min(updateLeavePolicyResponsePaidPercentageMin).max(updateLeavePolicyResponsePaidPercentageMax).optional(),
+  "jurisdiction": zod.enum(['KE']).optional(),
+  "effectiveFrom": zod.coerce.date().optional(),
+  "effectiveTo": zod.coerce.date().nullish(),
+  "sourceUrl": zod.string().optional(),
+  "verifiedOn": zod.coerce.date().optional(),
+  "needsLegalReview": zod.boolean().optional(),
   "active": zod.boolean()
 })
 
@@ -506,15 +634,71 @@ export const ListLeaveBalancesResponseItem = zod.object({
   "leaveType": zod.string(),
   "leaveTypeName": zod.string(),
   "year": zod.number().int(),
-  "entitlementDays": zod.number().int(),
-  "accruedDays": zod.number().int(),
-  "usedDays": zod.number().int(),
-  "pendingDays": zod.number().int(),
-  "remainingDays": zod.number().int(),
+  "entitlementDays": zod.number(),
+  "entitlementWeeks": zod.number().optional(),
+  "accruedDays": zod.number(),
+  "usedDays": zod.number(),
+  "pendingDays": zod.number(),
+  "remainingDays": zod.number(),
   "accrualMethod": zod.enum(['annual', 'monthly']),
-  "active": zod.boolean()
+  "active": zod.boolean(),
+  "statutoryUnit": zod.enum(['days', 'weeks', 'months']).optional(),
+  "statutoryEntitlementLabel": zod.string().optional(),
+  "ledgerEntryCount": zod.number().int().optional()
 })
 export const ListLeaveBalancesResponse = zod.array(ListLeaveBalancesResponseItem)
+
+
+/**
+ * @summary Record manager recommendation on a leave request
+ */
+export const RecommendLeaveRequestParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const recommendLeaveRequestBodyCommentMax = 1000;
+
+
+
+export const RecommendLeaveRequestBody = zod.object({
+  "decision": zod.enum(['recommend', 'not_recommend']),
+  "comment": zod.string().max(recommendLeaveRequestBodyCommentMax).nullish()
+})
+
+export const RecommendLeaveRequestResponse = zod.unknown()
+
+
+/**
+ * @summary Cancel an approved request and post a reversing ledger entry
+ */
+export const CancelLeaveRequestParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const CancelLeaveRequestResponse = zod.unknown()
+
+
+/**
+ * @summary List signed leave ledger entries visible to the signed-in user
+ */
+export const ListLeaveLedgerQueryParams = zod.object({
+  "employeeId": zod.coerce.string().optional(),
+  "leaveType": zod.coerce.string().optional()
+})
+
+export const ListLeaveLedgerResponseItem = zod.object({
+  "id": zod.string(),
+  "employeeId": zod.string(),
+  "leaveType": zod.string(),
+  "requestId": zod.string().nullish(),
+  "entryType": zod.enum(['accrual', 'deduction', 'adjustment', 'reversal', 'carry_over', 'expiry', 'opening']),
+  "quantityQuarterDays": zod.number().int(),
+  "quantityDays": zod.number(),
+  "effectiveDate": zod.coerce.date(),
+  "note": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListLeaveLedgerResponse = zod.array(ListLeaveLedgerResponseItem)
 
 
 /**
@@ -541,8 +725,12 @@ export const DecideLeaveRequestResponse = zod.object({
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date(),
   "days": zod.number(),
+  "halfDay": zod.boolean().optional(),
   "reason": zod.string(),
-  "status": zod.enum(['pending', 'approved', 'rejected', 'cancelled']),
+  "status": zod.enum(['pending', 'recommended', 'approved', 'rejected', 'cancelled']),
+  "recommendationLabel": zod.string().nullish(),
+  "recommendationSuggestion": zod.string().nullish(),
+  "recommendationReasons": zod.array(zod.string()).optional(),
   "approverId": zod.string().nullish(),
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),

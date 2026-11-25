@@ -20,4 +20,10 @@ export interface LeaveRequestInput {
      * @maxLength 1000
      */
   reason: string;
+  halfDay?: boolean;
+  /**
+     * @maxLength 300
+     * @nullable
+     */
+  certificateReference?: string | null;
 }

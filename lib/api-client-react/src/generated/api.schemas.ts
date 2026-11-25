@@ -58,6 +58,7 @@ export type LeaveRequestStatus = typeof LeaveRequestStatus[keyof typeof LeaveReq
 
 export const LeaveRequestStatus = {
   pending: 'pending',
+  recommended: 'recommended',
   approved: 'approved',
   rejected: 'rejected',
   cancelled: 'cancelled',
@@ -345,8 +346,14 @@ export interface LeaveRequest {
   startDate: string;
   endDate: string;
   days: number;
+  halfDay?: boolean;
   reason: string;
   status: LeaveRequestStatus;
+  /** @nullable */
+  recommendationLabel?: string | null;
+  /** @nullable */
+  recommendationSuggestion?: string | null;
+  recommendationReasons?: string[];
   /** @nullable */
   approverId?: string | null;
   /** @nullable */
@@ -371,6 +378,12 @@ export interface LeaveRequestInput {
      * @maxLength 1000
      */
   reason: string;
+  halfDay?: boolean;
+  /**
+     * @maxLength 300
+     * @nullable
+     */
+  certificateReference?: string | null;
 }
 
 export type LeaveAccrualMethod = typeof LeaveAccrualMethod[keyof typeof LeaveAccrualMethod];
@@ -381,13 +394,43 @@ export const LeaveAccrualMethod = {
   monthly: 'monthly',
 } as const;
 
+export type LeavePolicyJurisdiction = typeof LeavePolicyJurisdiction[keyof typeof LeavePolicyJurisdiction];
+
+
+export const LeavePolicyJurisdiction = {
+  KE: 'KE',
+} as const;
+
 export interface LeavePolicy {
   id: string;
   code: string;
   name: string;
   /** @minimum 0 */
   entitlementDays: number;
+  /** @minimum 0 */
+  entitlementWeeks?: number;
+  /** @minimum 0 */
+  entitlementMonths?: number;
+  /** @minimum 0 */
+  sickFullPayDays?: number;
+  /** @minimum 0 */
+  sickHalfPayDays?: number;
   accrualMethod: LeaveAccrualMethod;
+  /** @minimum 0 */
+  minimumServiceMonths?: number;
+  certificateRequired?: boolean;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  paidPercentage?: number;
+  jurisdiction?: LeavePolicyJurisdiction;
+  effectiveFrom?: string;
+  /** @nullable */
+  effectiveTo?: string | null;
+  sourceUrl?: string;
+  verifiedOn?: string;
+  needsLegalReview?: boolean;
   active: boolean;
 }
 
@@ -402,7 +445,29 @@ export interface LeavePolicyInput {
      * @maximum 366
      */
   entitlementDays: number;
+  /** @minimum 0 */
+  entitlementWeeks?: number;
+  /** @minimum 0 */
+  entitlementMonths?: number;
+  /** @minimum 0 */
+  sickFullPayDays?: number;
+  /** @minimum 0 */
+  sickHalfPayDays?: number;
   accrualMethod: LeaveAccrualMethod;
+  /** @minimum 0 */
+  minimumServiceMonths?: number;
+  certificateRequired?: boolean;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  paidPercentage?: number;
+  effectiveFrom?: string;
+  /** @nullable */
+  effectiveTo?: string | null;
+  sourceUrl?: string;
+  verifiedOn?: string;
+  needsLegalReview?: boolean;
 }
 
 export interface LeavePolicyUpdate {
@@ -416,9 +481,26 @@ export interface LeavePolicyUpdate {
      * @maximum 366
      */
   entitlementDays: number;
+  /** @minimum 0 */
+  entitlementWeeks?: number;
+  /** @minimum 0 */
+  entitlementMonths?: number;
+  /** @minimum 0 */
+  sickFullPayDays?: number;
+  /** @minimum 0 */
+  sickHalfPayDays?: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
 }
+
+export type LeaveBalanceStatutoryUnit = typeof LeaveBalanceStatutoryUnit[keyof typeof LeaveBalanceStatutoryUnit];
+
+
+export const LeaveBalanceStatutoryUnit = {
+  days: 'days',
+  weeks: 'weeks',
+  months: 'months',
+} as const;
 
 export interface LeaveBalance {
   employeeId: string;
@@ -427,12 +509,60 @@ export interface LeaveBalance {
   leaveTypeName: string;
   year: number;
   entitlementDays: number;
+  entitlementWeeks?: number;
   accruedDays: number;
   usedDays: number;
   pendingDays: number;
   remainingDays: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
+  statutoryUnit?: LeaveBalanceStatutoryUnit;
+  statutoryEntitlementLabel?: string;
+  ledgerEntryCount?: number;
+}
+
+export type LeaveRecommendationInputDecision = typeof LeaveRecommendationInputDecision[keyof typeof LeaveRecommendationInputDecision];
+
+
+export const LeaveRecommendationInputDecision = {
+  recommend: 'recommend',
+  not_recommend: 'not_recommend',
+} as const;
+
+export interface LeaveRecommendationInput {
+  decision: LeaveRecommendationInputDecision;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  comment?: string | null;
+}
+
+export type LeaveLedgerEntryEntryType = typeof LeaveLedgerEntryEntryType[keyof typeof LeaveLedgerEntryEntryType];
+
+
+export const LeaveLedgerEntryEntryType = {
+  accrual: 'accrual',
+  deduction: 'deduction',
+  adjustment: 'adjustment',
+  reversal: 'reversal',
+  carry_over: 'carry_over',
+  expiry: 'expiry',
+  opening: 'opening',
+} as const;
+
+export interface LeaveLedgerEntry {
+  id: string;
+  employeeId: string;
+  leaveType: string;
+  /** @nullable */
+  requestId?: string | null;
+  entryType: LeaveLedgerEntryEntryType;
+  quantityQuarterDays: number;
+  quantityDays: number;
+  effectiveDate: string;
+  note: string;
+  createdAt: string;
 }
 
 export type LeaveDecisionInputDecision = typeof LeaveDecisionInputDecision[keyof typeof LeaveDecisionInputDecision];
@@ -556,6 +686,11 @@ employeeId?: string;
  * @maximum 2100
  */
 year?: number;
+};
+
+export type ListLeaveLedgerParams = {
+employeeId?: string;
+leaveType?: string;
 };
 
 export type ListAuditEventsParams = {

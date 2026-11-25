@@ -11,6 +11,7 @@ export type LeaveRequestStatus = typeof LeaveRequestStatus[keyof typeof LeaveReq
 
 export const LeaveRequestStatus = {
   pending: 'pending',
+  recommended: 'recommended',
   approved: 'approved',
   rejected: 'rejected',
   cancelled: 'cancelled',
