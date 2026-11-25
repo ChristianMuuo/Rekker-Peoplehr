@@ -203,7 +203,20 @@ function canonicalLeaveCode(value: string): string {
   return normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
 }
 
-function policyStatutoryFields(raw: Record<string, unknown>, defaults?: Partial<DemoLeavePolicyItem>) {
+function policyStatutoryFields(
+  raw: Record<string, unknown>,
+  defaults?: {
+    entitlementWeeks?: number;
+    entitlementMonths?: number;
+    sickFullPayDays?: number;
+    sickHalfPayDays?: number;
+    minimumServiceMonths?: number;
+    certificateRequired?: boolean;
+    paidPercentage?: number;
+    sourceUrl?: string;
+    needsLegalReview?: boolean;
+  },
+) {
   const numeric = (key: string, fallback: number) => {
     const value = raw[key];
     return typeof value === "number" && Number.isFinite(value) ? value : fallback;
