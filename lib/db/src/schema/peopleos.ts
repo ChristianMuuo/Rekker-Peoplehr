@@ -204,6 +204,7 @@ export const leaveRequestsTable = pgTable(
     endDate: date("end_date", { mode: "string" }).notNull(),
     days: integer("days").notNull(),
     halfDay: boolean("half_day").notNull().default(false),
+    certificateReference: text("certificate_reference"),
     reason: text("reason").notNull(),
     status: text("status").notNull().default("pending"),
     createdByUserId: text("created_by_user_id"),
