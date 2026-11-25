@@ -355,6 +355,9 @@ export interface LeaveRequest {
   /** @nullable */
   decidedAt?: string | null;
   isDemo: boolean;
+  recommendationStatus?: 'not_assessed' | 'recommended' | 'not_recommended';
+  /** @nullable */
+  recommendationComment?: string | null;
 }
 
 export interface LeaveRequestInput {
@@ -371,6 +374,7 @@ export interface LeaveRequestInput {
      * @maxLength 1000
      */
   reason: string;
+  halfDay?: boolean;
 }
 
 export type LeaveAccrualMethod = typeof LeaveAccrualMethod[keyof typeof LeaveAccrualMethod];
@@ -389,6 +393,9 @@ export interface LeavePolicy {
   entitlementDays: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
+  entitlementQuantity?: number;
+  entitlementUnit?: 'days' | 'weeks' | 'months';
+  needsLegalReview?: boolean;
 }
 
 export interface LeavePolicyInput {
@@ -403,6 +410,8 @@ export interface LeavePolicyInput {
      */
   entitlementDays: number;
   accrualMethod: LeaveAccrualMethod;
+  entitlementQuantity?: number;
+  entitlementUnit?: 'days' | 'weeks' | 'months';
 }
 
 export interface LeavePolicyUpdate {
@@ -418,6 +427,8 @@ export interface LeavePolicyUpdate {
   entitlementDays: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
+  entitlementQuantity?: number;
+  entitlementUnit?: 'days' | 'weeks' | 'months';
 }
 
 export interface LeaveBalance {
