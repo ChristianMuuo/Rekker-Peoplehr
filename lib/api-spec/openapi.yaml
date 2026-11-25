@@ -408,11 +408,29 @@ paths:
     get:
       operationId: listAuditEvents
       tags: [audit]
-      summary: List auditable HR activity
+      summary: List filtered, organisation-scoped auditable HR activity
       parameters:
         - name: limit
           in: query
-          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+          schema: { type: integer, minimum: 1, maximum: 500, default: 30 }
+        - name: actor
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: action
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: targetType
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: targetId
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
       responses:
         "200":
           description: Audit events visible to the signed-in user's role
@@ -422,6 +440,47 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AuditEvent"
+  /audit-events/export.csv:
+    get:
+      operationId: exportAuditEventsCsv
+      tags: [audit]
+      summary: Export filtered audit events as CSV
+      parameters:
+        - name: actor
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: action
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: targetType
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: targetId
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: CSV export with organisation-scoped audit rows
+          content:
+            text/csv:
+              schema: { type: string }
+  /audit-events/integrity:
+    get:
+      operationId: verifyAuditEventIntegrity
+      tags: [audit]
+      summary: Verify the append-only audit hash chain
+      responses:
+        "200":
+          description: Hash-chain verification result and any legacy rows without hashes
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
   /agents/status:
     get:
       operationId: getAgentProviderStatus
