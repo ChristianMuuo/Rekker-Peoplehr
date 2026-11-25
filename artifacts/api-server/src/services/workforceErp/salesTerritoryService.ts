@@ -15,6 +15,11 @@ import {
 } from "./workforceErpMemoryStore";
 import { DEMO_EMPLOYEES_LIST } from "../../routes/peopleos";
 
+function previousCompletedMonthPeriod(now = new Date()): string {
+  const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  return `${previousMonth.getUTCFullYear()}-${String(previousMonth.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 export interface SalesRepAttainment extends MemSalesAssignment {
   attainmentPct: number;
   remainingTargetKes: number;
@@ -155,7 +160,7 @@ export async function createTerritory(
 
 export async function listSalesForce(
   organizationId: string,
-  reportingPeriod: string = "2026-03",
+  reportingPeriod: string = previousCompletedMonthPeriod(),
 ): Promise<{
   items: SalesRepAttainment[];
   totalAttributedKes: number;
@@ -257,7 +262,7 @@ export async function assignSalesRep(
   const territoryId = sanitizeText(input.territoryId, 64);
   const employeeId = sanitizeText(input.employeeId, 64);
   const effectiveFrom = sanitizeText(input.effectiveFrom || new Date().toISOString().slice(0, 10), 10);
-  const reportingPeriod = sanitizeText(input.reportingPeriod || "2026-03", 20);
+  const reportingPeriod = sanitizeText(input.reportingPeriod || previousCompletedMonthPeriod(), 20);
 
   if (!territoryId || !employeeId) {
     throw new Error("territoryId and employeeId are required.");
