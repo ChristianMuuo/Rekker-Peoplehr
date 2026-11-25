@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import {
   AGENT_REGISTRY,
-  processAgentQuery,
   type AgentRole,
   type ChatMessage
 } from '../data/aiAgents';
@@ -22,7 +21,7 @@ export function AgentHubPage() {
       id: 'init-1',
       sender: 'agent',
       agentRole: 'supervisor',
-      text: `Hello! I am the **Rekker AI Multi-Agent Supervisor** coordinating **10 specialist HR intelligence agents**:\n\n• **HR Copilot, Onboarding & Learning** — Workforce operations, 30-60-90 checklists & ML skills-gap analysis\n• **Recruitment & Performance** — Explainable TF-IDF candidate matching & OKR momentum\n• **Payroll & Attendance** — Configurable Kenyan PAYE/NSSF/SHIF/AHL & IsolationForest anomaly detection\n• **Retention, Compliance & Executive** — XGBoost attrition risk, NLP sentiment, Ridge demand forecasting & ODPC/Employment Act RAG\n\nSelect any agent on the left or ask me directly. High-impact actions are always held for human signoff.`,
+      text: `Welcome to the Rekker PeopleOS agent workspace preview. The interface exposes role-specific agent workflows, but availability depends on the connected backend and configured providers. Responses are advisory only; authorized people retain every consequential decision. Ask a question to test the currently connected service.`,
       timestamp: 'Online',
     },
   ]);
@@ -94,8 +93,14 @@ export function AgentHubPage() {
       }
       qc.invalidateQueries({ queryKey: ['ai-telemetry'] });
     } catch {
-      const fallback = processAgentQuery(q, activeRole);
-      setMessages((prev) => [...prev, fallback]);
+      const unavailableMessage: ChatMessage = {
+        id: `unavailable_${Date.now()}`,
+        sender: "agent",
+        agentRole: activeRole,
+        text: "The agent API is unavailable or did not return a valid response. No simulated answer was generated. Check Diagnostics or contact your PeopleOS administrator.",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      setMessages((prev) => [...prev, unavailableMessage]);
     } finally {
       setIsTyping(false);
     }
@@ -114,9 +119,12 @@ export function AgentHubPage() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900" role="status">
+        <strong>Concept preview:</strong> role-specific agent workflows are shown here. Only backend responses from configured services are presented as live output; unavailable calls are not replaced by canned replies.
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">Multi-Agent AI Intelligence</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">AI agent workspace · preview</p>
           <h1 className="font-display text-2xl font-semibold tracking-[-.03em] text-stone-900">
             Rekker AI Agent Hub & Governance
           </h1>
@@ -126,7 +134,7 @@ export function AgentHubPage() {
             onClick={() => setActiveTab('chat')}
             className={`btn min-h-9 px-3 text-xs ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
           >
-            <Sparkles size={14} /> 10-Agent Workspace
+            <Sparkles size={14} /> Agent workspace · preview
           </button>
           {canViewGovernance && (
             <>
@@ -281,7 +289,7 @@ export function AgentHubPage() {
         </div>
       ) : (
         <div className="flex h-[calc(100vh-210px)] min-h-[540px] flex-col gap-4 md:flex-row">
-          {/* 11 Agents Sidebar */}
+          {/* Agent roles preview */}
           <div className="flex w-full md:w-80 flex-col rounded-2xl border border-stone-200 bg-white p-3 shadow-xs shrink-0">
             <div className="mb-2 flex items-center justify-between border-b border-stone-100 pb-2.5 px-1">
               <div className="flex items-center gap-2">
@@ -289,7 +297,7 @@ export function AgentHubPage() {
                   <Cpu size={15} />
                 </div>
                 <div>
-                  <h3 className="font-display text-xs font-bold text-stone-900">10 Specialist Agents + Supervisor</h3>
+                  <h3 className="font-display text-xs font-bold text-stone-900">Agent roles · preview</h3>
                   <p className="text-[10px] text-stone-500">RBAC Scoped StateGraph</p>
                 </div>
               </div>
@@ -379,7 +387,7 @@ export function AgentHubPage() {
                           </div>
                         )}
 
-                        {/* Statutory & Policy RAG Citations */}
+                        {/* Policy source citations */}
                         {!isUser && m.citations && m.citations.length > 0 && (
                           <div className="mt-2 rounded-lg bg-white/80 p-2 border border-stone-200/80 text-[10px] text-stone-600">
                             <span className="font-bold flex items-center gap-1 text-red-800">
@@ -446,7 +454,7 @@ export function AgentHubPage() {
               {isTyping && (
                 <div className="flex items-center gap-2 text-stone-400 text-xs italic">
                   <Bot size={16} className="animate-spin text-red-700" />
-                  <span>{activeAgent.name} is invoking scoped HR tools & policy RAG...</span>
+                  <span>{activeAgent.name} is preparing an advisory response from connected services...</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
