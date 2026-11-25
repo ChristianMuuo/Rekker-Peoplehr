@@ -979,7 +979,7 @@ function LeavePage() {
   const activePolicies = policies.data?.filter(policy => policy.active) ?? [];
   const availableBalanceEmployees = [...new Map((balances.data ?? []).map(balance => [balance.employeeId, balance.employeeName])).entries()];
   const visibleBalances = (balances.data ?? []).filter(balance => !balanceEmployeeId || balance.employeeId === balanceEmployeeId);
-  const canManagePolicies = Boolean(auth.data?.canManagePeople);
+  const canManagePolicies = ['hr_admin', 'hr_manager', 'hr_director', 'system_admin'].includes(auth.data?.role ?? '');
   const canChooseBalanceEmployee = Boolean(auth.data?.canApproveLeave);
   const role = auth.data?.role ?? 'employee';
   const canRecommendLeave = role === 'department_manager' || ['hr_admin', 'hr_manager', 'hr_director', 'system_admin'].includes(role);
