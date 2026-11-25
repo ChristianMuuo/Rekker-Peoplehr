@@ -193,6 +193,50 @@ const adminRoles: readonly string[] = [
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
+function canonicalLeaveCode(value: string): string {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("annual")) return "annual";
+  if (normalized.includes("sick")) return "sick";
+  if (normalized.includes("maternity")) return "maternity";
+  if (normalized.includes("paternity")) return "paternity";
+  if (normalized.includes("pre-adoptive") || normalized.includes("preadoptive")) return "pre-adoptive";
+  return normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+}
+
+function policyStatutoryFields(raw: Record<string, unknown>, defaults?: Partial<DemoLeavePolicyItem>) {
+  const numeric = (key: string, fallback: number) => {
+    const value = raw[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  };
+  const boolean = (key: string, fallback: boolean) =>
+    typeof raw[key] === "boolean" ? raw[key] as boolean : fallback;
+  return {
+    entitlementWeeks: numeric("entitlementWeeks", defaults?.entitlementWeeks ?? 0),
+    entitlementMonths: numeric("entitlementMonths", defaults?.entitlementMonths ?? 0),
+    sickFullPayDays: numeric("sickFullPayDays", defaults?.sickFullPayDays ?? 0),
+    sickHalfPayDays: numeric("sickHalfPayDays", defaults?.sickHalfPayDays ?? 0),
+    minimumServiceMonths: numeric("minimumServiceMonths", defaults?.minimumServiceMonths ?? 0),
+    certificateRequired: boolean("certificateRequired", defaults?.certificateRequired ?? false),
+    paidPercentage: numeric("paidPercentage", defaults?.paidPercentage ?? 100),
+    effectiveFrom: typeof raw.effectiveFrom === "string" ? raw.effectiveFrom : "2026-01-01",
+    effectiveTo: typeof raw.effectiveTo === "string" ? raw.effectiveTo : null,
+    sourceUrl: typeof raw.sourceUrl === "string" ? raw.sourceUrl : defaults?.sourceUrl ?? "",
+    verifiedOn: typeof raw.verifiedOn === "string" ? raw.verifiedOn : new Date().toISOString().slice(0, 10),
+    needsLegalReview: boolean("needsLegalReview", defaults?.needsLegalReview ?? true),
+  };
+}
+
+function statutoryFloorError(code: string, entitlementDays: number, fields: ReturnType<typeof policyStatutoryFields>): string | null {
+  return validateKenyaStatutoryFloor({
+    code,
+    entitlementDays,
+    entitlementWeeks: fields.entitlementWeeks,
+    entitlementMonths: fields.entitlementMonths,
+    sickFullPayDays: fields.sickFullPayDays,
+    sickHalfPayDays: fields.sickHalfPayDays,
+  });
+}
+
 export interface DemoLeaveItem {
   id: string;
   employeeId: string;
@@ -467,6 +511,8 @@ router.get("/leave-policies", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
   if (!process.env.DATABASE_URL) {
+    ensureDemoKenyaDefaultPolicies(membership.organizationId);
+    ensureDemoLeaveLedger(membership.organizationId);
     let items = DEMO_LEAVE_POLICIES.filter(
       (p) => p.organizationId === membership.organizationId,
     );
@@ -489,6 +535,7 @@ router.get("/leave-policies", async (req, res): Promise<void> => {
     );
     return;
   }
+  await ensureKenyaDefaultLeavePolicies(membership.organizationId, membership.userId);
   const conditions = [
     eq(leavePoliciesTable.organizationId, membership.organizationId),
   ];
