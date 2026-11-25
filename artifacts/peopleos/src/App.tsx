@@ -1189,11 +1189,21 @@ function ApprovalsPage() {
 function AuditPage() {
   const auth = useGetAuthContext();
   const audit = useListAuditEvents({ limit: 100 }, { query: { enabled: !!auth.data?.canViewAudit, queryKey: getListAuditEventsQueryKey({ limit: 100 }) } });
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportCsv = async () => {
+    setExportError(null);
+    try {
+      await triggerCsvDownload('/api/audit-events/export.csv', `peopleos-audit-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Audit export failed.');
+    }
+  };
   if (auth.isLoading) return <LoadingScreen label="Checking audit access" />;
   if (!auth.data?.canViewAudit) return <div><PageHeading eyebrow="Governance" title="Audit trail" /><div className="surface"><EmptyState title="Restricted area" message="Audit events are available only to designated audit roles. Ask your system administrator if your role should include this access." /></div></div>;
   if (audit.isLoading) return <LoadingScreen label="Loading audit events" />;
   if (audit.isError) return <ErrorState title="Audit events could not load" onRetry={() => audit.refetch()} />;
-  return <div><PageHeading eyebrow="Governance / Record of changes" title="Audit trail" description="A chronological record of actions returned for your authorized audit view." />
+  return <div><PageHeading eyebrow="Governance / Record of changes" title="Audit trail" description="A chronological record of actions returned for your authorized audit view." action={<button type="button" className="btn btn-secondary min-h-9 px-3 text-xs" onClick={() => void exportCsv()} data-testid="button-export-audit-csv"><Download size={14} /> Export CSV</button>} />
+    {exportError && <p className="mb-3 text-xs text-[#a91919]" role="alert">{exportError}</p>}
     {!audit.data?.length ? <div className="surface"><EmptyState title="No audit events" message="No events were returned for this timeline." /></div> :
     <div className="surface divide-y divide-stone-100">{audit.data.map((event,i) => <div className="flex gap-4 p-4 md:p-5" key={event.id} data-testid={`row-audit-event-${event.id}`}>
       <div className="flex w-20 shrink-0 flex-col items-end pt-1 text-right"><span className="text-[10px] font-bold text-stone-700">{formatDate(event.occurredAt)}</span><span className="mt-1 text-[10px] text-stone-400">{new Date(event.occurredAt).toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'})}</span></div>
