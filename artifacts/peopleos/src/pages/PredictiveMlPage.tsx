@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { apiGet, apiPost } from '../lib/api';
 import { useGetAuthContext } from '@workspace/api-client-react';
+import { FEATURE_REGISTRY, featureStatusLabel } from '../data/featureRegistry';
 
 type MlTaskKey =
   | 'attrition'
@@ -74,12 +75,12 @@ export function PredictiveMlPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">Predictive Machine Learning Engine</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">ML model workspace · preview</p>
           <h1 className="font-display text-3xl font-semibold tracking-[-.035em] text-stone-900">
-            Workforce ML Intelligence & Governance
+            Workforce ML model preview
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
-            Python Scikit-learn & XGBoost models with calibrated uncertainty intervals, explainable feature attributions, and audited data provenance.
+            Run the connected Python ML service against authorized tenant inputs. Model cards, training provenance, calibration evidence and limitations must be reviewed before any model is presented as production-ready.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -98,13 +99,17 @@ export function PredictiveMlPage() {
         </div>
       </div>
 
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950" role="status" data-testid="banner-ml-preview">
+        <strong>{featureStatusLabel(FEATURE_REGISTRY.mlIntelligence.status)}:</strong> {FEATURE_REGISTRY.mlIntelligence.description} The visible catalogue and model names do not certify that a model is trained, validated, calibrated or approved for consequential HR use.
+      </div>
+
       {/* Model Governance & Transparency Banner */}
       <div className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-xs shadow-xs">
         <ShieldCheck size={18} className="mt-0.5 shrink-0 text-red-700" />
         <div className="flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-bold text-stone-900">
-              Data Lineage & Provenance Guarantee:
+              Model input provenance:
               <span className={`ml-2 inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase font-bold ${
                 dataProvenance === 'live_tenant_data'
                   ? 'bg-emerald-100 text-emerald-800'
@@ -116,12 +121,12 @@ export function PredictiveMlPage() {
               </span>
             </p>
             <span className="font-mono text-[11px] text-stone-400">
-              Python 3.14 · Scikit-learn & XGBoost · v1.2.0
+              Python service · model version shown by backend when available
             </span>
           </div>
           <p className="mt-1 text-stone-600">
             {mlOverview.data?.disclaimer ||
-              'Features are assembled server-side strictly from authorized organization data. Models adhere to Kenya ODPC Privacy standards and never execute consequential HR decisions autonomously.'}
+              'Model results are advisory only. No model card or independent validation report is published in this preview; do not use outputs for hiring, discipline, promotion, pay or termination decisions.'}
           </p>
         </div>
       </div>
@@ -129,9 +134,9 @@ export function PredictiveMlPage() {
       {/* Model Selector Tabs */}
       <div className="flex flex-wrap gap-2">
         {[
-          ['attrition', 'XGBoost Attrition Risk'],
-          ['workforce_forecast', 'Ridge Demand Forecast'],
-          ['sentiment', 'NLP Burnout & Sentiment'],
+          ['attrition', 'Attrition analysis'],
+          ['workforce_forecast', 'Workforce forecast'],
+          ['sentiment', 'Feedback sentiment preview'],
           ['skills_gap', 'Competency Skills-Gap'],
           ['payroll_anomalies', 'IsolationForest Payroll Anomalies'],
           ['attendance_anomalies', 'Attendance Outlier Detection'],
@@ -156,7 +161,7 @@ export function PredictiveMlPage() {
                 <div>
                   <h3 className="font-display text-base font-bold text-stone-900">Attrition Risk Distribution</h3>
                   <p className="text-xs text-stone-500">
-                    CV ROC-AUC: <span className="font-bold text-emerald-700">{activeResult?.evaluationMetrics?.cvRocAuc ?? '0.8400'}</span> · F1: {activeResult?.evaluationMetrics?.cvF1Score ?? '0.7800'}
+                    CV ROC-AUC: <span className="font-bold text-stone-700">{activeResult?.evaluationMetrics?.cvRocAuc ?? 'Not published'}</span> · F1: {activeResult?.evaluationMetrics?.cvF1Score ?? 'Not published'}
                   </p>
                 </div>
                 <span className="rounded bg-stone-100 px-2 py-0.5 font-mono text-[10px]">XGBClassifier</span>
@@ -176,7 +181,7 @@ export function PredictiveMlPage() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center text-xs text-stone-400">
                   <Activity size={28} className="mb-2 text-stone-300" />
-                  <p>Click &ldquo;Run attrition Inference&rdquo; to execute Python XGBoost model on tenant data.</p>
+                  <p>Run the configured attrition task to see whether a model is available and whether its result is supported by sufficient data.</p>
                 </div>
               )}
             </div>
@@ -258,7 +263,7 @@ export function PredictiveMlPage() {
           <div className="surface p-5 lg:col-span-2">
             <h3 className="mb-2 font-display text-base font-bold text-stone-900">NLP Burnout & Sentiment Monitor</h3>
             <p className="mb-3 text-xs text-stone-500">
-              Avg Polarity: {activeResult?.averagePolarity ?? '0.45'} · Flagged Burnout Risk: {activeResult?.atRiskCount ?? '0'}
+              Avg Polarity: {activeResult?.averagePolarity ?? 'Not available'} · Flagged Burnout Risk: {activeResult?.atRiskCount ?? 'Not available'}
             </p>
             {activeResult?.entries ? (
               <div className="grid gap-3 sm:grid-cols-2">
@@ -423,7 +428,7 @@ export function PredictiveMlPage() {
                           <Check size={12} /> Approve
                         </button>
                       ) : (
-                        <span className="text-[10px] font-semibold text-emerald-700">Production Ready</span>
+                        <span className="text-[10px] font-semibold text-emerald-700">Approved in registry</span>
                       )}
                     </td>
                   )}
