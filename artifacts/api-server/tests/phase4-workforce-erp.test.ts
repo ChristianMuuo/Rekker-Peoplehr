@@ -90,7 +90,13 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
 
   test("2. Competency-Aware Shift Scheduling: conflict detection, leave blocking, and competency validation", async () => {
     await withServer(async (baseUrl) => {
-      const shiftDate = "2026-03-08";
+      const demoDate = (offsetDays: number): string => {
+        const date = new Date();
+        date.setUTCHours(0, 0, 0, 0);
+        date.setUTCDate(date.getUTCDate() + offsetDays);
+        return date.toISOString().slice(0, 10);
+      };
+      const shiftDate = demoDate(45);
 
       // A: Successful schedule assignment for qualified employee (Achieng Odhiambo)
       const validShiftRes = await fetch(`${baseUrl}/api/workforce-erp/shifts`, {
@@ -133,7 +139,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
       assert.ok(overlapData.error?.includes("conflict") || overlapData.error?.includes("already scheduled"));
 
       // C: Assigning employee on approved leave must be rejected
-      // Wanjiku Kimani (emp 4) has approved annual leave March 02 to March 13, 2026
+      // Demo Employee 04 has an approved request approximately 30 days before today.
       const leaveConflictRes = await fetch(`${baseUrl}/api/workforce-erp/shifts`, {
         method: "POST",
         headers: supervisorHeaders,
@@ -141,7 +147,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
           employeeId: "10000000-0000-4000-8000-000000000004",
           unitType: "warehouse",
           workZone: "Nairobi Dispatch Warehouse",
-          shiftDate: "2026-03-05",
+          shiftDate: demoDate(-30),
           shiftName: "Day (08:00-17:00)",
           startTime: "08:00",
           endTime: "17:00",
@@ -161,7 +167,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
           employeeId: "10000000-0000-4000-8000-000000000005", // Brenda Mutheu (sales rep)
           unitType: "warehouse",
           workZone: "High-Bay Racks",
-          shiftDate: "2026-03-09",
+          shiftDate: demoDate(46),
           shiftName: "Day (08:00-17:00)",
           startTime: "08:00",
           endTime: "17:00",
