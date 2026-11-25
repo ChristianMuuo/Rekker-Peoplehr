@@ -866,71 +866,65 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
   }
   const membership = await ensureMembership(req, res);
   if (!membership) return;
-  const isOrganizationAdmin = adminRoles.includes(membership.role);
   const year = query.data.year ?? new Date().getUTCFullYear();
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const isOrganizationAdmin = adminRoles.includes(membership.role);
 
   if (!process.env.DATABASE_URL) {
-    let permittedDemoEmployees = isOrganizationAdmin
+    ensureDemoLeaveLedger(membership.organizationId);
+    let permittedEmployees = isOrganizationAdmin
       ? DEMO_EMPLOYEES_LIST
       : membership.role === PEOPLEOS_ROLES.departmentManager && membership.employeeId
-        ? DEMO_EMPLOYEES_LIST.filter(
-            (e) =>
-              e.id === membership.employeeId ||
-              e.managerId === membership.employeeId,
-          )
+        ? DEMO_EMPLOYEES_LIST.filter((employee) =>
+            employee.id === membership.employeeId || employee.managerId === membership.employeeId)
         : membership.employeeId
-          ? DEMO_EMPLOYEES_LIST.filter((e) => e.id === membership.employeeId)
+          ? DEMO_EMPLOYEES_LIST.filter((employee) => employee.id === membership.employeeId)
           : [];
-
     if (query.data.employeeId) {
-      if (!permittedDemoEmployees.some((e) => e.id === query.data.employeeId)) {
-        res
-          .status(403)
-          .json({ error: "You cannot view leave balances for this employee." });
+      if (!permittedEmployees.some((employee) => employee.id === query.data.employeeId)) {
+        res.status(403).json({ error: "You cannot view leave balances for this employee." });
         return;
       }
-      permittedDemoEmployees = permittedDemoEmployees.filter(
-        (e) => e.id === query.data.employeeId,
-      );
+      permittedEmployees = permittedEmployees.filter((employee) => employee.id === query.data.employeeId);
     }
-
-    const policies = DEMO_LEAVE_POLICIES.filter(
-      (p) => p.organizationId === membership.organizationId,
-    ).sort((a, b) => a.name.localeCompare(b.name));
-
-    const balances = permittedDemoEmployees.flatMap((employee) =>
+    const policies = DEMO_LEAVE_POLICIES
+      .filter((policy) => policy.organizationId === membership.organizationId)
+      .filter((policy) => isOrganizationAdmin || policy.active)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const balances = permittedEmployees.flatMap((employee) =>
       policies.map((policy) => {
-        const relevantRequests = DEMO_LEAVE_STORE.filter(
-          (request) =>
-            request.employeeId === employee.id &&
-            request.leaveType === policy.code &&
-            (request.status === "approved" || request.status === "pending"),
-        );
-        const usedDays = relevantRequests
-          .filter((request) => request.status === "approved")
-          .reduce(
-            (total, request) =>
-              total +
-              businessDaysForYear(
-                dateOnly(request.startDate),
-                dateOnly(request.endDate),
-                year,
-              ),
-            0,
-          );
+        const entries = DEMO_LEAVE_LEDGER.filter((entry) =>
+          entry.organizationId === membership.organizationId &&
+          entry.employeeId === employee.id &&
+          entry.leaveType === policy.code &&
+          entry.effectiveDate >= yearStart &&
+          entry.effectiveDate <= yearEnd);
+        const ledgerQuarterDays = entries.reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+        const accruedQuarterDays = entries
+          .filter((entry) => ["accrual", "opening", "carry_over"].includes(entry.entryType))
+          .reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+        const deductionQuarterDays = entries
+          .filter((entry) => entry.entryType === "deduction")
+          .reduce((total, entry) => total + Math.abs(entry.quantityQuarterDays), 0);
+        const reversalQuarterDays = entries
+          .filter((entry) => entry.entryType === "reversal")
+          .reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+        const relevantRequests = DEMO_LEAVE_STORE.filter((request) =>
+          request.employeeId === employee.id &&
+          request.leaveType === policy.code &&
+          dateOnly(request.startDate) <= yearEnd &&
+          dateOnly(request.endDate) >= yearStart);
         const pendingDays = relevantRequests
           .filter((request) => request.status === "pending")
-          .reduce(
-            (total, request) =>
-              total +
-              businessDaysForYear(
-                dateOnly(request.startDate),
-                dateOnly(request.endDate),
-                year,
-              ),
-            0,
-          );
-        const accruedDays = accruedDaysForYear(policy, year, new Date());
+          .reduce((total, request) => total + request.days, 0);
+        const usedDays = Math.max(0, deductionQuarterDays - reversalQuarterDays) / 4;
+        const statutoryUnit = policy.entitlementWeeks > 0 ? "weeks" : policy.entitlementMonths > 0 ? "months" : "days";
+        const statutoryEntitlementLabel = policy.entitlementWeeks > 0
+          ? `${policy.entitlementWeeks} weeks (14 calendar days)`
+          : policy.entitlementMonths > 0
+            ? `${policy.entitlementMonths} month(s)`
+            : `${policy.entitlementDays} working days`;
         return {
           employeeId: employee.id,
           employeeName: `${employee.firstName} ${employee.lastName}`,
@@ -938,12 +932,17 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
           leaveTypeName: policy.name,
           year,
           entitlementDays: policy.entitlementDays,
-          accruedDays,
+          entitlementWeeks: policy.entitlementWeeks,
+          entitlementMonths: policy.entitlementMonths,
+          accruedDays: daysFromQuarterDays(accruedQuarterDays),
           usedDays,
           pendingDays,
-          remainingDays: accruedDays - usedDays - pendingDays,
+          remainingDays: daysFromQuarterDays(ledgerQuarterDays) - pendingDays,
           accrualMethod: policy.accrualMethod,
           active: policy.active,
+          statutoryUnit,
+          statutoryEntitlementLabel,
+          ledgerEntryCount: entries.length,
         };
       }),
     );
@@ -951,138 +950,124 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
     return;
   }
 
-  let permittedEmployees: {
+  await ensureKenyaDefaultLeavePolicies(membership.organizationId, membership.userId);
+  let permittedEmployees: Array<{
     id: string;
     firstName: string;
     lastName: string;
-  }[] = [];
+    startDate: string;
+  }> = [];
 
   if (isOrganizationAdmin) {
-    const conditions = [
-      eq(employeesTable.organizationId, membership.organizationId),
-    ];
-    if (query.data.employeeId) {
-      conditions.push(eq(employeesTable.id, query.data.employeeId));
-    }
+    const conditions = [eq(employeesTable.organizationId, membership.organizationId)];
+    if (query.data.employeeId) conditions.push(eq(employeesTable.id, query.data.employeeId));
     permittedEmployees = await db
-      .select({
-        id: employeesTable.id,
-        firstName: employeesTable.firstName,
-        lastName: employeesTable.lastName,
-      })
+      .select({ id: employeesTable.id, firstName: employeesTable.firstName, lastName: employeesTable.lastName, startDate: employeesTable.startDate })
       .from(employeesTable)
       .where(and(...conditions));
   } else if (membership.role === PEOPLEOS_ROLES.departmentManager) {
-    const conditions = [
-      eq(employeesTable.organizationId, membership.organizationId),
-    ];
-    if (membership.employeeId) {
-      conditions.push(
-        inArray(employeesTable.id, [
-          membership.employeeId,
-          ...(
-            await db
-              .select({ id: employeesTable.id })
-              .from(employeesTable)
-              .where(
-                and(
-                  eq(employeesTable.organizationId, membership.organizationId),
-                  eq(employeesTable.managerId, membership.employeeId),
-                ),
-              )
-          ).map((employee) => employee.id),
-        ]),
-      );
-    } else {
+    if (!membership.employeeId) {
       res.json(ListLeaveBalancesResponse.parse([]));
       return;
     }
-    permittedEmployees = await db
-      .select({
-        id: employeesTable.id,
-        firstName: employeesTable.firstName,
-        lastName: employeesTable.lastName,
-      })
+    const reports = await db
+      .select({ id: employeesTable.id })
       .from(employeesTable)
-      .where(and(...conditions));
+      .where(and(
+        eq(employeesTable.organizationId, membership.organizationId),
+        eq(employeesTable.managerId, membership.employeeId),
+      ));
+    const allowedIds = [membership.employeeId, ...reports.map((employee) => employee.id)];
+    if (query.data.employeeId && !allowedIds.includes(query.data.employeeId)) {
+      res.status(403).json({ error: "You cannot view leave balances for this employee." });
+      return;
+    }
+    permittedEmployees = await db
+      .select({ id: employeesTable.id, firstName: employeesTable.firstName, lastName: employeesTable.lastName, startDate: employeesTable.startDate })
+      .from(employeesTable)
+      .where(and(
+        eq(employeesTable.organizationId, membership.organizationId),
+        inArray(employeesTable.id, query.data.employeeId ? [query.data.employeeId] : allowedIds),
+      ));
   } else if (membership.employeeId) {
     permittedEmployees = await db
-      .select({
-        id: employeesTable.id,
-        firstName: employeesTable.firstName,
-        lastName: employeesTable.lastName,
-      })
+      .select({ id: employeesTable.id, firstName: employeesTable.firstName, lastName: employeesTable.lastName, startDate: employeesTable.startDate })
       .from(employeesTable)
-      .where(
-        and(
-          eq(employeesTable.organizationId, membership.organizationId),
-          eq(employeesTable.id, membership.employeeId),
-        ),
-      );
+      .where(and(
+        eq(employeesTable.organizationId, membership.organizationId),
+        eq(employeesTable.id, membership.employeeId),
+        query.data.employeeId ? eq(employeesTable.id, query.data.employeeId) : undefined,
+      ));
   }
 
-  if (
-    query.data.employeeId &&
-    !permittedEmployees.some((employee) => employee.id === query.data.employeeId)
-  ) {
-    res.status(403).json({ error: "You cannot view leave balances for this employee." });
-    return;
-  }
   if (!permittedEmployees.length) {
     res.json(ListLeaveBalancesResponse.parse([]));
     return;
   }
 
+  const policies = await db
+    .select()
+    .from(leavePoliciesTable)
+    .where(and(
+      eq(leavePoliciesTable.organizationId, membership.organizationId),
+      isOrganizationAdmin ? undefined : eq(leavePoliciesTable.active, true),
+    ))
+    .orderBy(leavePoliciesTable.name);
+  for (const employee of permittedEmployees) {
+    for (const policy of policies) {
+      await ensureMonthlyAnnualLeaveAccrual(membership.organizationId, employee, policy);
+    }
+  }
   const employeeIds = permittedEmployees.map((employee) => employee.id);
-  const yearStart = `${year}-01-01`;
-  const yearEnd = `${year}-12-31`;
-  const [policies, requests] = await Promise.all([
-    db
-      .select()
-      .from(leavePoliciesTable)
-      .where(eq(leavePoliciesTable.organizationId, membership.organizationId))
-      .orderBy(leavePoliciesTable.name),
-    db
-      .select()
-      .from(leaveRequestsTable)
-      .where(
-        and(
-          eq(leaveRequestsTable.organizationId, membership.organizationId),
-          inArray(leaveRequestsTable.employeeId, employeeIds),
-          inArray(leaveRequestsTable.status, ["pending", "approved"]),
-          lte(leaveRequestsTable.startDate, yearEnd),
-          gte(leaveRequestsTable.endDate, yearStart),
-        ),
-      ),
+  const [requests, ledger] = await Promise.all([
+    db.select().from(leaveRequestsTable).where(and(
+      eq(leaveRequestsTable.organizationId, membership.organizationId),
+      inArray(leaveRequestsTable.employeeId, employeeIds),
+      inArray(leaveRequestsTable.status, ["pending", "recommended", "approved"]),
+      lte(leaveRequestsTable.startDate, yearEnd),
+      gte(leaveRequestsTable.endDate, yearStart),
+    )),
+    db.select().from(leaveLedgerTable).where(and(
+      eq(leaveLedgerTable.organizationId, membership.organizationId),
+      inArray(leaveLedgerTable.employeeId, employeeIds),
+      gte(leaveLedgerTable.effectiveDate, yearStart),
+      lte(leaveLedgerTable.effectiveDate, yearEnd),
+    )),
   ]);
-  const employeesById = new Map(
-    permittedEmployees.map((employee) => [
-      employee.id,
-      `${employee.firstName} ${employee.lastName}`,
-    ]),
-  );
+  const employeesById = new Map(permittedEmployees.map((employee) => [
+    employee.id,
+    `${employee.firstName} ${employee.lastName}`,
+  ]));
   const balances = permittedEmployees.flatMap((employee) =>
     policies.map((policy) => {
-      const relevantRequests = requests.filter(
-        (request) =>
-          request.employeeId === employee.id &&
-          request.leaveType === policy.code,
+      const entries = ledger.filter((entry) =>
+        entry.employeeId === employee.id && entry.leaveType === policy.code);
+      const ledgerQuarterDays = entries.reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+      const accruedQuarterDays = entries
+        .filter((entry) => ["accrual", "opening", "carry_over"].includes(entry.entryType))
+        .reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+      const deductionQuarterDays = entries
+        .filter((entry) => entry.entryType === "deduction")
+        .reduce((total, entry) => total + Math.abs(entry.quantityQuarterDays), 0);
+      const reversalQuarterDays = entries
+        .filter((entry) => entry.entryType === "reversal")
+        .reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+      const relevantRequests = requests.filter((request) =>
+        request.employeeId === employee.id &&
+        request.leaveType === policy.code &&
+        request.status !== "approved" &&
+        request.startDate <= yearEnd &&
+        request.endDate >= yearStart);
+      const pendingDays = relevantRequests.reduce(
+        (total, request) => total + (request.halfDay ? 0.5 : request.days),
+        0,
       );
-      const usedDays = relevantRequests
-        .filter((request) => request.status === "approved")
-        .reduce(
-          (total, request) =>
-            total + businessDaysForYear(request.startDate, request.endDate, year),
-          0,
-        );
-      const pendingDays = relevantRequests
-        .filter((request) => request.status === "pending")
-        .reduce(
-          (total, request) =>
-            total + businessDaysForYear(request.startDate, request.endDate, year),
-          0,
-        );
-      const accruedDays = accruedDaysForYear(policy, year, new Date());
+      const statutoryUnit = policy.entitlementWeeks > 0 ? "weeks" : policy.entitlementMonths > 0 ? "months" : "days";
+      const statutoryEntitlementLabel = policy.entitlementWeeks > 0
+        ? `${policy.entitlementWeeks} weeks (14 calendar days)`
+        : policy.entitlementMonths > 0
+          ? `${policy.entitlementMonths} month(s)`
+          : `${policy.entitlementDays} working days`;
       return {
         employeeId: employee.id,
         employeeName: employeesById.get(employee.id) ?? "Employee",
@@ -1090,12 +1075,17 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
         leaveTypeName: policy.name,
         year,
         entitlementDays: policy.entitlementDays,
-        accruedDays,
-        usedDays,
+        entitlementWeeks: policy.entitlementWeeks,
+        entitlementMonths: policy.entitlementMonths,
+        accruedDays: daysFromQuarterDays(accruedQuarterDays),
+        usedDays: Math.max(0, deductionQuarterDays - reversalQuarterDays) / 4,
         pendingDays,
-        remainingDays: accruedDays - usedDays - pendingDays,
+        remainingDays: daysFromQuarterDays(ledgerQuarterDays) - pendingDays,
         accrualMethod: policy.accrualMethod,
         active: policy.active,
+        statutoryUnit,
+        statutoryEntitlementLabel,
+        ledgerEntryCount: entries.length,
       };
     }),
   );
