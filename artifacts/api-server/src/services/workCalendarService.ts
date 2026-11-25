@@ -6,6 +6,7 @@ import {
   db,
   organizationsTable,
   workCalendarsTable,
+  publicHolidaysTable,
   type AttendanceCorrectionRecord,
   type WorkCalendarRecord,
 } from "@workspace/db";
@@ -79,21 +80,35 @@ export async function resolveEffectiveWorkCalendar(
   location?: string | null,
 ) {
   const calendars = await getWorkCalendars(organizationId);
+  const persistedHolidays = process.env.DATABASE_URL
+    ? await db
+        .select({
+          date: publicHolidaysTable.holidayDate,
+          name: publicHolidaysTable.name,
+        })
+        .from(publicHolidaysTable)
+        .where(eq(publicHolidaysTable.organizationId, organizationId))
+    : [];
   const byLoc = location
     ? calendars.find((c) => c.location && c.location.toLowerCase() === location.toLowerCase())
     : undefined;
   const def = byLoc ?? calendars.find((c) => c.isDefault) ?? calendars[0];
 
   if (def) {
+    const configuredHolidays = JSON.parse(def.holidaysJson || "[]") as Array<{
+      date: string;
+      name: string;
+    }>;
+    const holidayMap = new Map<string, string>();
+    for (const holiday of [...configuredHolidays, ...persistedHolidays]) {
+      holidayMap.set(holiday.date, holiday.name);
+    }
     return {
       id: def.id,
       name: def.name,
       timezone: def.timezone || DEFAULT_ORG_TIMEZONE,
       workdays: JSON.parse(def.workdaysJson || "[1,2,3,4,5]") as number[],
-      holidays: JSON.parse(def.holidaysJson || "[]") as Array<{
-        date: string;
-        name: string;
-      }>,
+      holidays: [...holidayMap.entries()].map(([date, name]) => ({ date, name })),
       shiftStartTime: def.shiftStartTime || "08:00",
       shiftEndTime: def.shiftEndTime || "17:00",
     };
@@ -114,7 +129,7 @@ export async function resolveEffectiveWorkCalendar(
     name: "Organization Default Calendar",
     timezone: orgTz,
     workdays: [1, 2, 3, 4, 5],
-    holidays: [] as Array<{ date: string; name: string }>,
+    holidays: persistedHolidays,
     shiftStartTime: "08:00",
     shiftEndTime: "17:00",
   };
