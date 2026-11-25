@@ -32,6 +32,14 @@ export interface Phase2MemoryState {
   profileCorrectionRequests: ProfileCorrectionRequestRecord[];
   privacyRequests: PrivacyRequestRecord[];
   workCalendars: WorkCalendarRecord[];
+  publicHolidays: Array<{
+    id: string;
+    organizationId: string;
+    holidayDate: string;
+    name: string;
+    sourceUrl: string | null;
+    isGazetted: boolean;
+  }>;
   attendanceCorrections: AttendanceCorrectionRecord[];
   employeeExtras: Map<
     string,
@@ -54,7 +62,7 @@ export interface Phase2MemoryState {
 }
 
 const DEFAULT_ORG = PEOPLEOS_ORGANIZATION_ID;
-const NOW = new Date("2026-11-12T06:00:00.000Z");
+const NOW = new Date();
 
 export const phase2MemoryStore: Phase2MemoryState = {
   positions: [
@@ -336,6 +344,7 @@ export const phase2MemoryStore: Phase2MemoryState = {
       location: null,
       timezone: "Africa/Nairobi",
       workdaysJson: "[1,2,3,4,5]",
+      workdayWeightsJson: JSON.stringify({ 1: 1, 2: 1, 3: 1, 4: 1, 5: 1 }),
       holidaysJson: JSON.stringify([
         { date: "2026-01-01", name: "New Year's Day" },
         { date: "2026-05-01", name: "Labour Day" },
@@ -354,6 +363,7 @@ export const phase2MemoryStore: Phase2MemoryState = {
       updatedAt: NOW,
     },
   ],
+  publicHolidays: [],
   attendanceCorrections: [],
   employeeExtras: new Map([
     [
