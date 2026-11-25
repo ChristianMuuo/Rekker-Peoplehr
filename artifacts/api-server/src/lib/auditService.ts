@@ -12,6 +12,14 @@ export interface AuditEntry {
   targetType: string;
   targetId: string;
   summary: string;
+  beforeJson?: string | null;
+  afterJson?: string | null;
+  reason?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
+  prevHash?: string | null;
+  hash?: string | null;
   correlationId?: string;
   isDemo: boolean;
 }
@@ -103,6 +111,12 @@ export async function recordAuditEvent(params: {
   targetType: string;
   targetId: string;
   summary: string;
+  before?: unknown;
+  after?: unknown;
+  reason?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
   correlationId?: string;
   critical?: boolean;
   isDemo?: boolean;
@@ -123,6 +137,12 @@ export async function recordAuditEvent(params: {
     targetType: params.targetType,
     targetId: params.targetId,
     summary: fullSummary,
+    beforeJson: params.before === undefined ? null : JSON.stringify(params.before),
+    afterJson: params.after === undefined ? null : JSON.stringify(params.after),
+    reason: params.reason ?? null,
+    ipAddress: params.ipAddress ?? null,
+    userAgent: params.userAgent ?? null,
+    requestId: params.requestId ?? params.correlationId ?? null,
     correlationId: params.correlationId,
     isDemo: params.isDemo ?? !process.env.DATABASE_URL,
   };
@@ -151,6 +171,12 @@ export async function recordAuditEvent(params: {
         targetType: params.targetType,
         targetId: params.targetId,
         summary: fullSummary,
+        beforeJson: params.before === undefined ? null : JSON.stringify(params.before),
+        afterJson: params.after === undefined ? null : JSON.stringify(params.after),
+        reason: params.reason ?? null,
+        ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
+        requestId: params.requestId ?? params.correlationId ?? null,
         isDemo: params.isDemo ?? false,
       });
     } catch (err) {
