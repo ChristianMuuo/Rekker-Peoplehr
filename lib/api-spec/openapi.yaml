@@ -770,11 +770,11 @@ components:
         leaveType: { type: string }
         leaveTypeName: { type: string }
         year: { type: integer }
-        entitlementDays: { type: integer }
-        accruedDays: { type: integer }
-        usedDays: { type: integer }
-        pendingDays: { type: integer }
-        remainingDays: { type: integer }
+        entitlementDays: { type: number }
+        accruedDays: { type: number }
+        usedDays: { type: number }
+        pendingDays: { type: number }
+        remainingDays: { type: number }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
     LeaveDecisionInput:
