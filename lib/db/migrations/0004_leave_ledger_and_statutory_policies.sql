@@ -98,3 +98,9 @@ SELECT
 FROM "peopleos_leave_requests"
 WHERE "status" IN ('approved', 'rejected')
 ON CONFLICT ("request_id", "step") DO NOTHING;
+
+-- Support configurable partial working weekdays, e.g. Saturday as a half-day.
+ALTER TABLE "peopleos_work_calendars"
+  ADD COLUMN IF NOT EXISTS "half_workdays_json" text NOT NULL DEFAULT '[]';
+ALTER TABLE "peopleos_leave_requests"
+  ALTER COLUMN "days" TYPE numeric(6,2) USING "days"::numeric;
