@@ -1136,7 +1136,7 @@ function LeavePage() {
         {advisories[req.id] && <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3" data-testid={`panel-leave-advisory-${req.id}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-stone-800">{advisories[req.id].label}</span><span className="text-[10px] font-bold uppercase tracking-wide text-stone-600">Suggestion: {advisories[req.id].suggestion}</span></div><ul className="mt-2 space-y-1 text-[11px] leading-4 text-stone-600">{advisories[req.id].reasons.map((reason, index) => <li key={index}>• {reason}</li>)}</ul><p className="mt-2 text-[9px] text-stone-400">Advisory only. A human reviewer makes the recommendation and HR makes the final decision.</p></div>}
       </article>)}</div>}
       {leaveActionError && <p className="mt-3 text-xs text-[#a91919]" role="alert" data-testid="text-leave-action-error">{leaveActionError}</p>}
-      {decide.isError && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-leave-decision-error">Decision could not be saved. Refresh and confirm you still have approval access.</p>
+      {decide.isError && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-leave-decision-error">Decision could not be saved. Refresh and confirm you still have approval access.</p>}
     </section>
     {showForm && <Modal title="Request time away" onClose={() => setShowForm(false)} testId="dialog-create-leave">
       <form className="space-y-4" data-testid="form-leave-request" onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); const data: LeaveRequestInput = { employeeId: String(fd.get('employeeId') ?? ''), leaveType: String(fd.get('leaveType')), startDate: String(fd.get('startDate')), endDate: String(fd.get('endDate')), reason: String(fd.get('reason')).trim(), halfDay: fd.get('halfDay') === 'on' }; create.mutate({ data }, { onSuccess: () => { refresh(); setShowForm(false); } }); }}>
@@ -1399,8 +1399,6 @@ function SettingsPage() {
             </div>
           </div>
         )}
-      </section>
-
       </section>}
       {!isDiagnosticsView && <>
       <section className="surface mt-4 p-5 md:p-7" data-testid="section-role-access">
