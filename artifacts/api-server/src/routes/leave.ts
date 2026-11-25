@@ -354,13 +354,20 @@ function eventEntitlementCalendarDays(
   policy: { entitlementDays: number; entitlementQuantity?: number; entitlementUnit?: string },
   startDate: string,
 ): number {
+  const quantity =
+    policy.entitlementQuantity ??
+    (policy.entitlementUnit === "weeks"
+      ? policy.entitlementDays / 7
+      : policy.entitlementUnit === "months"
+        ? policy.entitlementDays / 30
+        : policy.entitlementDays);
   if (policy.entitlementUnit === "weeks") {
-    return (policy.entitlementQuantity ?? 0) * 7;
+    return quantity * 7;
   }
   if (policy.entitlementUnit === "months") {
     const endExclusive = addMonthsClamped(
       new Date(`${startDate}T00:00:00.000Z`),
-      policy.entitlementQuantity ?? 0,
+      quantity,
     );
     const start = new Date(`${startDate}T00:00:00.000Z`);
     return Math.max(0, Math.round((endExclusive.getTime() - start.getTime()) / 86_400_000));
