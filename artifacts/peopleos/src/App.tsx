@@ -956,6 +956,9 @@ function LeavePage() {
   const [balanceEmployeeId, setBalanceEmployeeId] = useState('');
   const [balanceYear, setBalanceYear] = useState(new Date().getUTCFullYear());
   const [policyFormError, setPolicyFormError] = useState(false);
+  const [advisories, setAdvisories] = useState<Record<string, { label: string; suggestion: 'approve' | 'review' | 'decline'; reasons: string[]; rulesFired: string[] }>>({});
+  const [advisoryBusy, setAdvisoryBusy] = useState<string | null>(null);
+  const [leaveActionError, setLeaveActionError] = useState<string | null>(null);
   const list = useListLeaveRequests({ status: filter ? filter as 'pending' | 'approved' | 'rejected' | 'cancelled' : undefined });
   const employees = useListEmployees({ page: 1, pageSize: 100 });
   const policies = useListLeavePolicies();
@@ -978,12 +981,57 @@ function LeavePage() {
   const visibleBalances = (balances.data ?? []).filter(balance => !balanceEmployeeId || balance.employeeId === balanceEmployeeId);
   const canManagePolicies = Boolean(auth.data?.canManagePeople);
   const canChooseBalanceEmployee = Boolean(auth.data?.canApproveLeave);
+  const role = auth.data?.role ?? 'employee';
+  const canRecommendLeave = role === 'department_manager' || ['hr_admin', 'hr_manager', 'hr_director', 'system_admin'].includes(role);
+  const canApproveFinalLeave = ['hr_admin', 'hr_manager', 'hr_director', 'system_admin'].includes(role);
+  const entitlementLabel = (policy: LeavePolicy) => {
+    const quantity = policy.entitlementQuantity ?? policy.entitlementDays;
+    const unit = policy.entitlementUnit ?? 'days';
+    if (unit === 'weeks') return `${quantity} weeks (${quantity * 7} calendar days)`;
+    if (unit === 'months') return `${quantity} months`;
+    return policy.code === 'annual' ? `${quantity} working days per 12 months` : `${quantity} days`;
+  };
+  const inspectAdvisory = async (requestId: string) => {
+    setAdvisoryBusy(requestId);
+    setLeaveActionError(null);
+    try {
+      const result = await apiGet<{ label: string; suggestion: 'approve' | 'review' | 'decline'; reasons: string[]; rulesFired: string[] }>(`/api/leave-requests/${requestId}/advisory`);
+      setAdvisories(previous => ({ ...previous, [requestId]: result }));
+    } catch (error) {
+      setLeaveActionError(error instanceof Error ? error.message : 'The leave advisory could not be loaded.');
+    } finally {
+      setAdvisoryBusy(null);
+    }
+  };
+  const submitRecommendation = async (requestId: string, decision: 'recommend' | 'not_recommend') => {
+    setLeaveActionError(null);
+    try {
+      await apiPost(`/api/leave-requests/${requestId}/recommendation`, { decision });
+      refresh();
+    } catch (error) {
+      setLeaveActionError(error instanceof Error ? error.message : 'The recommendation could not be saved.');
+    }
+  };
+  const cancelLeaveRequest = async (requestId: string) => {
+    setLeaveActionError(null);
+    try {
+      await apiPost(`/api/leave-requests/${requestId}/cancel`);
+      refresh();
+    } catch (error) {
+      setLeaveActionError(error instanceof Error ? error.message : 'The leave request could not be cancelled.');
+    }
+  };
   const savePolicy = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const entitlementQuantity = Number(formData.get('entitlementQuantity'));
+    const entitlementUnit = String(formData.get('entitlementUnit') ?? 'days') as 'days' | 'weeks' | 'months';
+    const entitlementDays = entitlementQuantity * (entitlementUnit === 'weeks' ? 7 : entitlementUnit === 'months' ? 30 : 1);
     const data = {
       name: String(formData.get('name') ?? '').trim(),
-      entitlementDays: Number(formData.get('entitlementDays')),
+      entitlementDays,
+      entitlementQuantity,
+      entitlementUnit,
       accrualMethod: String(formData.get('accrualMethod')) as 'annual' | 'monthly',
     };
     setPolicyFormError(false);
@@ -1016,6 +1064,8 @@ function LeavePage() {
       data: {
         name: policy.name,
         entitlementDays: policy.entitlementDays,
+        entitlementQuantity: policy.entitlementQuantity ?? policy.entitlementDays,
+        entitlementUnit: policy.entitlementUnit ?? 'days',
         accrualMethod: policy.accrualMethod,
         active: !policy.active,
       },
@@ -1033,7 +1083,7 @@ function LeavePage() {
       </div>
       {balances.isLoading ? <div className="skeleton h-24" data-testid="state-leave-balances-loading" /> :
         balances.isError ? <ErrorState title="Leave balances could not load" onRetry={() => balances.refetch()} /> :
-        !policies.data?.length ? <EmptyState title="Leave policies are not configured" message={canManagePolicies ? "Add organization leave types and their entitlement rules below. No statutory amounts are pre-filled." : "Your HR team has not configured leave types and entitlement rules yet."} /> :
+        !policies.data?.length ? <EmptyState title="Leave policy pack unavailable" message="The organization leave policy records were not returned. Check database readiness and the statutory default-pack seed." /> :
         !visibleBalances.length ? <EmptyState title="No balances for this year" message="No leave policies or employee balances were returned for the selected year." /> :
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-xs" data-testid="table-leave-balances">
@@ -1051,12 +1101,12 @@ function LeavePage() {
         </div>}
     </section>
     {canManagePolicies && <section className="surface mb-4 p-4 md:p-5" data-testid="section-leave-policies">
-      <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Organization leave policies</h2><p className="mt-1 text-xs text-stone-500">Set entitlements and accrual for this organization. Entitlement amounts are not pre-populated.</p></div><button className="btn btn-secondary min-h-9 shrink-0 px-3" onClick={() => { setEditingPolicy(null); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid="button-add-leave-policy"><Plus size={14} /> Add leave type</button></div>
+      <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Organization leave policies</h2><p className="mt-1 text-xs text-stone-500">Kenya statutory defaults are seeded on first run. Company policies can be adjusted only within the legal minimums.</p></div><button className="btn btn-secondary min-h-9 shrink-0 px-3" onClick={() => { setEditingPolicy(null); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid="button-add-leave-policy"><Plus size={14} /> Add leave type</button></div>
       {policies.isLoading ? <div className="skeleton h-16" data-testid="state-leave-policies-loading" /> :
         policies.isError ? <ErrorState title="Leave policies could not load" onRetry={() => policies.refetch()} /> :
         !policies.data?.length ? <EmptyState title="No leave types yet" message="Add your organization's leave types and rules. You choose the entitlement and whether it accrues annually or monthly." /> :
         <div className="divide-y divide-stone-100">{policies.data.map(policy => <article key={policy.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center" data-testid={`card-leave-policy-${policy.id}`}>
-          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-stone-800">{policy.name}</h3><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${policy.active ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-stone-100 text-stone-500'}`}>{policy.active ? 'Active' : 'Inactive'}</span></div><p className="mt-1 text-xs text-stone-500">{policy.entitlementDays} days per year · {policy.accrualMethod === 'monthly' ? 'Accrues monthly' : 'Granted annually'}</p></div>
+          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-stone-800">{policy.name}</h3><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${policy.active ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-stone-100 text-stone-500'}`}>{policy.active ? 'Active' : 'Inactive'}</span>{policy.needsLegalReview && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-800">Legal review</span>}</div><p className="mt-1 text-xs text-stone-500">{entitlementLabel(policy)} · {policy.accrualMethod === 'monthly' ? 'Accrues monthly' : 'Granted annually'}</p></div>
           <div className="flex gap-2"><button className="btn btn-secondary min-h-9 px-3" onClick={() => { setEditingPolicy(policy); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid={`button-edit-leave-policy-${policy.id}`}>Edit</button><button className="btn btn-ghost min-h-9 px-3 text-xs" disabled={updatePolicy.isPending} onClick={() => togglePolicy(policy)} data-testid={`button-toggle-leave-policy-${policy.id}`}>{policy.active ? 'Deactivate' : 'Reactivate'}</button></div>
         </article>)}</div>}
       {updatePolicy.isError && !showPolicyForm && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-leave-policy-toggle-error">The leave policy status could not be changed. Refresh and try again.</p>}
@@ -1076,10 +1126,11 @@ function LeavePage() {
       {decide.isError && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-leave-decision-error">Decision could not be saved. Refresh and confirm you still have approval access.</p>}
     </section>
     {showForm && <Modal title="Request time away" onClose={() => setShowForm(false)} testId="dialog-create-leave">
-      <form className="space-y-4" data-testid="form-leave-request" onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); const data: LeaveRequestInput = { employeeId: String(fd.get('employeeId') ?? ''), leaveType: String(fd.get('leaveType')), startDate: String(fd.get('startDate')), endDate: String(fd.get('endDate')), reason: String(fd.get('reason')).trim() }; create.mutate({ data }, { onSuccess: () => { refresh(); setShowForm(false); } }); }}>
+      <form className="space-y-4" data-testid="form-leave-request" onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); const data: LeaveRequestInput = { employeeId: String(fd.get('employeeId') ?? ''), leaveType: String(fd.get('leaveType')), startDate: String(fd.get('startDate')), endDate: String(fd.get('endDate')), reason: String(fd.get('reason')).trim(), halfDay: fd.get('halfDay') === 'on' }; create.mutate({ data }, { onSuccess: () => { refresh(); setShowForm(false); } }); }}>
         <label><span className="label">Employee</span><select className="field" name="employeeId" required data-testid="select-leave-employee"><option value="">Select a permitted employee record</option>{employees.data?.items.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName} · {e.departmentName}</option>)}</select><span className="mt-1 block text-[10px] text-stone-400">Only employee records returned for your account are listed.</span></label>
-        <label><span className="label">Leave type</span><select className="field" name="leaveType" required disabled={!activePolicies.length} data-testid="select-leave-type"><option value="">Select a configured leave type</option>{activePolicies.map(policy => <option key={policy.code} value={policy.code}>{policy.name} · {policy.entitlementDays} days/year</option>)}</select></label>
+        <label><span className="label">Leave type</span><select className="field" name="leaveType" required disabled={!activePolicies.length} data-testid="select-leave-type"><option value="">Select a leave type</option>{activePolicies.map(policy => <option key={policy.code} value={policy.code}>{policy.name} · {entitlementLabel(policy)}</option>)}</select></label>
         <div className="grid gap-3 sm:grid-cols-2"><Field name="startDate" label="First day away" type="date" required /><Field name="endDate" label="Last day away" type="date" required /></div>
+        <label className="flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" name="halfDay" className="h-4 w-4 accent-[#C71D1D]" data-testid="checkbox-leave-half-day" /> Request a half day (one working date only)</label>
         <label><span className="label">Reason</span><textarea className="field min-h-24 resize-y" name="reason" minLength={3} maxLength={1000} required placeholder="Add context for your manager" data-testid="input-leave-reason" /></label>
         {create.isError && <p className="text-xs text-[#a91919]" data-testid="text-leave-create-error">{create.error instanceof Error ? create.error.message : 'Request could not be submitted. Check the dates, available balance, and leave type.'}</p>}
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)} data-testid="button-cancel-leave">Cancel</button><button className="btn btn-primary" disabled={create.isPending || !activePolicies.length} data-testid="button-submit-leave">{create.isPending ? 'Submitting…' : 'Submit request'}</button></div>
@@ -1088,8 +1139,8 @@ function LeavePage() {
     {showPolicyForm && <Modal title={editingPolicy ? 'Edit leave policy' : 'Add leave type'} onClose={() => { setShowPolicyForm(false); setEditingPolicy(null); }} testId="dialog-leave-policy">
       <form className="space-y-4" onSubmit={savePolicy} data-testid="form-leave-policy">
         <Field name="name" label="Leave type name" defaultValue={editingPolicy?.name} required />
-        <label><span className="label">Annual entitlement (days)</span><input className="field" name="entitlementDays" type="number" min="0" max="366" step="1" defaultValue={editingPolicy?.entitlementDays ?? ''} required data-testid="input-leave-policy-entitlement" /></label>
-        <label><span className="label">Accrual rule</span><select className="field" name="accrualMethod" defaultValue={editingPolicy?.accrualMethod ?? 'annual'} data-testid="select-leave-policy-accrual"><option value="annual">Granted annually</option><option value="monthly">Accrues monthly</option></select></label>
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr]"><label><span className="label">Entitlement amount</span><input className="field" name="entitlementQuantity" type="number" min="0" max="366" step="1" defaultValue={editingPolicy?.entitlementQuantity ?? editingPolicy?.entitlementDays ?? ''} required data-testid="input-leave-policy-entitlement" /></label><label><span className="label">Entitlement unit</span><select className="field" name="entitlementUnit" defaultValue={editingPolicy?.entitlementUnit ?? 'days'} data-testid="select-leave-policy-unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label></div>
+        <label><span className="label">Accrual rule</span><select className="field" name="accrualMethod" defaultValue={editingPolicy?.accrualMethod ?? 'annual'} data-testid="select-leave-policy-accrual"><option value="annual">Granted annually</option><option value="monthly">Accrues monthly</option></select></label><p className="text-[10px] leading-4 text-stone-500">Paternity leave is legally stored as 2 weeks. The system displays the equivalent in calendar days; working-day conversion depends on the employee schedule and requires legal review.</p>
         {policyFormError && <p className="text-xs text-[#a91919]" data-testid="text-leave-policy-error">{createPolicy.error instanceof Error ? createPolicy.error.message : updatePolicy.error instanceof Error ? updatePolicy.error.message : 'The policy could not be saved. Check the values and whether this leave type already exists.'}</p>}
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><button type="button" className="btn btn-secondary" onClick={() => { setShowPolicyForm(false); setEditingPolicy(null); }} data-testid="button-cancel-leave-policy">Cancel</button><button className="btn btn-primary" disabled={createPolicy.isPending || updatePolicy.isPending} data-testid="button-save-leave-policy">{createPolicy.isPending || updatePolicy.isPending ? 'Saving…' : 'Save policy'}</button></div>
       </form>
