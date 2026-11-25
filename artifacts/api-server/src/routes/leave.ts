@@ -2053,8 +2053,10 @@ router.post(
     }
     const membership = await requireRoles(req, res, approverRoles);
     if (!membership) return;
+    const targetStatus = body.data.decision === "approve" ? "approved" : "rejected";
+
     if (!process.env.DATABASE_URL) {
-      const target = DEMO_LEAVE_STORE.find((r) => r.id === params.data.requestId);
+      const target = DEMO_LEAVE_STORE.find((item) => item.id === params.data.requestId);
       if (!target) {
         res.status(404).json({ error: "Leave request not found." });
         return;
@@ -2063,11 +2065,23 @@ router.post(
         res.status(409).json({ error: "This request has already been decided." });
         return;
       }
-      if (membership.employeeId && target.employeeId === membership.employeeId) {
-        res.status(403).json({ error: "You cannot approve a leave request you submitted." });
+      if (!target.recommendationStatus || target.recommendationStatus === "not_assessed") {
+        res.status(409).json({ error: "A manager recommendation is required before HR can decide this request." });
         return;
       }
-      target.status = body.data.decision === "approve" ? "approved" : "rejected";
+      if (body.data.decision === "approve" && target.recommendationStatus !== "recommended") {
+        res.status(409).json({ error: "This request was not recommended. HR may reject it, but cannot approve it without a recommendation." });
+        return;
+      }
+      if (
+        target.createdByUserId === membership.userId ||
+        target.recommendationByUserId === membership.userId ||
+        (membership.employeeId && target.employeeId === membership.employeeId)
+      ) {
+        res.status(403).json({ error: "The requester or recommender cannot approve their own leave request." });
+        return;
+      }
+      target.status = targetStatus;
       target.decisionComment = body.data.comment ?? null;
       target.decidedAt = new Date();
       target.approverId = membership.userId;
@@ -2086,46 +2100,38 @@ router.post(
       res.json(DecideLeaveRequestResponse.parse(target));
       return;
     }
-    const [request] = await db
-      .select()
-      .from(leaveRequestsTable)
-      .where(
-        and(
-          eq(leaveRequestsTable.id, params.data.requestId),
-          eq(leaveRequestsTable.organizationId, membership.organizationId),
-        ),
-      )
-      .limit(1);
-    if (!request) {
-      res.status(404).json({ error: "Leave request not found." });
-      return;
-    }
-    if (request.status !== "pending") {
-      res.status(409).json({ error: "This request has already been decided." });
-      return;
-    }
-    if (
-      membership.role === PEOPLEOS_ROLES.departmentManager &&
-      !(await canManageRequest(
-        membership.organizationId,
-        membership.employeeId ?? "",
-        membership.role,
-        request.employeeId,
-      ))
-    ) {
-      res.status(403).json({ error: "You cannot approve leave for this employee." });
-      return;
-    }
-    if (request.createdByUserId === membership.userId) {
-      res.status(403).json({ error: "You cannot approve a leave request you submitted." });
-      return;
-    }
-    const status = body.data.decision === "approve" ? "approved" : "rejected";
-    const updated = await db.transaction(async (tx) => {
-      const [result] = await tx
+
+    const result = await db.transaction(async (tx) => {
+      const [request] = await tx
+        .select()
+        .from(leaveRequestsTable)
+        .where(
+          and(
+            eq(leaveRequestsTable.id, params.data.requestId),
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!request) return { kind: "missing" as const };
+      if (request.status !== "pending") return { kind: "already_decided" as const };
+      if (!request.recommendationStatus || request.recommendationStatus === "not_assessed") {
+        return { kind: "recommendation_required" as const };
+      }
+      if (body.data.decision === "approve" && request.recommendationStatus !== "recommended") {
+        return { kind: "not_recommended" as const };
+      }
+      if (
+        request.createdByUserId === membership.userId ||
+        request.recommendationByUserId === membership.userId
+      ) {
+        return { kind: "self_approval" as const };
+      }
+
+      const [updated] = await tx
         .update(leaveRequestsTable)
         .set({
-          status,
+          status: targetStatus,
           approverUserId: membership.userId,
           decisionComment: body.data.comment ?? null,
           decidedAt: new Date(),
@@ -2135,29 +2141,71 @@ router.post(
             eq(leaveRequestsTable.id, request.id),
             eq(leaveRequestsTable.organizationId, membership.organizationId),
             eq(leaveRequestsTable.status, "pending"),
+            eq(leaveRequestsTable.recommendationStatus, request.recommendationStatus),
           ),
         )
         .returning();
-      if (!result) return null;
+      if (!updated) return { kind: "already_decided" as const };
+
+      if (targetStatus === "approved") {
+        const yearlyDays = businessDaysByYear(request.startDate, request.endDate);
+        for (const [leaveYear, fullDays] of yearlyDays) {
+          const quantityDays =
+            fullDays - (request.halfDay && request.startDate.slice(0, 4) === String(leaveYear) ? 0.5 : 0);
+          if (quantityDays <= 0) continue;
+          await tx
+            .insert(leaveLedgerTable)
+            .values({
+              organizationId: membership.organizationId,
+              employeeId: request.employeeId,
+              leaveType: request.leaveType,
+              leaveYear,
+              leaveRequestId: request.id,
+              entryType: "deduction",
+              quantityDays: -quantityDays,
+              sourceKey: `approval:${request.id}:${leaveYear}`,
+              description: `Approved leave deduction for ${leaveYear}`,
+              createdByUserId: membership.userId,
+              isDemo: request.isDemo,
+            })
+            .onConflictDoNothing();
+        }
+      }
+
       await tx.insert(auditEventsTable).values({
         organizationId: membership.organizationId,
         actorUserId: membership.userId,
         actor: membership.role,
-        action: status === "approved" ? "leave_request_approved" : "leave_request_rejected",
+        action: targetStatus === "approved" ? "leave_request_approved" : "leave_request_rejected",
         targetType: "leave_request",
         targetId: request.id,
-        summary: `A leave request was ${status}.`,
+        summary: `A leave request was ${targetStatus}.`,
         isDemo: request.isDemo,
       });
-      return result;
+      return { kind: "updated" as const, request: updated };
     });
-    if (!updated) {
+
+    if (result.kind === "missing") {
+      res.status(404).json({ error: "Leave request not found." });
+      return;
+    }
+    if (result.kind === "already_decided") {
       res.status(409).json({ error: "This request has already been decided." });
       return;
     }
-    const [response] = await serializeRequests(membership.organizationId, [
-      updated,
-    ]);
+    if (result.kind === "recommendation_required") {
+      res.status(409).json({ error: "A manager recommendation is required before HR can decide this request." });
+      return;
+    }
+    if (result.kind === "not_recommended") {
+      res.status(409).json({ error: "This request was not recommended and cannot be approved." });
+      return;
+    }
+    if (result.kind === "self_approval") {
+      res.status(403).json({ error: "The requester or recommender cannot approve their own leave request." });
+      return;
+    }
+    const [response] = await serializeRequests(membership.organizationId, [result.request]);
     res.json(DecideLeaveRequestResponse.parse(response));
   },
 );
