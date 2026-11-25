@@ -6,6 +6,7 @@ import {
   db,
   organizationsTable,
   workCalendarsTable,
+  publicHolidaysTable,
   type AttendanceCorrectionRecord,
   type WorkCalendarRecord,
 } from "@workspace/db";
@@ -79,21 +80,43 @@ export async function resolveEffectiveWorkCalendar(
   location?: string | null,
 ) {
   const calendars = await getWorkCalendars(organizationId);
+  const persistedHolidays = process.env.DATABASE_URL
+    ? await db
+        .select({
+          date: publicHolidaysTable.holidayDate,
+          name: publicHolidaysTable.name,
+        })
+        .from(publicHolidaysTable)
+        .where(eq(publicHolidaysTable.organizationId, organizationId))
+    : phase2MemoryStore.publicHolidays
+        .filter((holiday) => holiday.organizationId === organizationId)
+        .map((holiday) => ({ date: holiday.holidayDate, name: holiday.name }));
   const byLoc = location
     ? calendars.find((c) => c.location && c.location.toLowerCase() === location.toLowerCase())
     : undefined;
   const def = byLoc ?? calendars.find((c) => c.isDefault) ?? calendars[0];
 
   if (def) {
+    const configuredHolidays = JSON.parse(def.holidaysJson || "[]") as Array<{
+      date: string;
+      name: string;
+    }>;
+    const holidayMap = new Map<string, string>();
+    for (const holiday of [...configuredHolidays, ...persistedHolidays]) {
+      holidayMap.set(holiday.date, holiday.name);
+    }
     return {
       id: def.id,
       name: def.name,
       timezone: def.timezone || DEFAULT_ORG_TIMEZONE,
       workdays: JSON.parse(def.workdaysJson || "[1,2,3,4,5]") as number[],
-      holidays: JSON.parse(def.holidaysJson || "[]") as Array<{
-        date: string;
-        name: string;
-      }>,
+      workdayWeights: JSON.parse(
+        def.workdayWeightsJson ||
+          JSON.stringify(Object.fromEntries(
+            (JSON.parse(def.workdaysJson || "[1,2,3,4,5]") as number[]).map((day) => [day, 1]),
+          )),
+      ) as Record<number, number>,
+      holidays: [...holidayMap.entries()].map(([date, name]) => ({ date, name })),
       shiftStartTime: def.shiftStartTime || "08:00",
       shiftEndTime: def.shiftEndTime || "17:00",
     };
@@ -114,7 +137,8 @@ export async function resolveEffectiveWorkCalendar(
     name: "Organization Default Calendar",
     timezone: orgTz,
     workdays: [1, 2, 3, 4, 5],
-    holidays: [] as Array<{ date: string; name: string }>,
+    workdayWeights: { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1 },
+    holidays: persistedHolidays,
     shiftStartTime: "08:00",
     shiftEndTime: "17:00",
   };
@@ -128,6 +152,7 @@ export async function upsertWorkCalendar(params: {
   location?: string | null;
   timezone: string;
   workdays: number[];
+  workdayWeights?: Record<number, number>;
   holidays: Array<{ date: string; name: string }>;
   shiftStartTime: string;
   shiftEndTime: string;
@@ -140,9 +165,19 @@ export async function upsertWorkCalendar(params: {
     throw new Error(`Invalid IANA timezone '${params.timezone}'.`);
   }
 
-  const cleanWorkdays = [...new Set(params.workdays)].filter(
-    (d) => Number.isInteger(d) && d >= 0 && d <= 6,
+  const submittedWeights = params.workdayWeights ?? Object.fromEntries(
+    params.workdays.map((day) => [day, 1]),
   );
+  const cleanWeights: Record<number, number> = {};
+  for (const [rawDay, rawWeight] of Object.entries(submittedWeights)) {
+    const day = Number(rawDay);
+    const weight = Number(rawWeight);
+    if (!Number.isInteger(day) || day < 0 || day > 6 || !Number.isFinite(weight) || weight < 0 || weight > 1) {
+      throw new Error("Workday weights must map weekday numbers 0-6 to values between 0 and 1.");
+    }
+    if (weight > 0) cleanWeights[day] = weight;
+  }
+  const cleanWorkdays = Object.keys(cleanWeights).map(Number).sort((a, b) => a - b);
   if (cleanWorkdays.length === 0) {
     throw new Error("At least one working day of the week must be configured.");
   }
@@ -164,6 +199,7 @@ export async function upsertWorkCalendar(params: {
           location: params.location ? sanitizeText(params.location, 120) : null,
           timezone: params.timezone,
           workdaysJson: JSON.stringify(cleanWorkdays),
+          workdayWeightsJson: JSON.stringify(cleanWeights),
           holidaysJson: JSON.stringify(params.holidays),
           shiftStartTime: params.shiftStartTime,
           shiftEndTime: params.shiftEndTime,
@@ -202,6 +238,7 @@ export async function upsertWorkCalendar(params: {
     location: params.location ? sanitizeText(params.location, 120) : null,
     timezone: params.timezone,
     workdaysJson: JSON.stringify(cleanWorkdays),
+    workdayWeightsJson: JSON.stringify(cleanWeights),
     holidaysJson: JSON.stringify(params.holidays),
     shiftStartTime: params.shiftStartTime,
     shiftEndTime: params.shiftEndTime,
@@ -231,6 +268,7 @@ export function countCalendarWorkingDays(
   endIso: string,
   calendar: {
     workdays: number[];
+    workdayWeights?: Record<number, number>;
     holidays: Array<{ date: string; name: string }>;
   },
 ): { workingDays: number; excludedHolidayCount: number } {
@@ -244,11 +282,12 @@ export function countCalendarWorkingDays(
   while (cursor <= final) {
     const iso = cursor.toISOString().slice(0, 10);
     const weekday = cursor.getUTCDay();
-    if (workdaySet.has(weekday)) {
+    const weight = calendar.workdayWeights?.[weekday] ?? (workdaySet.has(weekday) ? 1 : 0);
+    if (weight > 0) {
       if (holidaySet.has(iso)) {
-        excludedHolidayCount += 1;
+        excludedHolidayCount += weight;
       } else {
-        workingDays += 1;
+        workingDays += weight;
       }
     }
     cursor.setUTCDate(cursor.getUTCDate() + 1);

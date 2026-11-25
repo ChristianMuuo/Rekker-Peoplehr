@@ -12,6 +12,14 @@ export interface AuditEntry {
   targetType: string;
   targetId: string;
   summary: string;
+  beforeJson?: string | null;
+  afterJson?: string | null;
+  reason?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
+  prevHash?: string | null;
+  hash?: string | null;
   correlationId?: string;
   isDemo: boolean;
 }
@@ -25,41 +33,50 @@ export class AuditPersistenceError extends Error {
   }
 }
 
+function demoAuditTime(daysAgo: number, hour: number): string {
+  const value = new Date();
+  value.setUTCDate(value.getUTCDate() - daysAgo);
+  value.setUTCHours(hour, 0, 0, 0);
+  return value.toISOString();
+}
+
+const demoPayrollPeriod = new Date().toISOString().slice(0, 7);
+
 export const DEMO_AUDIT_STORE: AuditEntry[] = [
   {
     id: "audit-001",
     organizationId: "rekker-demo",
-    occurredAt: "2026-03-05T14:20:00.000Z",
-    actor: "Demo Admin 07 (hr_admin)",
+    occurredAt: demoAuditTime(1, 14),
+    actor: "Demo HR Administrator",
     actorUserId: "user_demo_admin_01",
     action: "LEAVE_APPROVE",
     targetType: "leave_request",
     targetId: "leave-001",
-    summary: "Approved annual leave request in sandbox preview.",
+    summary: "Synthetic annual leave approval activity in the sandbox preview.",
     isDemo: true,
   },
   {
     id: "audit-002",
     organizationId: "rekker-demo",
-    occurredAt: "2026-03-01T09:00:00.000Z",
-    actor: "Demo Finance 09 (finance_manager)",
+    occurredAt: demoAuditTime(2, 9),
+    actor: "Demo Finance Manager",
     actorUserId: "user_demo_payroll_01",
     action: "PAYROLL_GENERATION",
     targetType: "payroll_period",
-    targetId: "period-2026-02",
-    summary: "Finalized statutory KRA & NSSF payroll report for February 2026.",
+    targetId: `period-${demoPayrollPeriod}`,
+    summary: `Synthetic payroll-period activity for ${demoPayrollPeriod} in the sandbox preview.`,
     isDemo: true,
   },
   {
     id: "audit-003",
     organizationId: "rekker-demo",
-    occurredAt: "2026-02-28T16:45:00.000Z",
-    actor: "Demo Recruiter 08 (recruiter)",
+    occurredAt: demoAuditTime(4, 16),
+    actor: "Demo Recruiter",
     actorUserId: "user_demo_recruiter_01",
     action: "CANDIDATE_SCREEN",
     targetType: "candidate",
     targetId: "cand-001",
-    summary: "Completed phone interview scorecard for Formulation & Filling Engineer candidate.",
+    summary: "Synthetic candidate review activity in the sandbox preview.",
     isDemo: true,
   },
 ];
@@ -94,6 +111,12 @@ export async function recordAuditEvent(params: {
   targetType: string;
   targetId: string;
   summary: string;
+  before?: unknown;
+  after?: unknown;
+  reason?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
   correlationId?: string;
   critical?: boolean;
   isDemo?: boolean;
@@ -114,6 +137,12 @@ export async function recordAuditEvent(params: {
     targetType: params.targetType,
     targetId: params.targetId,
     summary: fullSummary,
+    beforeJson: params.before === undefined ? null : JSON.stringify(params.before),
+    afterJson: params.after === undefined ? null : JSON.stringify(params.after),
+    reason: params.reason ?? null,
+    ipAddress: params.ipAddress ?? null,
+    userAgent: params.userAgent ?? null,
+    requestId: params.requestId ?? params.correlationId ?? null,
     correlationId: params.correlationId,
     isDemo: params.isDemo ?? !process.env.DATABASE_URL,
   };
@@ -142,6 +171,12 @@ export async function recordAuditEvent(params: {
         targetType: params.targetType,
         targetId: params.targetId,
         summary: fullSummary,
+        beforeJson: params.before === undefined ? null : JSON.stringify(params.before),
+        afterJson: params.after === undefined ? null : JSON.stringify(params.after),
+        reason: params.reason ?? null,
+        ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
+        requestId: params.requestId ?? params.correlationId ?? null,
         isDemo: params.isDemo ?? false,
       });
     } catch (err) {

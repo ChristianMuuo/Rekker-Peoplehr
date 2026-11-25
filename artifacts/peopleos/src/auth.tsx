@@ -297,5 +297,19 @@ export function UnifiedAuthProvider({
     );
   }
 
+  if (import.meta.env.PROD) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-stone-50 p-6 text-stone-900">
+        <section className="max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+          <h1 className="font-display text-xl font-semibold">Authentication is not configured</h1>
+          <p className="mt-2 text-sm leading-6 text-stone-600">
+            PeopleOS cannot open a production workspace without the configured Clerk identity provider.
+            Demo sign-in is disabled in production. Contact your PeopleOS administrator.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   return <DemoAuthProvider>{children}</DemoAuthProvider>;
 }

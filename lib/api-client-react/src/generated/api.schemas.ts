@@ -42,6 +42,9 @@ export const OrganizationRole = {
 } as const;
 
 export interface AuthContext {
+  userId: string;
+  /** @nullable */
+  employeeId?: string | null;
   role: OrganizationRole;
   displayName: string;
   organizationName: string;
@@ -355,6 +358,14 @@ export interface LeaveRequest {
   /** @nullable */
   decidedAt?: string | null;
   isDemo: boolean;
+  recommendationStatus?: 'not_assessed' | 'recommended' | 'not_recommended';
+  /** @nullable */
+  recommendationComment?: string | null;
+  /** @nullable */
+  recommendationByUserId?: string | null;
+  /** @nullable */
+  recommendationAt?: string | null;
+  halfDay?: boolean;
 }
 
 export interface LeaveRequestInput {
@@ -371,6 +382,7 @@ export interface LeaveRequestInput {
      * @maxLength 1000
      */
   reason: string;
+  halfDay?: boolean;
 }
 
 export type LeaveAccrualMethod = typeof LeaveAccrualMethod[keyof typeof LeaveAccrualMethod];
@@ -389,6 +401,9 @@ export interface LeavePolicy {
   entitlementDays: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
+  entitlementQuantity?: number;
+  entitlementUnit?: 'days' | 'weeks' | 'months';
+  needsLegalReview?: boolean;
 }
 
 export interface LeavePolicyInput {
@@ -403,6 +418,8 @@ export interface LeavePolicyInput {
      */
   entitlementDays: number;
   accrualMethod: LeaveAccrualMethod;
+  entitlementQuantity?: number;
+  entitlementUnit?: 'days' | 'weeks' | 'months';
 }
 
 export interface LeavePolicyUpdate {
@@ -418,6 +435,8 @@ export interface LeavePolicyUpdate {
   entitlementDays: number;
   accrualMethod: LeaveAccrualMethod;
   active: boolean;
+  entitlementQuantity?: number;
+  entitlementUnit?: 'days' | 'weeks' | 'months';
 }
 
 export interface LeaveBalance {
@@ -478,6 +497,10 @@ export interface AuditEvent {
   targetType: string;
   targetId: string;
   summary: string;
+  /** @nullable */
+  prevHash?: string | null;
+  /** @nullable */
+  hash?: string | null;
   isDemo: boolean;
 }
 

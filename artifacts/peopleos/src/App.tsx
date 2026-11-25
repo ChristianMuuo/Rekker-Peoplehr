@@ -46,6 +46,8 @@ const TradePage = lazy(() => import('@/pages/TradePage').then(m => ({ default: m
 import { apiGet, apiPost, triggerCsvDownload } from '@/lib/api';
 import { BulkImportDialog } from '@/components/phase2/BulkImportDialog';
 import { handleFallbackApi } from '@workspace/api-client-react';
+import { FEATURE_REGISTRY, featureStatusLabel } from '@/data/featureRegistry';
+import { formatRoleLabel } from '@/lib/presentation';
 
 // Demo-mode fallback auth context — used as React Query placeholderData so the
 // AppFrame never enters the error state on static Vercel deployments where there
@@ -213,12 +215,15 @@ const workNav: NavItem[] = [
   { label: 'Performance', href: '/performance', icon: ArrowUpRight },
   { label: 'Learning', href: '/learning', icon: FileText },
   { label: 'Documents', href: '/documents', icon: FileText },
-  { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
   { label: 'Reports & Analytics', href: '/reports', icon: ArrowDownRight },
 ];
 const workforceErpNav: NavItem[] = [
-  { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
   { label: 'HR Cases', href: '/hr-cases', icon: ShieldAlert },
+];
+const roadmapNav: NavItem[] = [
+  { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
+  { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
+  { label: 'Agent hub', href: '/agent-hub', icon: Sparkles },
 ];
 
 function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
@@ -277,7 +282,7 @@ function AppFrame() {
   // On Vercel static deployments, the placeholder fills in immediately.
   if (!auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
   const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings || auth.canViewAudit ? [{ label: 'Diagnostics', href: '/diagnostics', icon: Activity }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, ...roadmapNav, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings || auth.canViewAudit ? [{ label: 'Diagnostics', href: '/diagnostics', icon: Activity }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
 
   const pendingApprovals = Array.isArray(approvalsQuery.data) ? approvalsQuery.data : [];
   const pendingAiApprovals = (aiApprovalsQuery.data?.items ?? []).filter(a => a.status === 'pending');
@@ -291,7 +296,8 @@ function AppFrame() {
     const Icon = item.icon;
     return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} data-testid={`link-nav-${item.href.slice(1)}`}
       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${location === item.href || (item.href === '/people' && location.startsWith('/people/')) ? 'bg-[#f9e9e6] text-[#a91919]' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950'}`}>
-      <Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>
+      <Icon size={17} strokeWidth={1.8} /><span className="min-w-0 flex-1">{item.label}</span>
+      {FEATURE_REGISTRY[item.href] && <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[9px] font-semibold capitalize text-stone-500" data-testid={`badge-feature-${FEATURE_REGISTRY[item.href].id}`}>{featureStatusLabel(FEATURE_REGISTRY[item.href].status)}</span>}
       {item.href === '/approvals' && <span className="ml-auto rounded-full bg-[#f5d8d4] px-2 py-0.5 text-[10px] text-[#a91919]" data-testid="badge-approvals-nav">{notificationCount > 0 ? notificationCount : 'Open'}</span>}
     </Link>;
   });
@@ -361,7 +367,7 @@ function AppFrame() {
                 </div>
                 <div className="hidden sm:block text-left text-xs">
                   <p className="font-bold text-stone-800 leading-tight">{auth.displayName}</p>
-                  <p className="text-[10px] text-stone-400 capitalize">{auth.role.replaceAll('_', ' ')}</p>
+                  <p className="text-[10px] text-stone-400 capitalize">{formatRoleLabel(auth.role)}</p>
                 </div>
               </div>
             </div>
@@ -399,8 +405,9 @@ function AppFrame() {
         </div>
         <div className="mt-6 flex-1 overflow-y-auto px-3">
           <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">People operations</div>{renderNav(visibleWorkNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workforce ERP &amp; Relations</div>{renderNav(workforceErpNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length))}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workforce &amp; Relations</div>{renderNav(workforceErpNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Roadmap &amp; previews</div>{renderNav(roadmapNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length + roadmapNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
           <div className="mb-2 grid grid-cols-3 gap-1">
@@ -956,6 +963,9 @@ function LeavePage() {
   const [balanceEmployeeId, setBalanceEmployeeId] = useState('');
   const [balanceYear, setBalanceYear] = useState(new Date().getUTCFullYear());
   const [policyFormError, setPolicyFormError] = useState(false);
+  const [advisories, setAdvisories] = useState<Record<string, { label: string; suggestion: 'approve' | 'review' | 'decline'; reasons: string[]; rulesFired: string[] }>>({});
+  const [advisoryBusy, setAdvisoryBusy] = useState<string | null>(null);
+  const [leaveActionError, setLeaveActionError] = useState<string | null>(null);
   const list = useListLeaveRequests({ status: filter ? filter as 'pending' | 'approved' | 'rejected' | 'cancelled' : undefined });
   const employees = useListEmployees({ page: 1, pageSize: 100 });
   const policies = useListLeavePolicies();
@@ -976,14 +986,59 @@ function LeavePage() {
   const activePolicies = policies.data?.filter(policy => policy.active) ?? [];
   const availableBalanceEmployees = [...new Map((balances.data ?? []).map(balance => [balance.employeeId, balance.employeeName])).entries()];
   const visibleBalances = (balances.data ?? []).filter(balance => !balanceEmployeeId || balance.employeeId === balanceEmployeeId);
-  const canManagePolicies = Boolean(auth.data?.canManagePeople);
+  const canManagePolicies = ['hr_admin', 'hr_manager', 'hr_director', 'system_admin'].includes(auth.data?.role ?? '');
   const canChooseBalanceEmployee = Boolean(auth.data?.canApproveLeave);
+  const role = auth.data?.role ?? 'employee';
+  const canRecommendLeave = role === 'department_manager' || ['hr_admin', 'hr_manager', 'hr_director', 'system_admin'].includes(role);
+  const canApproveFinalLeave = ['hr_admin', 'hr_manager', 'hr_director', 'system_admin'].includes(role);
+  const entitlementLabel = (policy: LeavePolicy) => {
+    const quantity = policy.entitlementQuantity ?? policy.entitlementDays;
+    const unit = policy.entitlementUnit ?? 'days';
+    if (unit === 'weeks') return `${quantity} weeks (${quantity * 7} calendar days)`;
+    if (unit === 'months') return `${quantity} months`;
+    return policy.code === 'annual' ? `${quantity} working days per 12 months` : `${quantity} days`;
+  };
+  const inspectAdvisory = async (requestId: string) => {
+    setAdvisoryBusy(requestId);
+    setLeaveActionError(null);
+    try {
+      const result = await apiGet<{ label: string; suggestion: 'approve' | 'review' | 'decline'; reasons: string[]; rulesFired: string[] }>(`/api/leave-requests/${requestId}/advisory`);
+      setAdvisories(previous => ({ ...previous, [requestId]: result }));
+    } catch (error) {
+      setLeaveActionError(error instanceof Error ? error.message : 'The leave advisory could not be loaded.');
+    } finally {
+      setAdvisoryBusy(null);
+    }
+  };
+  const submitRecommendation = async (requestId: string, decision: 'recommend' | 'not_recommend') => {
+    setLeaveActionError(null);
+    try {
+      await apiPost(`/api/leave-requests/${requestId}/recommendation`, { decision });
+      refresh();
+    } catch (error) {
+      setLeaveActionError(error instanceof Error ? error.message : 'The recommendation could not be saved.');
+    }
+  };
+  const cancelLeaveRequest = async (requestId: string) => {
+    setLeaveActionError(null);
+    try {
+      await apiPost(`/api/leave-requests/${requestId}/cancel`);
+      refresh();
+    } catch (error) {
+      setLeaveActionError(error instanceof Error ? error.message : 'The leave request could not be cancelled.');
+    }
+  };
   const savePolicy = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const entitlementQuantity = Number(formData.get('entitlementQuantity'));
+    const entitlementUnit = String(formData.get('entitlementUnit') ?? 'days') as 'days' | 'weeks' | 'months';
+    const entitlementDays = entitlementQuantity * (entitlementUnit === 'weeks' ? 7 : entitlementUnit === 'months' ? 30 : 1);
     const data = {
       name: String(formData.get('name') ?? '').trim(),
-      entitlementDays: Number(formData.get('entitlementDays')),
+      entitlementDays,
+      entitlementQuantity,
+      entitlementUnit,
       accrualMethod: String(formData.get('accrualMethod')) as 'annual' | 'monthly',
     };
     setPolicyFormError(false);
@@ -1016,6 +1071,8 @@ function LeavePage() {
       data: {
         name: policy.name,
         entitlementDays: policy.entitlementDays,
+        entitlementQuantity: policy.entitlementQuantity ?? policy.entitlementDays,
+        entitlementUnit: policy.entitlementUnit ?? 'days',
         accrualMethod: policy.accrualMethod,
         active: !policy.active,
       },
@@ -1033,7 +1090,7 @@ function LeavePage() {
       </div>
       {balances.isLoading ? <div className="skeleton h-24" data-testid="state-leave-balances-loading" /> :
         balances.isError ? <ErrorState title="Leave balances could not load" onRetry={() => balances.refetch()} /> :
-        !policies.data?.length ? <EmptyState title="Leave policies are not configured" message={canManagePolicies ? "Add organization leave types and their entitlement rules below. No statutory amounts are pre-filled." : "Your HR team has not configured leave types and entitlement rules yet."} /> :
+        !policies.data?.length ? <EmptyState title="Leave policy pack unavailable" message="The organization leave policy records were not returned. Check database readiness and the statutory default-pack seed." /> :
         !visibleBalances.length ? <EmptyState title="No balances for this year" message="No leave policies or employee balances were returned for the selected year." /> :
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-xs" data-testid="table-leave-balances">
@@ -1051,12 +1108,12 @@ function LeavePage() {
         </div>}
     </section>
     {canManagePolicies && <section className="surface mb-4 p-4 md:p-5" data-testid="section-leave-policies">
-      <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Organization leave policies</h2><p className="mt-1 text-xs text-stone-500">Set entitlements and accrual for this organization. Entitlement amounts are not pre-populated.</p></div><button className="btn btn-secondary min-h-9 shrink-0 px-3" onClick={() => { setEditingPolicy(null); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid="button-add-leave-policy"><Plus size={14} /> Add leave type</button></div>
+      <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Organization leave policies</h2><p className="mt-1 text-xs text-stone-500">Kenya statutory defaults are seeded on first run. Company policies can be adjusted only within the legal minimums.</p></div><button className="btn btn-secondary min-h-9 shrink-0 px-3" onClick={() => { setEditingPolicy(null); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid="button-add-leave-policy"><Plus size={14} /> Add leave type</button></div>
       {policies.isLoading ? <div className="skeleton h-16" data-testid="state-leave-policies-loading" /> :
         policies.isError ? <ErrorState title="Leave policies could not load" onRetry={() => policies.refetch()} /> :
         !policies.data?.length ? <EmptyState title="No leave types yet" message="Add your organization's leave types and rules. You choose the entitlement and whether it accrues annually or monthly." /> :
         <div className="divide-y divide-stone-100">{policies.data.map(policy => <article key={policy.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center" data-testid={`card-leave-policy-${policy.id}`}>
-          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-stone-800">{policy.name}</h3><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${policy.active ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-stone-100 text-stone-500'}`}>{policy.active ? 'Active' : 'Inactive'}</span></div><p className="mt-1 text-xs text-stone-500">{policy.entitlementDays} days per year · {policy.accrualMethod === 'monthly' ? 'Accrues monthly' : 'Granted annually'}</p></div>
+          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold text-stone-800">{policy.name}</h3><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${policy.active ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-stone-100 text-stone-500'}`}>{policy.active ? 'Active' : 'Inactive'}</span>{policy.needsLegalReview && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-800">Legal review</span>}</div><p className="mt-1 text-xs text-stone-500">{entitlementLabel(policy)} · {policy.accrualMethod === 'monthly' ? 'Accrues monthly' : 'Granted annually'}</p></div>
           <div className="flex gap-2"><button className="btn btn-secondary min-h-9 px-3" onClick={() => { setEditingPolicy(policy); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid={`button-edit-leave-policy-${policy.id}`}>Edit</button><button className="btn btn-ghost min-h-9 px-3 text-xs" disabled={updatePolicy.isPending} onClick={() => togglePolicy(policy)} data-testid={`button-toggle-leave-policy-${policy.id}`}>{policy.active ? 'Deactivate' : 'Reactivate'}</button></div>
         </article>)}</div>}
       {updatePolicy.isError && !showPolicyForm && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-leave-policy-toggle-error">The leave policy status could not be changed. Refresh and try again.</p>}
@@ -1068,18 +1125,25 @@ function LeavePage() {
       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h2 className="font-display text-lg font-semibold text-stone-900">Leave requests</h2><p className="mt-1 text-xs text-stone-500">Records visible to your account</p></div><select className="field w-full sm:w-48" value={filter} onChange={e => setFilter(e.target.value)} aria-label="Filter leave status" data-testid="select-leave-status"><option value="">All statuses</option>{['pending','approved','rejected','cancelled'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
       {list.isLoading ? <div className="space-y-3" data-testid="state-leave-loading">{[1,2,3].map(x => <div className="skeleton h-16" key={x} />)}</div> : list.isError ? <ErrorState title="Leave requests could not load" onRetry={() => list.refetch()} /> : !list.data?.length ? <EmptyState title="No leave requests" message="Requests matching this filter will appear here." /> :
       <div className="space-y-3">{list.data.map(req => <article key={req.id} className="rounded-xl border border-stone-200 p-4" data-testid={`card-leave-request-${req.id}`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-bold text-stone-800">{req.employeeName}</h3><StatusPill status={req.status} /><ModeBadge demo={req.isDemo} /></div><p className="mt-1 text-xs capitalize text-stone-500">{req.leaveType} leave · {req.days} days</p><p className="mt-2 text-sm text-stone-700">{formatDate(req.startDate)} — {formatDate(req.endDate)}</p><p className="mt-2 text-xs leading-5 text-stone-500">{req.reason}</p></div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-bold text-stone-800">{req.employeeName}</h3><StatusPill status={req.status} /><ModeBadge demo={req.isDemo} /></div><p className="mt-1 text-xs capitalize text-stone-500">{req.leaveType} leave · {req.leaveType.toLowerCase().includes('paternity') ? '2 weeks (14 calendar days)' : `${req.days} ${req.days === 1 ? 'day' : 'days'}`}{req.halfDay ? ' (half-day)' : ''}</p><p className="mt-2 text-sm text-stone-700">{formatDate(req.startDate)} — {formatDate(req.endDate)}</p><p className="mt-2 text-xs leading-5 text-stone-500">{req.reason}</p>{req.status === 'pending' && <p className="mt-2 text-[10px] text-stone-500">Human recommendation: <span className="font-bold capitalize">{(req.recommendationStatus ?? 'not_assessed').replaceAll('_', ' ')}</span>{req.recommendationAt ? ` · ${formatDate(req.recommendationAt)}` : ''}</p>}</div>
           <div className="flex items-center gap-2 text-[10px] text-stone-400"><Clock3 size={13} /> Submitted {formatDate(req.submittedAt)}</div>
-          {req.status === 'pending' && auth.data?.canApproveLeave && <div className="flex gap-2"><button className="btn btn-primary min-h-9 px-3" disabled={decide.isPending} onClick={() => decide.mutate({ requestId: req.id, data: { decision: 'approve' } }, { onSuccess: refresh })} data-testid={`button-approve-leave-${req.id}`}><Check size={14} /> Approve</button><button className="btn btn-secondary min-h-9 px-3" disabled={decide.isPending} onClick={() => { const comment = window.prompt('Optional reason for declining this request') ?? ''; decide.mutate({ requestId: req.id, data: { decision: 'reject', comment: comment || null } }, { onSuccess: refresh }); }} data-testid={`button-reject-leave-${req.id}`}>Decline</button></div>}
+          {req.status === 'pending' && canRecommendLeave && req.recommendationStatus === 'not_assessed' && <div className="flex flex-wrap gap-2"><button className="btn btn-secondary min-h-9 px-3" disabled={advisoryBusy === req.id} onClick={() => inspectAdvisory(req.id)} data-testid={`button-check-leave-advisory-${req.id}`}>{advisoryBusy === req.id ? 'Checking…' : 'Rule-based advisory'}</button><button className="btn btn-primary min-h-9 px-3" onClick={() => submitRecommendation(req.id, 'recommend')} data-testid={`button-recommend-leave-${req.id}`}>Recommend</button><button className="btn btn-secondary min-h-9 px-3" onClick={() => submitRecommendation(req.id, 'not_recommend')} data-testid={`button-not-recommend-leave-${req.id}`}>Do not recommend</button></div>}
+          {req.status === 'pending' && canApproveFinalLeave && req.recommendationStatus === 'recommended' && req.recommendationByUserId !== auth.data?.userId && <div className="flex gap-2"><button className="btn btn-primary min-h-9 px-3" disabled={decide.isPending} onClick={() => decide.mutate({ requestId: req.id, data: { decision: 'approve' } }, { onSuccess: refresh })} data-testid={`button-approve-leave-${req.id}`}><Check size={14} /> Approve</button><button className="btn btn-secondary min-h-9 px-3" disabled={decide.isPending} onClick={() => { const comment = window.prompt('Optional reason for declining this request') ?? ''; decide.mutate({ requestId: req.id, data: { decision: 'reject', comment: comment || null } }, { onSuccess: refresh }); }} data-testid={`button-reject-leave-${req.id}`}>Decline</button></div>}
+          {req.status === 'pending' && canApproveFinalLeave && req.recommendationStatus === 'not_recommended' && <button className="btn btn-secondary min-h-9 px-3" disabled={decide.isPending} onClick={() => { const comment = window.prompt('Reason for declining this request') ?? ''; decide.mutate({ requestId: req.id, data: { decision: 'reject', comment: comment || null } }, { onSuccess: refresh }); }} data-testid={`button-reject-not-recommended-leave-${req.id}`}>Decline request</button>}
+          {req.status === 'pending' && canApproveFinalLeave && req.recommendationStatus === 'recommended' && req.recommendationByUserId === auth.data?.userId && <p className="max-w-48 text-[10px] leading-4 text-amber-700">A different HR approver must complete this decision.</p>}
+          {(req.status === 'pending' || req.status === 'approved') && (req.employeeId === auth.data?.employeeId || canApproveFinalLeave) && <button className="btn btn-ghost min-h-9 px-3 text-xs text-stone-600" onClick={() => { if (window.confirm('Cancel this leave request? Any approved balance deduction will be reversed.')) void cancelLeaveRequest(req.id); }} data-testid={`button-cancel-leave-request-${req.id}`}>Cancel request</button>}
         </div>
+        {advisories[req.id] && <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3" data-testid={`panel-leave-advisory-${req.id}`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-stone-800">{advisories[req.id].label}</span><span className="text-[10px] font-bold uppercase tracking-wide text-stone-600">Suggestion: {advisories[req.id].suggestion}</span></div><ul className="mt-2 space-y-1 text-[11px] leading-4 text-stone-600">{advisories[req.id].reasons.map((reason, index) => <li key={index}>• {reason}</li>)}</ul><p className="mt-2 text-[9px] text-stone-400">Advisory only. A human reviewer makes the recommendation and HR makes the final decision.</p></div>}
       </article>)}</div>}
+      {leaveActionError && <p className="mt-3 text-xs text-[#a91919]" role="alert" data-testid="text-leave-action-error">{leaveActionError}</p>}
       {decide.isError && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-leave-decision-error">Decision could not be saved. Refresh and confirm you still have approval access.</p>}
     </section>
     {showForm && <Modal title="Request time away" onClose={() => setShowForm(false)} testId="dialog-create-leave">
-      <form className="space-y-4" data-testid="form-leave-request" onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); const data: LeaveRequestInput = { employeeId: String(fd.get('employeeId') ?? ''), leaveType: String(fd.get('leaveType')), startDate: String(fd.get('startDate')), endDate: String(fd.get('endDate')), reason: String(fd.get('reason')).trim() }; create.mutate({ data }, { onSuccess: () => { refresh(); setShowForm(false); } }); }}>
+      <form className="space-y-4" data-testid="form-leave-request" onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); const data: LeaveRequestInput = { employeeId: String(fd.get('employeeId') ?? ''), leaveType: String(fd.get('leaveType')), startDate: String(fd.get('startDate')), endDate: String(fd.get('endDate')), reason: String(fd.get('reason')).trim(), halfDay: fd.get('halfDay') === 'on' }; create.mutate({ data }, { onSuccess: () => { refresh(); setShowForm(false); } }); }}>
         <label><span className="label">Employee</span><select className="field" name="employeeId" required data-testid="select-leave-employee"><option value="">Select a permitted employee record</option>{employees.data?.items.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName} · {e.departmentName}</option>)}</select><span className="mt-1 block text-[10px] text-stone-400">Only employee records returned for your account are listed.</span></label>
-        <label><span className="label">Leave type</span><select className="field" name="leaveType" required disabled={!activePolicies.length} data-testid="select-leave-type"><option value="">Select a configured leave type</option>{activePolicies.map(policy => <option key={policy.code} value={policy.code}>{policy.name} · {policy.entitlementDays} days/year</option>)}</select></label>
+        <label><span className="label">Leave type</span><select className="field" name="leaveType" required disabled={!activePolicies.length} data-testid="select-leave-type"><option value="">Select a leave type</option>{activePolicies.map(policy => <option key={policy.code} value={policy.code}>{policy.name} · {entitlementLabel(policy)}</option>)}</select></label>
         <div className="grid gap-3 sm:grid-cols-2"><Field name="startDate" label="First day away" type="date" required /><Field name="endDate" label="Last day away" type="date" required /></div>
+        <label className="flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" name="halfDay" className="h-4 w-4 accent-[#C71D1D]" data-testid="checkbox-leave-half-day" /> Request a half day (one working date only)</label>
         <label><span className="label">Reason</span><textarea className="field min-h-24 resize-y" name="reason" minLength={3} maxLength={1000} required placeholder="Add context for your manager" data-testid="input-leave-reason" /></label>
         {create.isError && <p className="text-xs text-[#a91919]" data-testid="text-leave-create-error">{create.error instanceof Error ? create.error.message : 'Request could not be submitted. Check the dates, available balance, and leave type.'}</p>}
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)} data-testid="button-cancel-leave">Cancel</button><button className="btn btn-primary" disabled={create.isPending || !activePolicies.length} data-testid="button-submit-leave">{create.isPending ? 'Submitting…' : 'Submit request'}</button></div>
@@ -1088,8 +1152,8 @@ function LeavePage() {
     {showPolicyForm && <Modal title={editingPolicy ? 'Edit leave policy' : 'Add leave type'} onClose={() => { setShowPolicyForm(false); setEditingPolicy(null); }} testId="dialog-leave-policy">
       <form className="space-y-4" onSubmit={savePolicy} data-testid="form-leave-policy">
         <Field name="name" label="Leave type name" defaultValue={editingPolicy?.name} required />
-        <label><span className="label">Annual entitlement (days)</span><input className="field" name="entitlementDays" type="number" min="0" max="366" step="1" defaultValue={editingPolicy?.entitlementDays ?? ''} required data-testid="input-leave-policy-entitlement" /></label>
-        <label><span className="label">Accrual rule</span><select className="field" name="accrualMethod" defaultValue={editingPolicy?.accrualMethod ?? 'annual'} data-testid="select-leave-policy-accrual"><option value="annual">Granted annually</option><option value="monthly">Accrues monthly</option></select></label>
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr]"><label><span className="label">Entitlement amount</span><input className="field" name="entitlementQuantity" type="number" min="0" max="366" step="1" defaultValue={editingPolicy?.entitlementQuantity ?? editingPolicy?.entitlementDays ?? ''} required data-testid="input-leave-policy-entitlement" /></label><label><span className="label">Entitlement unit</span><select className="field" name="entitlementUnit" defaultValue={editingPolicy?.entitlementUnit ?? 'days'} data-testid="select-leave-policy-unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label></div>
+        <label><span className="label">Accrual rule</span><select className="field" name="accrualMethod" defaultValue={editingPolicy?.accrualMethod ?? 'annual'} data-testid="select-leave-policy-accrual"><option value="annual">Granted annually</option><option value="monthly">Accrues monthly</option></select></label><p className="text-[10px] leading-4 text-stone-500">Paternity leave is legally stored as 2 weeks. The system displays the equivalent in calendar days; working-day conversion depends on the employee schedule and requires legal review.</p>
         {policyFormError && <p className="text-xs text-[#a91919]" data-testid="text-leave-policy-error">{createPolicy.error instanceof Error ? createPolicy.error.message : updatePolicy.error instanceof Error ? updatePolicy.error.message : 'The policy could not be saved. Check the values and whether this leave type already exists.'}</p>}
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><button type="button" className="btn btn-secondary" onClick={() => { setShowPolicyForm(false); setEditingPolicy(null); }} data-testid="button-cancel-leave-policy">Cancel</button><button className="btn btn-primary" disabled={createPolicy.isPending || updatePolicy.isPending} data-testid="button-save-leave-policy">{createPolicy.isPending || updatePolicy.isPending ? 'Saving…' : 'Save policy'}</button></div>
       </form>
@@ -1125,11 +1189,21 @@ function ApprovalsPage() {
 function AuditPage() {
   const auth = useGetAuthContext();
   const audit = useListAuditEvents({ limit: 100 }, { query: { enabled: !!auth.data?.canViewAudit, queryKey: getListAuditEventsQueryKey({ limit: 100 }) } });
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportCsv = async () => {
+    setExportError(null);
+    try {
+      await triggerCsvDownload('/api/audit-events/export.csv', `peopleos-audit-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Audit export failed.');
+    }
+  };
   if (auth.isLoading) return <LoadingScreen label="Checking audit access" />;
   if (!auth.data?.canViewAudit) return <div><PageHeading eyebrow="Governance" title="Audit trail" /><div className="surface"><EmptyState title="Restricted area" message="Audit events are available only to designated audit roles. Ask your system administrator if your role should include this access." /></div></div>;
   if (audit.isLoading) return <LoadingScreen label="Loading audit events" />;
   if (audit.isError) return <ErrorState title="Audit events could not load" onRetry={() => audit.refetch()} />;
-  return <div><PageHeading eyebrow="Governance / Record of changes" title="Audit trail" description="A chronological record of actions returned for your authorized audit view." />
+  return <div><PageHeading eyebrow="Governance / Record of changes" title="Audit trail" description="A chronological record of actions returned for your authorized audit view." action={<button type="button" className="btn btn-secondary min-h-9 px-3 text-xs" onClick={() => void exportCsv()} data-testid="button-export-audit-csv"><Download size={14} /> Export CSV</button>} />
+    {exportError && <p className="mb-3 text-xs text-[#a91919]" role="alert">{exportError}</p>}
     {!audit.data?.length ? <div className="surface"><EmptyState title="No audit events" message="No events were returned for this timeline." /></div> :
     <div className="surface divide-y divide-stone-100">{audit.data.map((event,i) => <div className="flex gap-4 p-4 md:p-5" key={event.id} data-testid={`row-audit-event-${event.id}`}>
       <div className="flex w-20 shrink-0 flex-col items-end pt-1 text-right"><span className="text-[10px] font-bold text-stone-700">{formatDate(event.occurredAt)}</span><span className="mt-1 text-[10px] text-stone-400">{new Date(event.occurredAt).toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'})}</span></div>
@@ -1206,17 +1280,17 @@ function SettingsPage() {
   const securityQuery = useQuery({
     queryKey: ['security-status'],
     queryFn: () => apiGet<any>('/api/security/status'),
-    enabled: canInspectDiagnostics,
+    enabled: canInspectDiagnostics && !isDiagnosticsView,
   });
   const readyzQuery = useQuery({
     queryKey: ['system-readyz'],
     queryFn: () => apiGet<ReadyzPayload>('/api/readyz'),
-    enabled: canInspectDiagnostics,
+    enabled: canInspectDiagnostics && isDiagnosticsView,
   });
   const diagnosticsQuery = useQuery({
     queryKey: ['admin-diagnostics'],
     queryFn: () => apiGet<AdminDiagnosticsPayload>('/api/admin/diagnostics'),
-    enabled: canInspectDiagnostics,
+    enabled: canInspectDiagnostics && isDiagnosticsView,
   });
 
   if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading configuration and diagnostics" />;
@@ -1233,12 +1307,12 @@ function SettingsPage() {
   return <div>
     <PageHeading
       eyebrow={isDiagnosticsView ? 'Operations / System health' : 'Workspace / Configuration'}
-      title={isDiagnosticsView ? 'System Diagnostics' : 'Settings & Diagnostics'}
-      description="Role access, runtime readiness, subsystem telemetry, integration registry, and security controls for Rekker PeopleOS."
-      action={canInspectDiagnostics ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
+      title={isDiagnosticsView ? 'System Diagnostics' : 'Workspace Settings'}
+      description={isDiagnosticsView ? 'Live API, database, authentication and integration health checks for administrators.' : 'Review your workspace access profile, security posture and connected service configuration.'}
+      action={canInspectDiagnostics && isDiagnosticsView ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
     />
     {!canInspectDiagnostics ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect workspace configuration and system diagnostics." /></div> : <>
-      <section className="surface p-5 md:p-7" data-testid="section-system-diagnostics">
+      {isDiagnosticsView && <section className="surface p-5 md:p-7" data-testid="section-system-diagnostics">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#C71D1D]"><Activity size={18} /></div>
@@ -1325,13 +1399,13 @@ function SettingsPage() {
             </div>
           </div>
         )}
-      </section>
-
+      </section>}
+      {!isDiagnosticsView && <>
       <section className="surface mt-4 p-5 md:p-7" data-testid="section-role-access">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#a91919]"><ShieldCheck size={18} /></div><div><h2 className="font-display text-lg font-semibold text-stone-900">Your access profile</h2><p className="text-xs text-stone-500">Permissions are supplied by the PeopleOS authorization service.</p></div></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            ['Organization role', auth.data?.role.replaceAll('_',' ') ?? '—', true],
+            ['Organization role', auth.data?.role ? formatRoleLabel(auth.data.role) : '—', true],
             ['Manage people', auth.data?.canManagePeople, auth.data?.canManagePeople],
             ['Approve leave', auth.data?.canApproveLeave, auth.data?.canApproveLeave],
             ['View audit', auth.data?.canViewAudit, auth.data?.canViewAudit],
@@ -1356,6 +1430,7 @@ function SettingsPage() {
           <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">AI provider setup</h2><p className="mt-1 text-xs text-stone-500">Provider credentials are not editable in this interface.</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${provider.data?.configured ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`} data-testid="status-settings-provider">{provider.data?.configured ? 'Configured' : 'Setup required'}</span></div>
           <div className="mt-4 rounded-xl bg-[#f7f4ef] p-4"><p className="text-sm font-semibold text-stone-700">Provider: {provider.data?.provider || 'Not configured'}</p><p className="mt-1 text-xs text-stone-500">{provider.data?.message || 'No provider key has been supplied. No model calls are made.'}</p><p className="mt-2 text-[10px] text-stone-400">Set up through the approved server environment process. Never paste provider secrets into the browser.</p></div>
         </section>
+      </>}
       </>}
     </>}
   </div>;

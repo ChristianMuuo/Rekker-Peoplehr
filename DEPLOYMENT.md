@@ -116,13 +116,31 @@ pnpm run build
 ## 5. Deployment
 
 ### Frontend (Vercel)
-`vercel.json` builds and deploys `artifacts/peopleos`:
+
+`vercel.json` builds the Vite SPA in `artifacts/peopleos`:
 - **Build Command:** `pnpm --filter @workspace/peopleos run build`
 - **Output Directory:** `artifacts/peopleos/dist/public`
-- **SPA Routing:** Rewrites all non-file routes to `/index.html`.
-- When hosted separately from the API server, set `VITE_API_BASE_URL` and `VITE_CLERK_PUBLISHABLE_KEY` in hosting settings. Unreachable GET requests to `/api/*` may render explicit static preview data ONLY when network connection fails and opt-in demo fallback is active; real `4xx`/`5xx` server errors always surface loudly.
+- **SPA Routing:** Non-API paths are rewritten to `/index.html`. The negative-lookahead rule deliberately excludes `/api/*`; the SPA must never answer an API request with its HTML shell.
+- **Search indexing:** responses include `X-Robots-Tag: noindex, nofollow, noarchive`; the HTML shell carries the matching robots meta directive. This discourages indexing, but it is not access control.
+- **Production identity:** the Vite build must include `VITE_CLERK_PUBLISHABLE_KEY`. If Clerk is not configured, the production UI blocks access rather than showing demo sign-in.
+- **API origin:** set `VITE_API_BASE_URL` to the verified HTTPS origin of the separately hosted Express service. Do not set it to the PeopleOS frontend URL and do not use an invented hostname. The SPA calls that origin directly; the Express service must allow the exact Vercel frontend origin in `PEOPLEOS_ALLOWED_ORIGINS`. The frontend disables mock fallback in production.
+- **Deployment protection:** use Vercel Deployment Protection (or an equivalent server-side identity gate) for preview/demo deployments carrying Rekker branding. Noindex headers are not a password. Confirm protection is enabled in Vercel project settings before sharing a public demo URL.
 
 ### Backend (`artifacts/api-server`) + ML (`services/ml-engine`)
+
 1. Deploy `artifacts/api-server/dist/index.mjs` on Render, Railway, Cloud Run, or Fly.io with `NODE_ENV=production`, `PEOPLEOS_AUTH_MODE=clerk`, `PEOPLEOS_ALLOWED_ORIGINS`, `DATABASE_URL`, `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, and `PEOPLEOS_ENCRYPTION_KEY`.
-2. Deploy `services/ml-engine/ml_http_server.py` (Python HTTP server) as an internal service and point `PEOPLEOS_ML_URL` on the API server to it, or bundle `services/ml-engine` + `.venv` alongside Node.js.
-3. Point container health probes to `GET /api/healthz` (liveness) and `GET /api/readyz` (readiness).
+2. Set `PEOPLEOS_ALLOWED_ORIGINS` to the exact HTTPS Vercel production origin(s), not a wildcard. Configure the same Clerk application for the frontend and API.
+3. Deploy `services/ml-engine/ml_http_server.py` as an internal service and set `PEOPLEOS_ML_URL` on the API server only when that service is actually reachable. Otherwise the diagnostics page must report ML as unavailable.
+4. Point container health probes to `GET /api/healthz` (liveness) and `GET /api/readyz` (readiness). The frontend's `VITE_API_BASE_URL` points to the API origin root; the browser requests paths such as `/api/readyz`.
+5. Keep employee data and database credentials on the API server. Do not put database, encryption, Clerk secret, OpenAI, or M-Pesa secrets in Vite-prefixed variables.
+
+### Release checklist
+
+- [ ] The deployed Vercel build has the verified `VITE_API_BASE_URL` and Clerk publishable key.
+- [ ] The API service has production Clerk keys, a production database URL, encryption key, and exact CORS origins.
+- [ ] `/api/healthz` returns JSON from Express, not the SPA shell.
+- [ ] `/api/readyz` confirms database connectivity and migration readiness.
+- [ ] Vercel Deployment Protection or equivalent server-side access control is enabled for the shared demo.
+- [ ] Noindex headers are present and the demo is absent from public sitemaps/marketing links.
+- [ ] Demo records are synthetic only and visibly labelled.
+

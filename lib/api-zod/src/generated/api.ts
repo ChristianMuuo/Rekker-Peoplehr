@@ -59,6 +59,8 @@ export const GetPeopleOsOverviewResponse = zod.object({
  * @summary Get the signed-in user's role and application permissions
  */
 export const GetAuthContextResponse = zod.object({
+  "userId": zod.string(),
+  "employeeId": zod.string().nullish(),
   "role": zod.enum(['employee', 'department_manager', 'hr_admin', 'hr_director', 'hr_manager', 'hr_officer', 'recruiter', 'payroll_officer', 'finance_manager', 'production_supervisor', 'warehouse_supervisor', 'sales_manager', 'system_admin', 'read_only_executive', 'auditor']),
   "displayName": zod.string(),
   "organizationName": zod.string(),
@@ -363,7 +365,12 @@ export const ListLeaveRequestsResponseItem = zod.object({
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),
   "decidedAt": zod.coerce.date().nullish(),
-  "isDemo": zod.boolean()
+  "isDemo": zod.boolean(),
+  "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
+  "recommendationComment": zod.string().nullish(),
+  "recommendationByUserId": zod.string().nullish(),
+  "recommendationAt": zod.coerce.date().nullish(),
+  "halfDay": zod.boolean().optional()
 })
 export const ListLeaveRequestsResponse = zod.array(ListLeaveRequestsResponseItem)
 
@@ -383,7 +390,8 @@ export const CreateLeaveRequestBody = zod.object({
   "leaveType": zod.string().min(1).max(createLeaveRequestBodyLeaveTypeMax),
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date(),
-  "reason": zod.string().min(createLeaveRequestBodyReasonMin).max(createLeaveRequestBodyReasonMax)
+  "reason": zod.string().min(createLeaveRequestBodyReasonMin).max(createLeaveRequestBodyReasonMax),
+  "halfDay": zod.boolean().optional()
 })
 
 export const CreateLeaveRequestResponse = zod.object({
@@ -400,7 +408,12 @@ export const CreateLeaveRequestResponse = zod.object({
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),
   "decidedAt": zod.coerce.date().nullish(),
-  "isDemo": zod.boolean()
+  "isDemo": zod.boolean(),
+  "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
+  "recommendationComment": zod.string().nullish(),
+  "recommendationByUserId": zod.string().nullish(),
+  "recommendationAt": zod.coerce.date().nullish(),
+  "halfDay": zod.boolean().optional()
 })
 
 
@@ -417,7 +430,10 @@ export const ListLeavePoliciesResponseItem = zod.object({
   "name": zod.string(),
   "entitlementDays": zod.number().int().min(listLeavePoliciesResponseEntitlementDaysMin),
   "accrualMethod": zod.enum(['annual', 'monthly']),
-  "active": zod.boolean()
+  "active": zod.boolean(),
+  "entitlementQuantity": zod.number().int().min(0).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional(),
+  "needsLegalReview": zod.boolean().optional()
 })
 export const ListLeavePoliciesResponse = zod.array(ListLeavePoliciesResponseItem)
 
@@ -435,7 +451,9 @@ export const createLeavePolicyBodyEntitlementDaysMax = 366;
 export const CreateLeavePolicyBody = zod.object({
   "name": zod.string().min(1).max(createLeavePolicyBodyNameMax),
   "entitlementDays": zod.number().int().min(createLeavePolicyBodyEntitlementDaysMin).max(createLeavePolicyBodyEntitlementDaysMax),
-  "accrualMethod": zod.enum(['annual', 'monthly'])
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "entitlementQuantity": zod.number().int().min(0).max(366).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional()
 })
 
 export const createLeavePolicyResponseEntitlementDaysMin = 0;
@@ -448,7 +466,10 @@ export const CreateLeavePolicyResponse = zod.object({
   "name": zod.string(),
   "entitlementDays": zod.number().int().min(createLeavePolicyResponseEntitlementDaysMin),
   "accrualMethod": zod.enum(['annual', 'monthly']),
-  "active": zod.boolean()
+  "active": zod.boolean(),
+  "entitlementQuantity": zod.number().int().min(0).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional(),
+  "needsLegalReview": zod.boolean().optional()
 })
 
 
@@ -470,7 +491,9 @@ export const UpdateLeavePolicyBody = zod.object({
   "name": zod.string().min(1).max(updateLeavePolicyBodyNameMax),
   "entitlementDays": zod.number().int().min(updateLeavePolicyBodyEntitlementDaysMin).max(updateLeavePolicyBodyEntitlementDaysMax),
   "accrualMethod": zod.enum(['annual', 'monthly']),
-  "active": zod.boolean()
+  "active": zod.boolean(),
+  "entitlementQuantity": zod.number().int().min(0).max(366).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional()
 })
 
 export const updateLeavePolicyResponseEntitlementDaysMin = 0;
@@ -483,7 +506,10 @@ export const UpdateLeavePolicyResponse = zod.object({
   "name": zod.string(),
   "entitlementDays": zod.number().int().min(updateLeavePolicyResponseEntitlementDaysMin),
   "accrualMethod": zod.enum(['annual', 'monthly']),
-  "active": zod.boolean()
+  "active": zod.boolean(),
+  "entitlementQuantity": zod.number().int().min(0).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional(),
+  "needsLegalReview": zod.boolean().optional()
 })
 
 
@@ -506,11 +532,11 @@ export const ListLeaveBalancesResponseItem = zod.object({
   "leaveType": zod.string(),
   "leaveTypeName": zod.string(),
   "year": zod.number().int(),
-  "entitlementDays": zod.number().int(),
-  "accruedDays": zod.number().int(),
-  "usedDays": zod.number().int(),
-  "pendingDays": zod.number().int(),
-  "remainingDays": zod.number().int(),
+  "entitlementDays": zod.number(),
+  "accruedDays": zod.number(),
+  "usedDays": zod.number(),
+  "pendingDays": zod.number(),
+  "remainingDays": zod.number(),
   "accrualMethod": zod.enum(['annual', 'monthly']),
   "active": zod.boolean()
 })
@@ -547,7 +573,12 @@ export const DecideLeaveRequestResponse = zod.object({
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),
   "decidedAt": zod.coerce.date().nullish(),
-  "isDemo": zod.boolean()
+  "isDemo": zod.boolean(),
+  "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
+  "recommendationComment": zod.string().nullish(),
+  "recommendationByUserId": zod.string().nullish(),
+  "recommendationAt": zod.coerce.date().nullish(),
+  "halfDay": zod.boolean().optional()
 })
 
 
@@ -585,6 +616,8 @@ export const ListAuditEventsResponseItem = zod.object({
   "targetType": zod.string(),
   "targetId": zod.string(),
   "summary": zod.string(),
+  "prevHash": zod.string().nullish(),
+  "hash": zod.string().nullish(),
   "isDemo": zod.boolean()
 })
 export const ListAuditEventsResponse = zod.array(ListAuditEventsResponseItem)

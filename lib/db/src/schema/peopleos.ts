@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  numeric,
   pgTable,
   primaryKey,
   text,
@@ -153,6 +154,15 @@ export const leavePoliciesTable = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     entitlementDays: integer("entitlement_days").notNull().default(0),
+    entitlementQuantity: integer("entitlement_quantity").notNull().default(0),
+    entitlementUnit: text("entitlement_unit").notNull().default("days"),
+    jurisdiction: text("jurisdiction").notNull().default("KE"),
+    effectiveFrom: date("effective_from", { mode: "string" }),
+    effectiveTo: date("effective_to", { mode: "string" }),
+    sourceUrl: text("source_url"),
+    verifiedOn: date("verified_on", { mode: "string" }),
+    needsLegalReview: boolean("needs_legal_review").notNull().default(true),
+    policyMetadataJson: text("policy_metadata_json"),
     accrualMethod: text("accrual_method").notNull().default("annual"),
     active: boolean("active").notNull().default(true),
     createdByUserId: text("created_by_user_id"),
@@ -189,9 +199,15 @@ export const leaveRequestsTable = pgTable(
     leaveType: text("leave_type").notNull(),
     startDate: date("start_date", { mode: "string" }).notNull(),
     endDate: date("end_date", { mode: "string" }).notNull(),
-    days: integer("days").notNull(),
+    days: numeric("days", { precision: 8, scale: 2, mode: "number" }).notNull(),
+    halfDay: boolean("half_day").notNull().default(false),
     reason: text("reason").notNull(),
     status: text("status").notNull().default("pending"),
+    recommendationStatus: text("recommendation_status").notNull().default("not_assessed"),
+    recommendationComment: text("recommendation_comment"),
+    recommendationByUserId: text("recommendation_by_user_id"),
+    recommendationAt: timestamp("recommendation_at", { withTimezone: true }),
+    recommendationJson: text("recommendation_json"),
     createdByUserId: text("created_by_user_id"),
     approverUserId: text("approver_user_id"),
     decisionComment: text("decision_comment"),
@@ -213,6 +229,144 @@ export const leaveRequestsTable = pgTable(
   ],
 );
 
+export const leaveLedgerTable = pgTable(
+  "peopleos_leave_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeesTable.id, { onDelete: "restrict" }),
+    leaveType: text("leave_type").notNull(),
+    leaveYear: integer("leave_year").notNull(),
+    leaveRequestId: uuid("leave_request_id").references(() => leaveRequestsTable.id, {
+      onDelete: "restrict",
+    }),
+    entryType: text("entry_type").notNull(),
+    quantityDays: numeric("quantity_days", { precision: 8, scale: 2, mode: "number" }).notNull(),
+    sourceKey: text("source_key").notNull(),
+    description: text("description").notNull(),
+    createdByUserId: text("created_by_user_id"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    isDemo: boolean("is_demo").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_ledger_org_source_uq").on(
+      table.organizationId,
+      table.sourceKey,
+    ),
+    index("peopleos_leave_ledger_org_employee_type_idx").on(
+      table.organizationId,
+      table.employeeId,
+      table.leaveType,
+    ),
+    index("peopleos_leave_ledger_request_idx").on(table.leaveRequestId),
+  ],
+);
+
+export const leaveApprovalsTable = pgTable(
+  "peopleos_leave_approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    leaveRequestId: uuid("leave_request_id")
+      .notNull()
+      .references(() => leaveRequestsTable.id, { onDelete: "restrict" }),
+    stepIndex: integer("step_index").notNull(),
+    stepType: text("step_type").notNull(),
+    assignedRole: text("assigned_role").notNull(),
+    reviewerUserId: text("reviewer_user_id"),
+    decision: text("decision").notNull().default("pending"),
+    comment: text("comment"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_approvals_request_step_uq").on(
+      table.organizationId,
+      table.leaveRequestId,
+      table.stepIndex,
+    ),
+    index("peopleos_leave_approvals_org_reviewer_idx").on(
+      table.organizationId,
+      table.reviewerUserId,
+      table.decision,
+    ),
+  ],
+);
+
+export const leavePolicyVersionsTable = pgTable(
+  "peopleos_leave_policy_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    policyId: uuid("policy_id")
+      .notNull()
+      .references(() => leavePoliciesTable.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    effectiveFrom: date("effective_from", { mode: "string" }).notNull(),
+    effectiveTo: date("effective_to", { mode: "string" }),
+    changedByUserId: text("changed_by_user_id"),
+    changedAt: timestamp("changed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_policy_versions_policy_ver_uq").on(
+      table.organizationId,
+      table.policyId,
+      table.version,
+    ),
+    index("peopleos_leave_policy_versions_effective_idx").on(
+      table.organizationId,
+      table.policyId,
+      table.effectiveFrom,
+      table.effectiveTo,
+    ),
+  ],
+);
+
+export const publicHolidaysTable = pgTable(
+  "peopleos_public_holidays",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    holidayDate: date("holiday_date", { mode: "string" }).notNull(),
+    name: text("name").notNull(),
+    jurisdiction: text("jurisdiction").notNull().default("KE"),
+    sourceUrl: text("source_url"),
+    isGazetted: boolean("is_gazetted").notNull().default(false),
+    note: text("note"),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_public_holidays_org_date_uq").on(
+      table.organizationId,
+      table.holidayDate,
+    ),
+    index("peopleos_public_holidays_org_date_idx").on(
+      table.organizationId,
+      table.holidayDate,
+    ),
+  ],
+);
+
 export const auditEventsTable = pgTable(
   "peopleos_audit_events",
   {
@@ -226,6 +380,14 @@ export const auditEventsTable = pgTable(
     targetType: text("target_type").notNull(),
     targetId: text("target_id").notNull(),
     summary: text("summary").notNull(),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+    reason: text("reason"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    requestId: text("request_id"),
+    prevHash: text("prev_hash"),
+    hash: text("hash"),
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

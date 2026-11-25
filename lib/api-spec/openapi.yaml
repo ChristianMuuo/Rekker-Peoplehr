@@ -542,8 +542,10 @@ components:
       enum: [employee, department_manager, hr_admin, hr_director, hr_manager, hr_officer, recruiter, payroll_officer, finance_manager, production_supervisor, warehouse_supervisor, sales_manager, system_admin, read_only_executive, auditor]
     AuthContext:
       type: object
-      required: [role, displayName, organizationName, canManagePeople, canApproveLeave, canViewAudit, canViewPayroll, canManageSettings, isDemo]
+      required: [userId, employeeId, role, displayName, organizationName, canManagePeople, canApproveLeave, canViewAudit, canViewPayroll, canManageSettings, isDemo]
       properties:
+        userId: { type: string }
+        employeeId: { type: [ "string", "null" ] }
         role: { $ref: "#/components/schemas/OrganizationRole" }
         displayName: { type: string }
         organizationName: { type: string }
@@ -714,6 +716,11 @@ components:
         submittedAt: { type: string, format: date-time }
         decidedAt: { type: ["string", "null"], format: date-time }
         isDemo: { type: boolean }
+        recommendationStatus: { type: string, enum: [not_assessed, recommended, not_recommended] }
+        recommendationComment: { type: [ "string", "null" ] }
+        recommendationByUserId: { type: [ "string", "null" ] }
+        recommendationAt: { type: [ "string", "null" ], format: date-time }
+        halfDay: { type: boolean }
     LeaveRequestInput:
       type: object
       required: [employeeId, leaveType, startDate, endDate, reason]
@@ -723,6 +730,7 @@ components:
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         reason: { type: string, minLength: 3, maxLength: 1000 }
+        halfDay: { type: boolean, default: false }
     LeaveAccrualMethod:
       type: string
       enum: [annual, monthly]
@@ -734,6 +742,9 @@ components:
         code: { type: string }
         name: { type: string }
         entitlementDays: { type: integer, minimum: 0 }
+        entitlementQuantity: { type: integer, minimum: 0 }
+        entitlementUnit: { type: string, enum: [days, weeks, months] }
+        needsLegalReview: { type: boolean }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
     LeavePolicyInput:
@@ -742,6 +753,8 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        entitlementQuantity: { type: integer, minimum: 0, maximum: 366 }
+        entitlementUnit: { type: string, enum: [days, weeks, months] }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
     LeavePolicyUpdate:
       type: object
@@ -749,6 +762,8 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        entitlementQuantity: { type: integer, minimum: 0, maximum: 366 }
+        entitlementUnit: { type: string, enum: [days, weeks, months] }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
     LeaveBalance:
@@ -760,11 +775,11 @@ components:
         leaveType: { type: string }
         leaveTypeName: { type: string }
         year: { type: integer }
-        entitlementDays: { type: integer }
-        accruedDays: { type: integer }
-        usedDays: { type: integer }
-        pendingDays: { type: integer }
-        remainingDays: { type: integer }
+        entitlementDays: { type: number }
+        accruedDays: { type: number }
+        usedDays: { type: number }
+        pendingDays: { type: number }
+        remainingDays: { type: number }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
     LeaveDecisionInput:
@@ -794,6 +809,8 @@ components:
         targetType: { type: string }
         targetId: { type: string }
         summary: { type: string }
+        prevHash: { type: [ "string", "null" ] }
+        hash: { type: [ "string", "null" ] }
         isDemo: { type: boolean }
     AgentProviderStatus:
       type: object
