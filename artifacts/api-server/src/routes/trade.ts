@@ -2637,20 +2637,289 @@ router.post("/trade/crm/interactions", async (req: Request, res: Response) => {
  * Executive commercial analytics: brand revenue distribution, regional performance & debtor DSO
  */
 router.get("/trade/analytics/commercial", async (req: Request, res: Response) => {
-  // Brand distribution
+  // Brand distribution with margins and carton velocity
   const brandMetrics = [
-    { brand: "Saffron Milan", revenueCents: 184500000, marketSharePct: 41.5, cartonVelocity: 1420 },
-    { brand: "Bio Saff", revenueCents: 128900000, marketSharePct: 29.0, cartonVelocity: 980 },
-    { brand: "Cornells", revenueCents: 85200000, marketSharePct: 19.2, cartonVelocity: 640 },
-    { brand: "PetCare", revenueCents: 45600000, marketSharePct: 10.3, cartonVelocity: 310 },
+    {
+      brand: "Saffron Milan",
+      revenueCents: 184500000, // KES 1,845,000
+      marketSharePct: 41.5,
+      cartonVelocity: 1420,
+      grossMarginPct: 32.4,
+      avgCartonPriceKes: 1299,
+      category: "Personal Care & Skincare",
+    },
+    {
+      brand: "Bio Saff",
+      revenueCents: 128900000, // KES 1,289,000
+      marketSharePct: 29.0,
+      cartonVelocity: 980,
+      grossMarginPct: 28.6,
+      avgCartonPriceKes: 1315,
+      category: "Organic Hair & Body",
+    },
+    {
+      brand: "Cornells",
+      revenueCents: 85200000, // KES 852,000
+      marketSharePct: 19.2,
+      cartonVelocity: 640,
+      grossMarginPct: 35.1,
+      avgCartonPriceKes: 1331,
+      category: "Men's Grooming & Styling",
+    },
+    {
+      brand: "PetCare",
+      revenueCents: 45600000, // KES 456,000
+      marketSharePct: 10.3,
+      cartonVelocity: 310,
+      grossMarginPct: 24.8,
+      avgCartonPriceKes: 1470,
+      category: "Pet Hygiene & Grooming",
+    },
   ];
 
-  // County / Regional revenue
+  // County / Regional commercial performance
   const regionalMetrics = [
-    { county: "Nairobi", hubs: "WH-NBO-01", revenueCents: 215000000, activeBuyers: 48, growthPct: 24.1 },
-    { county: "Mombasa & Coast", hubs: "WH-MSA-01", revenueCents: 112000000, activeBuyers: 26, growthPct: 18.5 },
-    { county: "Kisumu & Western", hubs: "WH-KSM-01", revenueCents: 74000000, activeBuyers: 19, growthPct: 29.3 },
-    { county: "Nakuru & Rift", hubs: "WH-NKR-01", revenueCents: 43200000, activeBuyers: 14, growthPct: 15.2 },
+    {
+      county: "Nairobi",
+      hubs: "WH-NBO-01",
+      revenueCents: 215000000,
+      activeBuyers: 48,
+      growthPct: 24.1,
+      cartonsShipped: 1620,
+      onTimeFulfilmentPct: 98.4,
+    },
+    {
+      county: "Mombasa & Coast",
+      hubs: "WH-MSA-01",
+      revenueCents: 112000000,
+      activeBuyers: 26,
+      growthPct: 18.5,
+      cartonsShipped: 840,
+      onTimeFulfilmentPct: 95.8,
+    },
+    {
+      county: "Kisumu & Western",
+      hubs: "WH-KSM-01",
+      revenueCents: 74000000,
+      activeBuyers: 19,
+      growthPct: 29.3,
+      cartonsShipped: 560,
+      onTimeFulfilmentPct: 94.2,
+    },
+    {
+      county: "Nakuru & Rift",
+      hubs: "WH-NKR-01",
+      revenueCents: 43200000,
+      activeBuyers: 14,
+      growthPct: 15.2,
+      cartonsShipped: 330,
+      onTimeFulfilmentPct: 96.5,
+    },
+    {
+      county: "Kiambu & Mt Kenya",
+      hubs: "WH-NBO-01 (Satellite)",
+      revenueCents: 32000000,
+      activeBuyers: 11,
+      growthPct: 21.0,
+      cartonsShipped: 240,
+      onTimeFulfilmentPct: 97.4,
+    },
+    {
+      county: "Uasin Gishu & North Rift",
+      hubs: "WH-ELD-01",
+      revenueCents: 28000000,
+      activeBuyers: 9,
+      growthPct: 27.8,
+      cartonsShipped: 210,
+      onTimeFulfilmentPct: 93.8,
+    },
+  ];
+
+  // Monthly revenue vs collections waterfall (rolling 6 months)
+  const monthlyTrends = [
+    {
+      month: "Oct 2025",
+      invoicedCents: 340000000,
+      collectedCents: 310000000,
+      targetCents: 320000000,
+      dsoDays: 34,
+    },
+    {
+      month: "Nov 2025",
+      invoicedCents: 385000000,
+      collectedCents: 350000000,
+      targetCents: 360000000,
+      dsoDays: 32,
+    },
+    {
+      month: "Dec 2025",
+      invoicedCents: 490000000,
+      collectedCents: 460000000,
+      targetCents: 440000000,
+      dsoDays: 31,
+    },
+    {
+      month: "Jan 2026",
+      invoicedCents: 410000000,
+      collectedCents: 395000000,
+      targetCents: 400000000,
+      dsoDays: 29,
+    },
+    {
+      month: "Feb 2026",
+      invoicedCents: 435000000,
+      collectedCents: 418000000,
+      targetCents: 420000000,
+      dsoDays: 29,
+    },
+    {
+      month: "Mar 2026 (MTD)",
+      invoicedCents: 444200000,
+      collectedCents: 406000000,
+      targetCents: 450000000,
+      dsoDays: 28,
+    },
+  ];
+
+  // Accounts receivable aging breakdown
+  const agingWaterfall = [
+    {
+      bucket: "0 - 30 Days",
+      label: "Current (Standard Credit Terms)",
+      amountCents: 24500000, // KES 245,000
+      count: 18,
+      sharePct: 62.4,
+      status: "healthy",
+      color: "#059669",
+    },
+    {
+      bucket: "31 - 60 Days",
+      label: "Early Overdue (Follow-up Notice)",
+      amountCents: 9200000, // KES 92,000
+      count: 7,
+      sharePct: 23.4,
+      status: "warning",
+      color: "#d97706",
+    },
+    {
+      bucket: "61 - 90 Days",
+      label: "Escalated Credit (Hold Threshold)",
+      amountCents: 4100000, // KES 41,000
+      count: 3,
+      sharePct: 10.4,
+      status: "escalated",
+      color: "#ea580c",
+    },
+    {
+      bucket: "90+ Days",
+      label: "Critical Default Risk (Legal Recon)",
+      amountCents: 1500000, // KES 15,000
+      count: 2,
+      sharePct: 3.8,
+      status: "critical",
+      color: "#C71D1D",
+    },
+  ];
+
+  // Sales rep leaderboard
+  const salesRepLeaderboard = [
+    {
+      rank: 1,
+      name: "Kelvin Maina",
+      code: "SR-NBO-01",
+      territory: "Nairobi Central & Industrial",
+      monthlyTargetCents: 150000000,
+      achievedCents: 142000000,
+      achievementPct: 94.7,
+      activeAccounts: 24,
+      commissionEarnedCents: 3550000,
+      status: "Top Performer",
+    },
+    {
+      rank: 2,
+      name: "Faith Mwangi",
+      code: "SR-MSA-01",
+      territory: "Mombasa & Coast Region",
+      monthlyTargetCents: 100000000,
+      achievedCents: 88000000,
+      achievementPct: 88.0,
+      activeAccounts: 18,
+      commissionEarnedCents: 2640000,
+      status: "Pacing Above Target",
+    },
+    {
+      rank: 3,
+      name: "Brian Otieno",
+      code: "SR-KSM-01",
+      territory: "Western & Kisumu Hub",
+      monthlyTargetCents: 80000000,
+      achievedCents: 69000000,
+      achievementPct: 86.3,
+      activeAccounts: 14,
+      commissionEarnedCents: 2415000,
+      status: "Steady Growth",
+    },
+    {
+      rank: 4,
+      name: "Dennis Kipchirchir",
+      code: "SR-NKR-01",
+      territory: "Rift Valley & Nakuru",
+      monthlyTargetCents: 70000000,
+      achievedCents: 54000000,
+      achievementPct: 77.1,
+      activeAccounts: 11,
+      commissionEarnedCents: 1890000,
+      status: "On Track",
+    },
+  ];
+
+  // Top SKUs carton velocity
+  const topSkus = [
+    {
+      skuCode: "SKU-SAFF-001",
+      productName: "Saffron Milan Cocoa Butter Body Lotion 400ml",
+      brand: "Saffron Milan",
+      cartonsShipped: 680,
+      unitsTotal: 16320,
+      revenueCents: 88400000,
+      grossMarginPct: 34.2,
+    },
+    {
+      skuCode: "SKU-BIOS-001",
+      productName: "Bio Saff Organic Coconut Oil Moisturizer 250ml",
+      brand: "Bio Saff",
+      cartonsShipped: 540,
+      unitsTotal: 6480,
+      revenueCents: 71000000,
+      grossMarginPct: 29.5,
+    },
+    {
+      skuCode: "SKU-CORN-001",
+      productName: "Cornells Cedarwood & Bergamot Beard Oil 50ml",
+      brand: "Cornells",
+      cartonsShipped: 410,
+      unitsTotal: 19680,
+      revenueCents: 54600000,
+      grossMarginPct: 37.8,
+    },
+    {
+      skuCode: "SKU-PET-001",
+      productName: "PetCare Medicated Flea & Tick Dog Shampoo 500ml",
+      brand: "PetCare",
+      cartonsShipped: 310,
+      unitsTotal: 3720,
+      revenueCents: 45600000,
+      grossMarginPct: 24.8,
+    },
+    {
+      skuCode: "SKU-SAFF-002",
+      productName: "Saffron Milan Radiant Shea Butter Cream 250g",
+      brand: "Saffron Milan",
+      cartonsShipped: 290,
+      unitsTotal: 6960,
+      revenueCents: 37700000,
+      grossMarginPct: 31.0,
+    },
   ];
 
   // Financial health
@@ -2665,9 +2934,18 @@ router.get("/trade/analytics/commercial", async (req: Request, res: Response) =>
       totalOutstandingReceivablesCents: totalOutstandingCents,
       collectionEfficiencyPct: 91.4,
       daysSalesOutstandingDSO: 28, // Healthy FMCG standard (< 30 days)
+      quarterlyTargetCents: 500000000,
+      targetProgressPct: 88.8,
+      totalCartonsShipped: 3800,
+      activeTradingAccounts: 127,
+      overallGrossMarginPct: 30.8,
     },
     brands: brandMetrics,
     regions: regionalMetrics,
+    monthlyTrends,
+    agingWaterfall,
+    salesRepLeaderboard,
+    topSkus,
   });
 });
 

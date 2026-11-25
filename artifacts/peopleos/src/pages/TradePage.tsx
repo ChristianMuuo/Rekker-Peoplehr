@@ -32,7 +32,11 @@ import {
   ShoppingCart,
   Sparkles,
   Store,
+  Award,
+  BarChart3,
+  PieChart as PieIcon,
   Tag,
+  TrendingDown,
   TrendingUp,
   Truck,
   Users,
@@ -40,6 +44,21 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  BarChart,
+  Bar,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from 'recharts';
 import { apiGet, apiPost } from '../lib/api';
 
 export function TradePage() {
@@ -52,6 +71,10 @@ export function TradePage() {
   const [brandFilter, setBrandFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [banner, setBanner] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
+
+  // Commercial Analytics Sub-view & Timeframe State
+  const [analyticsView, setAnalyticsView] = useState<'all' | 'revenue_trends' | 'debtors_dso' | 'territories' | 'leaderboard'>('all');
+  const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'mtd' | 'q1' | 'rolling_6m'>('q1');
 
   // Cart state for Bulk Order
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -653,6 +676,57 @@ export function TradePage() {
     }
   };
 
+  // Phase 2 Handlers: Export Commercial Analytics CSV
+  const handleExportCommercialCsv = () => {
+    if (!commercialAnalytics) return;
+    let csv = '=== REKKER TRADE COMMERCIAL ANALYTICS & EXECUTIVE BI ===\n';
+    csv += `Export Timestamp,${new Date().toISOString()}\n`;
+    csv += `Total Gross Revenue (KES),${Math.round((commercialAnalytics.summary?.totalGrossRevenueCents || 0) / 100)}\n`;
+    csv += `Total Outstanding Receivables (KES),${Math.round((commercialAnalytics.summary?.totalOutstandingReceivablesCents || 0) / 100)}\n`;
+    csv += `Days Sales Outstanding (DSO),${commercialAnalytics.summary?.daysSalesOutstandingDSO || 28} Days\n`;
+    csv += `Collection Efficiency,${commercialAnalytics.summary?.collectionEfficiencyPct || 91.4}%\n\n`;
+
+    csv += '=== BRAND PERFORMANCE & MARGINS ===\n';
+    csv += 'Brand,Category,Revenue (KES),Market Share %,Carton Velocity,Gross Margin %,Avg Carton Price (KES)\n';
+    (commercialAnalytics.brands || []).forEach((b: any) => {
+      csv += `"${b.brand}","${b.category || ''}",${Math.round(b.revenueCents / 100)},${b.marketSharePct}%,${b.cartonVelocity},${b.grossMarginPct || ''}%,${b.avgCartonPriceKes || ''}\n`;
+    });
+    csv += '\n';
+
+    csv += '=== REGIONAL & COUNTY FULFILMENT ===\n';
+    csv += 'County/Region,Fulfilment Hub,Revenue (KES),Active Retailers,YoY Growth %,Cartons Shipped,On-Time Fulfilment %\n';
+    (commercialAnalytics.regions || []).forEach((r: any) => {
+      csv += `"${r.county}","${r.hubs}",${Math.round(r.revenueCents / 100)},${r.activeBuyers},${r.growthPct}%,${r.cartonsShipped || ''},${r.onTimeFulfilmentPct || ''}%\n`;
+    });
+    csv += '\n';
+
+    csv += '=== 6-MONTH REVENUE & CASH COLLECTIONS TREND ===\n';
+    csv += 'Month,Invoiced (KES),Cash Collected (KES),Target (KES),DSO (Days)\n';
+    (commercialAnalytics.monthlyTrends || []).forEach((m: any) => {
+      csv += `"${m.month}",${Math.round(m.invoicedCents / 100)},${Math.round(m.collectedCents / 100)},${Math.round(m.targetCents / 100)},${m.dsoDays}\n`;
+    });
+    csv += '\n';
+
+    csv += '=== SALES REPRESENTATIVE QUOTA LEADERBOARD ===\n';
+    csv += 'Rank,Representative,Code,Territory,Target (KES),Achieved (KES),Achievement %,Active Accounts,Commission (KES)\n';
+    (commercialAnalytics.salesRepLeaderboard || []).forEach((s: any) => {
+      csv += `${s.rank},"${s.name}","${s.code}","${s.territory}",${Math.round(s.monthlyTargetCents / 100)},${Math.round(s.achievedCents / 100)},${s.achievementPct}%,${s.activeAccounts},${Math.round(s.commissionEarnedCents / 100)}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `rekker_trade_commercial_bi_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setBanner({
+      type: 'success',
+      message: 'Commercial Analytics CSV census exported successfully.',
+    });
+  };
+
   const overview = overviewQuery.data?.metrics;
   const brands = overviewQuery.data?.brands || [];
   const products = productsQuery.data?.products || [];
@@ -785,285 +859,633 @@ export function TradePage() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          TAB 1: COMMERCIAL OVERVIEW
+          TAB 1: COMMERCIAL OVERVIEW & B2B ANALYTICS
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Key KPI Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Gross B2B Revenue
+          {/* Executive Control & Header Bar */}
+          <div className="flex flex-col gap-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-red-100 p-1.5 text-[#C71D1D]">
+                  <BarChart3 className="h-4 w-4" />
                 </span>
-                <span className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
-                  <DollarSign className="h-5 w-5" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#C71D1D]">
+                  Enterprise BI & Revenue Operations
                 </span>
               </div>
-              <p className="mt-3 text-2xl font-bold tracking-tight text-stone-900">
-                {overview ? formatKes(overview.totalGrossRevenueCents) : '...'}
+              <h2 className="mt-1 font-display text-xl font-bold tracking-tight text-stone-900">
+                Commercial Executive Analytics & Debtor Intelligence
+              </h2>
+              <p className="mt-0.5 text-xs text-stone-500">
+                Live volume breaks, cash collection velocity, 47-county wholesale distribution, and DSO schedules.
               </p>
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-700">
-                <TrendingUp className="h-3.5 w-3.5" />
-                <span>+22.4% vs last period across 4 brand lines</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Timeframe Selector */}
+              <div className="inline-flex rounded-xl bg-stone-100 p-1 text-xs font-semibold">
+                {(
+                  [
+                    ['mtd', 'MTD (Mar)'],
+                    ['q1', 'Q1 2026'],
+                    ['rolling_6m', 'Rolling 6M'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setAnalyticsTimeframe(key)}
+                    className={`rounded-lg px-2.5 py-1 transition ${
+                      analyticsTimeframe === key
+                        ? 'bg-white text-stone-900 shadow-sm'
+                        : 'text-stone-500 hover:text-stone-900'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-sm hover:bg-stone-50"
+              >
+                <Printer className="h-3.5 w-3.5 text-stone-500" />
+                Print Brief
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportCommercialCsv}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-stone-800"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV Census
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-view Navigation Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-stone-200 pb-2 text-xs">
+            {(
+              [
+                ['all', 'All Intelligence', Activity],
+                ['revenue_trends', 'Revenue & Collections Waterfall', TrendingUp],
+                ['debtors_dso', 'Debtor Aging & DSO Waterfall', Clock],
+                ['territories', 'Regional Fulfilment & Hubs', MapPin],
+                ['leaderboard', 'Sales Rep Quota Leaderboard', Award],
+              ] as const
+            ).map(([viewId, label, Icon]) => (
+              <button
+                key={viewId}
+                type="button"
+                onClick={() => setAnalyticsView(viewId)}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-semibold transition ${
+                  analyticsView === viewId
+                    ? 'bg-[#C71D1D] text-white shadow-sm'
+                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Key Executive KPI Cards */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                  Gross Wholesale Revenue
+                </span>
+                <span className="rounded-lg bg-emerald-50 p-1.5 text-emerald-600">
+                  <DollarSign className="h-4 w-4" />
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
+                {commercialAnalytics?.summary?.totalGrossRevenueCents
+                  ? formatKes(commercialAnalytics.summary.totalGrossRevenueCents)
+                  : formatKes(overview?.totalGrossRevenueCents || 444200000)}
+              </p>
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700">
+                <TrendingUp className="h-3 w-3" />
+                <span>+22.4% YoY · 88.8% Q1 Target</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Active B2B Buyers
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                  Cash Collected (Remitted)
                 </span>
-                <span className="rounded-lg bg-blue-50 p-2 text-blue-600">
-                  <Building2 className="h-5 w-5" />
+                <span className="rounded-lg bg-blue-50 p-1.5 text-blue-600">
+                  <BadgeCheck className="h-4 w-4" />
                 </span>
               </div>
-              <p className="mt-3 text-2xl font-bold tracking-tight text-stone-900">
-                {overview?.registeredBusinesses ?? '...'} Accounts
+              <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
+                KES 4.06M
               </p>
-              <div className="mt-2 text-xs text-stone-500">
-                <span>{overview?.pendingApprovals ?? 0} pending KRA PIN verification</span>
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-blue-700">
+                <span>91.4% Collection Efficiency Rate</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Accounts Receivable
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                  Outstanding Receivables
                 </span>
-                <span className="rounded-lg bg-amber-50 p-2 text-amber-600">
-                  <Clock className="h-5 w-5" />
+                <span className="rounded-lg bg-amber-50 p-1.5 text-amber-600">
+                  <Clock className="h-4 w-4" />
                 </span>
               </div>
-              <p className="mt-3 text-2xl font-bold tracking-tight text-stone-900">
-                {overview ? `KES ${(overview.outstandingReceivablesKes || 0).toLocaleString()}` : '...'}
+              <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
+                {commercialAnalytics?.summary?.totalOutstandingReceivablesCents
+                  ? formatKes(commercialAnalytics.summary.totalOutstandingReceivablesCents)
+                  : `KES ${(overview?.outstandingReceivablesKes || 39300).toLocaleString()}`}
               </p>
-              <div className="mt-2 text-xs text-amber-700">
-                <span>Credit terms: Net 7, 14, 30, and 60 days</span>
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700">
+                <Check className="h-3 w-3" />
+                <span>DSO: 28 Days (Target &lt; 30d)</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Fulfilment & Stock
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                  Carton Velocity Shipped
                 </span>
-                <span className="rounded-lg bg-orange-50 p-2 text-[#C71D1D]">
-                  <Truck className="h-5 w-5" />
+                <span className="rounded-lg bg-red-50 p-1.5 text-[#C71D1D]">
+                  <Package className="h-4 w-4" />
                 </span>
               </div>
-              <p className="mt-3 text-2xl font-bold tracking-tight text-stone-900">
-                {overview?.totalOrders ?? '...'} Active Shipments
+              <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
+                {commercialAnalytics?.summary?.totalCartonsShipped || 3800} <span className="text-xs font-normal text-stone-500">Cartons</span>
               </p>
-              <div className="mt-2 text-xs text-red-600">
-                <span>{overview?.lowStockProductsCount ?? 0} SKUs flagged low stock</span>
+              <div className="mt-1 text-[11px] text-stone-500">
+                <span>127 Active Wholesaler Accounts</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                  Portfolio Gross Margin
+                </span>
+                <span className="rounded-lg bg-purple-50 p-1.5 text-purple-600">
+                  <TrendingUp className="h-4 w-4" />
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
+                {commercialAnalytics?.summary?.overallGrossMarginPct || 30.8}%
+              </p>
+              <div className="mt-1 text-[11px] text-emerald-700">
+                <span>+8% Minimum Margin Floor Active</span>
               </div>
             </div>
           </div>
 
-          {/* Brand Breakdown */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm lg:col-span-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-stone-900">
-                    Rekker Portfolio Brand Performance
-                  </h3>
-                  <p className="text-xs text-stone-500">
-                    Production allocation and B2B wholesale demand distribution
-                  </p>
+          {/* ─────────────────────────────────────────────────────────────
+              VIEW SECTION: REVENUE & CASH COLLECTIONS WATERFALL
+          ───────────────────────────────────────────────────────────── */}
+          {(analyticsView === 'all' || analyticsView === 'revenue_trends') && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {/* Composed Chart: 6-Month Invoiced vs Collected vs Target */}
+              <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm lg:col-span-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-stone-900">
+                      Monthly Invoiced Revenue vs Cash Collections & Target
+                    </h3>
+                    <p className="text-xs text-stone-500">
+                      Comparing wholesale invoices issued against verified RTGS/EFT remittances in Kenya Shillings
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-bold text-stone-600">
+                    Oct 2025 – Mar 2026
+                  </span>
                 </div>
-                <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-bold text-stone-600">
-                  Q1 2026
-                </span>
+
+                <div className="mt-4 h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart
+                      data={(commercialAnalytics?.monthlyTrends || [
+                        { month: 'Oct 2025', invoicedCents: 340000000, collectedCents: 310000000, targetCents: 320000000 },
+                        { month: 'Nov 2025', invoicedCents: 385000000, collectedCents: 350000000, targetCents: 360000000 },
+                        { month: 'Dec 2025', invoicedCents: 490000000, collectedCents: 460000000, targetCents: 440000000 },
+                        { month: 'Jan 2026', invoicedCents: 410000000, collectedCents: 395000000, targetCents: 400000000 },
+                        { month: 'Feb 2026', invoicedCents: 435000000, collectedCents: 418000000, targetCents: 420000000 },
+                        { month: 'Mar 2026', invoicedCents: 444200000, collectedCents: 406000000, targetCents: 450000000 },
+                      ]).map((m: any) => ({
+                        month: m.month.replace(' 2025', '').replace(' 2026', ''),
+                        Invoiced: Math.round(m.invoicedCents / 100000), // in KES '000
+                        Collected: Math.round(m.collectedCents / 100000),
+                        Target: Math.round(m.targetCents / 100000),
+                      }))}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#78716c' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#78716c' }} unit="k" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          borderRadius: '12px',
+                          border: '1px solid #e7e5e4',
+                          fontSize: '11px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        }}
+                        formatter={(val: any) => [`KES ${(Number(val) * 1000).toLocaleString('en-KE')}`]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      <Bar dataKey="Invoiced" name="Invoiced Revenue" fill="#C71D1D" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Collected" name="Cash Collected" fill="#059669" radius={[4, 4, 0, 0]} />
+                      <Line type="monotone" dataKey="Target" name="Monthly Target" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4 }} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {brands.map((b: any) => (
-                  <div
-                    key={b.brand}
-                    className="flex flex-col justify-between rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:border-red-200"
-                  >
-                    <div>
+              {/* Brand Market Share Donut Chart */}
+              <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+                <div className="border-b border-stone-100 pb-3">
+                  <h3 className="text-base font-bold text-stone-900">Brand Portfolio Revenue Share</h3>
+                  <p className="text-xs text-stone-500">Margin contribution & volume velocity</p>
+                </div>
+
+                <div className="mt-4 h-48 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={commercialAnalytics?.brands || [
+                          { brand: 'Saffron Milan', revenueCents: 184500000 },
+                          { brand: 'Bio Saff', revenueCents: 128900000 },
+                          { brand: 'Cornells', revenueCents: 85200000 },
+                          { brand: 'PetCare', revenueCents: 45600000 },
+                        ]}
+                        dataKey="revenueCents"
+                        nameKey="brand"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={75}
+                        paddingAngle={3}
+                      >
+                        {['#C71D1D', '#059669', '#d97706', '#4f46e5'].map((color, index) => (
+                          <Cell key={`cell-${index}`} fill={color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          borderRadius: '12px',
+                          border: '1px solid #e7e5e4',
+                          fontSize: '11px',
+                        }}
+                        formatter={(val: any) => [formatKes(Number(val))]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="mt-2 space-y-2 text-xs">
+                  {(commercialAnalytics?.brands || [
+                    { brand: 'Saffron Milan', revenueCents: 184500000, marketSharePct: 41.5, grossMarginPct: 32.4, color: '#C71D1D' },
+                    { brand: 'Bio Saff', revenueCents: 128900000, marketSharePct: 29.0, grossMarginPct: 28.6, color: '#059669' },
+                    { brand: 'Cornells', revenueCents: 85200000, marketSharePct: 19.2, grossMarginPct: 35.1, color: '#d97706' },
+                    { brand: 'PetCare', revenueCents: 45600000, marketSharePct: 10.3, grossMarginPct: 24.8, color: '#4f46e5' },
+                  ]).map((b: any, idx: number) => {
+                    const colors = ['#C71D1D', '#059669', '#d97706', '#4f46e5'];
+                    return (
+                      <div key={b.brand} className="flex items-center justify-between border-b border-stone-50 pb-1.5 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }} />
+                          <span className="font-semibold text-stone-800">{b.brand}</span>
+                        </div>
+                        <div className="flex items-center gap-2 font-mono">
+                          <span className="text-stone-500">{b.marketSharePct}%</span>
+                          <span className="rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-bold text-emerald-800">
+                            {b.grossMarginPct || 30}% Margin
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              VIEW SECTION: DEBTOR AGING WATERFALL & DSO WORKING CAPITAL
+          ───────────────────────────────────────────────────────────── */}
+          {(analyticsView === 'all' || analyticsView === 'debtors_dso') && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {/* Accounts Receivable Aging Waterfall Chart */}
+              <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm lg:col-span-2">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-stone-900">
+                      Debtor Aging Schedule & Accounts Receivable Waterfall
+                    </h3>
+                    <p className="text-xs text-stone-500">
+                      Statutory credit risk exposure categorized across 0-30, 31-60, 61-90, and 90+ days aging buckets
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-bold text-stone-600">
+                    Credit Cap: KES 50M
+                  </span>
+                </div>
+
+                <div className="mt-4 h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={(commercialAnalytics?.agingWaterfall || [
+                        { bucket: '0 - 30 Days', amount: 245000, count: 18, color: '#059669' },
+                        { bucket: '31 - 60 Days', amount: 92000, count: 7, color: '#d97706' },
+                        { bucket: '61 - 90 Days', amount: 41000, count: 3, color: '#ea580c' },
+                        { bucket: '90+ Days', amount: 15000, count: 2, color: '#C71D1D' },
+                      ]).map((a: any) => ({
+                        bucket: a.bucket,
+                        AmountKes: a.amountCents ? Math.round(a.amountCents / 100) : a.amount,
+                        Count: a.count,
+                        color: a.color,
+                      }))}
+                      margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f4" />
+                      <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#78716c' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#78716c' }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          borderRadius: '12px',
+                          border: '1px solid #e7e5e4',
+                          fontSize: '11px',
+                        }}
+                        formatter={(val: any) => [`KES ${Number(val).toLocaleString('en-KE')}`, 'Outstanding']}
+                      />
+                      <Bar dataKey="AmountKes" name="Outstanding Balance" radius={[6, 6, 0, 0]}>
+                        {['#059669', '#d97706', '#ea580c', '#C71D1D'].map((color, index) => (
+                          <Cell key={`cell-${index}`} fill={color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-2.5">
+                    <span className="font-bold text-emerald-800">0 - 30 Days</span>
+                    <p className="mt-1 font-mono font-bold text-stone-900">KES 245,000</p>
+                    <span className="text-[10px] text-stone-500">18 Invoices · 62.4%</span>
+                  </div>
+                  <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-2.5">
+                    <span className="font-bold text-amber-800">31 - 60 Days</span>
+                    <p className="mt-1 font-mono font-bold text-stone-900">KES 92,000</p>
+                    <span className="text-[10px] text-stone-500">7 Invoices · 23.4%</span>
+                  </div>
+                  <div className="rounded-xl border border-orange-100 bg-orange-50/50 p-2.5">
+                    <span className="font-bold text-orange-800">61 - 90 Days</span>
+                    <p className="mt-1 font-mono font-bold text-stone-900">KES 41,000</p>
+                    <span className="text-[10px] text-stone-500">3 Invoices · 10.4%</span>
+                  </div>
+                  <div className="rounded-xl border border-red-100 bg-red-50/50 p-2.5">
+                    <span className="font-bold text-red-800">90+ Days (Hold)</span>
+                    <p className="mt-1 font-mono font-bold text-stone-900">KES 15,000</p>
+                    <span className="text-[10px] text-stone-500">2 Invoices · 3.8%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Working Capital & DSO Gauge */}
+              <div className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-[#C71D1D]" />
+                    <h3 className="text-base font-bold text-stone-900">Liquidity & DSO Benchmarking</h3>
+                  </div>
+                  <p className="mt-1 text-xs text-stone-500">Working capital recovery pace</p>
+
+                  <div className="mt-5 space-y-4">
+                    <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-stone-900">{b.brand}</span>
-                        <span className="text-xs font-bold text-[#C71D1D]">
-                          {b.revenueSharePct}% Share
+                        <span className="text-xs font-semibold text-stone-600">Days Sales Outstanding</span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          PERFORMING
                         </span>
                       </div>
-                      <p className="mt-1 text-xs text-stone-500">
-                        {b.catalogCount} Master Carton SKUs Active
+                      <p className="mt-2 text-3xl font-extrabold text-stone-900">
+                        28 <span className="text-sm font-normal text-stone-500">Days</span>
+                      </p>
+                      <p className="mt-1 text-[11px] text-stone-500">
+                        Improved by 6 days from Oct 2025 (34d). Kenya FMCG industry norm: &lt; 35 days.
                       </p>
                     </div>
 
-                    <div className="mt-4">
-                      <div className="h-2 w-full rounded-full bg-stone-200">
-                        <div
-                          className="h-2 rounded-full bg-[#C71D1D]"
-                          style={{ width: `${b.revenueSharePct}%` }}
-                        />
+                    <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-stone-600">Credit Risk Mitigation</span>
+                        <span className="text-xs font-bold text-emerald-700">96.2% Covered</span>
                       </div>
+                      <div className="mt-2 h-2 w-full rounded-full bg-stone-200">
+                        <div className="h-2 rounded-full bg-emerald-600" style={{ width: '96.2%' }} />
+                      </div>
+                      <p className="mt-2 text-[11px] text-stone-500">
+                        Overdue &gt;60 days represents only 14.2% of total receivables. Automatic credit holds enforced.
+                      </p>
                     </div>
                   </div>
-                ))}
+                </div>
+
+                <div className="mt-6 border-t border-stone-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('reconciliations')}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-stone-900 py-2.5 text-xs font-bold text-white shadow hover:bg-stone-800"
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Open Bank Reconciliations
+                  </button>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Compliance & Tax Regulations */}
+          {/* ─────────────────────────────────────────────────────────────
+              VIEW SECTION: SALES REP QUOTA LEADERBOARD & COMMISSIONS
+          ───────────────────────────────────────────────────────────── */}
+          {(analyticsView === 'all' || analyticsView === 'leaderboard') && (
             <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                <h3 className="text-base font-bold text-stone-900">Kenya Regulatory Gates</h3>
-              </div>
-              <p className="mt-1 text-xs text-stone-500">
-                Automated tax and data compliance controls
-              </p>
-
-              <div className="mt-4 space-y-3">
-                <div className="rounded-xl border border-stone-100 bg-stone-50 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-stone-800">KRA eTIMS Integration</span>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                      ACTIVE
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-stone-500">
-                    Automatic generation of KRA control codes and 16% standard VAT breakdown.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-stone-100 bg-stone-50 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-stone-800">Commercial Margin Floor</span>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                      PROTECTED
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-stone-500">
-                    Strict rejection of prices below unit production cost + 8% margin.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-stone-100 bg-stone-50 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-stone-800">ODPC & KDPA 2019 Privacy</span>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                      COMPLIANT
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-stone-500">
-                    Masked customer banking credentials and audited Maker-Checker approvals.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Executive Commercial Analytics & Debtor Health */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Left: Regional Fulfilment Distribution */}
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm lg:col-span-2">
-              <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-4">
                 <div>
                   <h3 className="text-base font-bold text-stone-900">
-                    Regional Distribution & County Coverage
+                    Sales Representative Quota Leaderboard & Earned Commissions
                   </h3>
                   <p className="text-xs text-stone-500">
-                    Wholesale buyer penetration and fulfilment hub alignment across Kenya
+                    Live territory performance pacing against monthly wholesale targets across Kenya
                   </p>
                 </div>
-                <span className="rounded-md bg-stone-100 px-2.5 py-1 text-xs font-bold text-stone-600">
-                  4 Regional Hubs
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('crm')}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-sm hover:bg-stone-50"
+                >
+                  <Users className="h-3.5 w-3.5 text-stone-500" />
+                  View CRM Visit Journal
+                </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {(commercialAnalytics?.regions || [
-                  { county: "Nairobi", hubs: "WH-NBO-01", revenueCents: 215000000, activeBuyers: 48, growthPct: 24.1 },
-                  { county: "Mombasa & Coast", hubs: "WH-MSA-01", revenueCents: 112000000, activeBuyers: 26, growthPct: 18.5 },
-                  { county: "Kisumu & Western", hubs: "WH-KSM-01", revenueCents: 74000000, activeBuyers: 19, growthPct: 29.3 },
-                  { county: "Nakuru & Rift", hubs: "WH-NKR-01", revenueCents: 43200000, activeBuyers: 14, growthPct: 15.2 },
-                ]).map((reg: any) => (
-                  <div key={reg.county} className="rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:border-red-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-[#C71D1D]" />
-                        <span className="text-xs font-bold text-stone-900">{reg.county}</span>
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {(commercialAnalytics?.salesRepLeaderboard || [
+                  { rank: 1, name: 'Kelvin Maina', code: 'SR-NBO-01', territory: 'Nairobi Central', monthlyTargetCents: 150000000, achievedCents: 142000000, achievementPct: 94.7, activeAccounts: 24, commissionEarnedCents: 3550000 },
+                  { rank: 2, name: 'Faith Mwangi', code: 'SR-MSA-01', territory: 'Mombasa & Coast', monthlyTargetCents: 100000000, achievedCents: 88000000, achievementPct: 88.0, activeAccounts: 18, commissionEarnedCents: 2640000 },
+                  { rank: 3, name: 'Brian Otieno', code: 'SR-KSM-01', territory: 'Western & Kisumu', monthlyTargetCents: 80000000, achievedCents: 69000000, achievementPct: 86.3, activeAccounts: 14, commissionEarnedCents: 2415000 },
+                  { rank: 4, name: 'Dennis Kipchirchir', code: 'SR-NKR-01', territory: 'Rift Valley & Nakuru', monthlyTargetCents: 70000000, achievedCents: 54000000, achievementPct: 77.1, activeAccounts: 11, commissionEarnedCents: 1890000 },
+                ]).map((rep: any) => (
+                  <div key={rep.name} className="relative rounded-xl border border-stone-100 bg-stone-50 p-4 transition hover:border-red-200">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-extrabold ${
+                              rep.rank === 1
+                                ? 'bg-amber-100 text-amber-800'
+                                : rep.rank === 2
+                                ? 'bg-stone-200 text-stone-700'
+                                : rep.rank === 3
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-stone-100 text-stone-500'
+                            }`}
+                          >
+                            #{rep.rank}
+                          </span>
+                          <span className="text-xs font-bold text-stone-900">{rep.name}</span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-stone-500">{rep.territory}</p>
                       </div>
+
                       <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                        +{reg.growthPct}% YoY
+                        {rep.achievementPct}%
                       </span>
                     </div>
-                    <div className="mt-3 flex items-baseline justify-between">
-                      <p className="text-base font-bold text-stone-900">{formatKes(reg.revenueCents)}</p>
-                      <span className="text-xs text-stone-500">{reg.activeBuyers} Retailers</span>
+
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-stone-500">Achieved:</span>
+                        <span className="font-bold text-stone-900">{formatKes(rep.achievedCents)}</span>
+                      </div>
+                      <div className="mt-1 h-2 w-full rounded-full bg-stone-200">
+                        <div
+                          className={`h-2 rounded-full ${rep.achievementPct >= 90 ? 'bg-emerald-600' : 'bg-[#C71D1D]'}`}
+                          style={{ width: `${Math.min(100, rep.achievementPct)}%` }}
+                        />
+                      </div>
+                      <div className="mt-1 text-right text-[10px] text-stone-400">
+                        Target: {formatKes(rep.monthlyTargetCents)}
+                      </div>
                     </div>
-                    <div className="mt-2 text-[11px] text-stone-500">
-                      Fulfilled via <span className="font-mono font-semibold text-stone-700">{reg.hubs}</span>
+
+                    <div className="mt-3 pt-3 border-t border-stone-200/60 flex items-center justify-between text-[11px]">
+                      <span className="text-stone-500">{rep.activeAccounts} Accounts</span>
+                      <span className="font-bold text-emerald-700 font-mono">
+                        +{formatKes(rep.commissionEarnedCents)} Comm.
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
+          )}
 
-            {/* Right: Treasury & DSO Health */}
-            <div className="flex flex-col justify-between rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-              <div>
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-[#C71D1D]" />
-                  <h3 className="text-base font-bold text-stone-900">Treasury & Working Capital</h3>
+          {/* ─────────────────────────────────────────────────────────────
+              VIEW SECTION: 47-COUNTY REGIONAL COVERAGE & TOP SKUs
+          ───────────────────────────────────────────────────────────── */}
+          {(analyticsView === 'all' || analyticsView === 'territories') && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {/* Regional Coverage Hubs (6 Clusters) */}
+              <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm lg:col-span-2">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-stone-900">
+                      Regional Distribution & Territory Hub Infrastructure
+                    </h3>
+                    <p className="text-xs text-stone-500">
+                      Wholesale retail penetration and on-time fulfilment rates across 6 regional nodes
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-bold text-stone-600">
+                    6 Territory Hubs
+                  </span>
                 </div>
-                <p className="mt-1 text-xs text-stone-500">
-                  Debtor recovery velocity and liquidity indicators
-                </p>
 
-                <div className="mt-6 space-y-4">
-                  <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-stone-600">Days Sales Outstanding (DSO)</span>
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        HEALTHY
-                      </span>
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-stone-900">
-                      {commercialAnalytics?.summary?.daysSalesOutstandingDSO || 28} <span className="text-sm font-normal text-stone-500">Days</span>
-                    </p>
-                    <p className="mt-1 text-[11px] text-stone-500">
-                      FMCG industry benchmark &lt; 30 days. Average settlement window across trade accounts.
-                    </p>
-                  </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {(commercialAnalytics?.regions || [
+                    { county: 'Nairobi', hubs: 'WH-NBO-01', revenueCents: 215000000, activeBuyers: 48, growthPct: 24.1, cartonsShipped: 1620, onTimeFulfilmentPct: 98.4 },
+                    { county: 'Mombasa & Coast', hubs: 'WH-MSA-01', revenueCents: 112000000, activeBuyers: 26, growthPct: 18.5, cartonsShipped: 840, onTimeFulfilmentPct: 95.8 },
+                    { county: 'Kisumu & Western', hubs: 'WH-KSM-01', revenueCents: 74000000, activeBuyers: 19, growthPct: 29.3, cartonsShipped: 560, onTimeFulfilmentPct: 94.2 },
+                    { county: 'Nakuru & Rift', hubs: 'WH-NKR-01', revenueCents: 43200000, activeBuyers: 14, growthPct: 15.2, cartonsShipped: 330, onTimeFulfilmentPct: 96.5 },
+                    { county: 'Kiambu & Mt Kenya', hubs: 'WH-NBO-01 (Satellite)', revenueCents: 32000000, activeBuyers: 11, growthPct: 21.0, cartonsShipped: 240, onTimeFulfilmentPct: 97.4 },
+                    { county: 'Uasin Gishu & North Rift', hubs: 'WH-ELD-01', revenueCents: 28000000, activeBuyers: 9, growthPct: 27.8, cartonsShipped: 210, onTimeFulfilmentPct: 93.8 },
+                  ]).map((reg: any) => (
+                    <div key={reg.county} className="rounded-xl border border-stone-100 bg-stone-50 p-3.5 transition hover:border-red-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-[#C71D1D]" />
+                          <span className="text-xs font-bold text-stone-900">{reg.county}</span>
+                        </div>
+                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                          +{reg.growthPct}% YoY
+                        </span>
+                      </div>
 
-                  <div className="rounded-xl border border-stone-100 bg-stone-50 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-stone-600">Collection Efficiency</span>
-                      <span className="text-xs font-bold text-emerald-700">
-                        {commercialAnalytics?.summary?.collectionEfficiencyPct || 91.4}%
-                      </span>
+                      <div className="mt-2.5 flex items-baseline justify-between">
+                        <p className="text-sm font-bold text-stone-900">{formatKes(reg.revenueCents)}</p>
+                        <span className="text-[11px] text-stone-500">{reg.activeBuyers} Retailers</span>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between text-[10px] text-stone-500 pt-1.5 border-t border-stone-200/60">
+                        <span>Hub: <strong className="font-mono text-stone-700">{reg.hubs}</strong></span>
+                        <span className="text-emerald-700 font-semibold">{reg.onTimeFulfilmentPct || 97}% On-Time</span>
+                      </div>
                     </div>
-                    <div className="mt-2 h-2 w-full rounded-full bg-stone-200">
-                      <div
-                        className="h-2 rounded-full bg-emerald-600"
-                        style={{ width: `${commercialAnalytics?.summary?.collectionEfficiencyPct || 91.4}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-[11px] text-stone-500">
-                      Proportion of mature invoices settled within terms without disputes.
-                    </p>
-                  </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="mt-6 border-t border-stone-100 pt-4">
-                <button
-                  onClick={() => setActiveTab('reconciliations')}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-stone-900 py-2.5 text-xs font-bold text-white shadow hover:bg-stone-800"
-                >
-                  <CreditCard className="h-4 w-4" />
-                  View Bank Reconciliations
-                </button>
+              {/* Top Selling Wholesale SKUs */}
+              <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+                <div className="border-b border-stone-100 pb-3">
+                  <h3 className="text-base font-bold text-stone-900">Top Wholesale SKUs</h3>
+                  <p className="text-xs text-stone-500">Carton velocity & demand leader</p>
+                </div>
+
+                <div className="mt-4 divide-y divide-stone-100 text-xs">
+                  {(commercialAnalytics?.topSkus || [
+                    { skuCode: 'SKU-SAFF-001', productName: 'Saffron Cocoa Butter Lotion 400ml', brand: 'Saffron Milan', cartonsShipped: 680, grossMarginPct: 34.2 },
+                    { skuCode: 'SKU-BIOS-001', productName: 'Bio Saff Coconut Oil 250ml', brand: 'Bio Saff', cartonsShipped: 540, grossMarginPct: 29.5 },
+                    { skuCode: 'SKU-CORN-001', productName: 'Cornells Cedarwood Beard Oil 50ml', brand: 'Cornells', cartonsShipped: 410, grossMarginPct: 37.8 },
+                    { skuCode: 'SKU-PET-001', productName: 'PetCare Flea & Tick Shampoo 500ml', brand: 'PetCare', cartonsShipped: 310, grossMarginPct: 24.8 },
+                    { skuCode: 'SKU-SAFF-002', productName: 'Saffron Shea Butter Cream 250g', brand: 'Saffron Milan', cartonsShipped: 290, grossMarginPct: 31.0 },
+                  ]).map((sku: any) => (
+                    <div key={sku.skuCode} className="py-2.5 flex items-center justify-between">
+                      <div className="space-y-0.5 max-w-[70%]">
+                        <p className="font-bold text-stone-900 truncate">{sku.productName}</p>
+                        <p className="text-[10px] font-mono text-stone-400">{sku.skuCode} · {sku.brand}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-stone-900 font-mono">{sku.cartonsShipped} ctn</p>
+                        <span className="text-[10px] text-emerald-700 font-semibold">{sku.grossMarginPct}% Margin</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
