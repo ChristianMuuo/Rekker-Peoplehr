@@ -279,6 +279,43 @@ paths:
           description: Insufficient permission
         "404":
           description: Leave policy not found
+  /leave-preview:
+    get:
+      operationId: previewLeaveRequest
+      tags: [leave]
+      summary: Calculate scheduled leave days, eligibility and available balance before submission
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: leaveType
+          in: query
+          required: true
+          schema: { type: string }
+        - name: startDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: endDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: halfDay
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Server-calculated preview; no request or ledger entry is written
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "403":
+          description: Employee is outside the user's permitted scope
+        "422":
+          description: Invalid date range or leave duration
   /leave-balances:
     get:
       operationId: listLeaveBalances
