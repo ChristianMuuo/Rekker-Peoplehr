@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { auditEventsTable, db } from "@workspace/db";
+import { desc, eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 export interface AuditEntry {
@@ -14,6 +15,8 @@ export interface AuditEntry {
   summary: string;
   correlationId?: string;
   isDemo: boolean;
+  prevHash?: string | null;
+  hash?: string | null;
 }
 
 export class AuditPersistenceError extends Error {
@@ -97,7 +100,7 @@ export async function recordAuditEvent(params: {
   correlationId?: string;
   critical?: boolean;
   isDemo?: boolean;
-  tx?: Pick<typeof db, "insert">;
+  tx?: Parameters<Parameters<typeof db.transaction>[0]>[0];
 }): Promise<void> {
   const safeSummary = sanitizeAuditSummary(params.summary);
   const fullSummary = params.correlationId
@@ -126,14 +129,36 @@ export async function recordAuditEvent(params: {
     return;
   }
 
-  DEMO_AUDIT_STORE.unshift(entry);
-  if (DEMO_AUDIT_STORE.length > 500) {
-    DEMO_AUDIT_STORE.length = 500;
-  }
-
   if (process.env.DATABASE_URL) {
     const sink = params.tx ?? db;
     try {
+      // Serialise organisation audit writes so the hash chain has one predecessor.
+      if (params.tx) {
+        await sink.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${params.organizationId}))`);
+      }
+      const [previous] = await sink
+        .select({ hash: auditEventsTable.hash })
+        .from(auditEventsTable)
+        .where(eq(auditEventsTable.organizationId, params.organizationId))
+        .orderBy(desc(auditEventsTable.occurredAt), desc(auditEventsTable.id))
+        .limit(1);
+      const prevHash = previous?.hash ?? null;
+      const hash = crypto
+        .createHash("sha256")
+        .update(JSON.stringify({
+          organizationId: params.organizationId,
+          actorUserId: params.actorUserId ?? null,
+          actor: params.actor,
+          action: params.action,
+          targetType: params.targetType,
+          targetId: params.targetId,
+          summary: fullSummary,
+          occurredAt: entry.occurredAt,
+          prevHash,
+        }))
+        .digest("hex");
+      entry.prevHash = prevHash;
+      entry.hash = hash;
       await sink.insert(auditEventsTable).values({
         organizationId: params.organizationId,
         actorUserId: params.actorUserId ?? null,
@@ -142,6 +167,8 @@ export async function recordAuditEvent(params: {
         targetType: params.targetType,
         targetId: params.targetId,
         summary: fullSummary,
+        prevHash,
+        hash,
         isDemo: params.isDemo ?? false,
       });
     } catch (err) {
@@ -159,5 +186,23 @@ export async function recordAuditEvent(params: {
         throw new AuditPersistenceError();
       }
     }
+  } else {
+    entry.prevHash = DEMO_AUDIT_STORE[0]?.hash ?? null;
+    entry.hash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify({
+        organizationId: entry.organizationId,
+        actorUserId: entry.actorUserId,
+        actor: entry.actor,
+        action: entry.action,
+        targetType: entry.targetType,
+        targetId: entry.targetId,
+        summary: entry.summary,
+        occurredAt: entry.occurredAt,
+        prevHash: entry.prevHash,
+      }))
+      .digest("hex");
+    DEMO_AUDIT_STORE.unshift(entry);
+    if (DEMO_AUDIT_STORE.length > 500) DEMO_AUDIT_STORE.length = 500;
   }
 }
