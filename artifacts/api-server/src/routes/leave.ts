@@ -435,7 +435,7 @@ async function serializeRequests(
     leaveType: leaveTypeNames.get(request.leaveType) ?? request.leaveType,
     startDate: request.startDate,
     endDate: request.endDate,
-    days: request.halfDay ? 0.5 : request.days,
+    days: request.days,
     halfDay: Boolean(request.halfDay),
     reason: request.reason,
     status: request.status,
@@ -1116,7 +1116,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
         request.startDate <= yearEnd &&
         request.endDate >= yearStart);
       const pendingDays = relevantRequests.reduce(
-        (total, request) => total + (request.halfDay ? 0.5 : request.days),
+        (total, request) => total + (request.days),
         0,
       );
       const statutoryUnit = policy.entitlementWeeks > 0 ? "weeks" : policy.entitlementMonths > 0 ? "months" : "days";
@@ -1164,6 +1164,10 @@ router.get("/leave-preview", async (req, res): Promise<void> => {
   }
   if (endDate! < startDate!) {
     res.status(400).json({ error: "End date must be on or after the start date." });
+    return;
+  }
+  if (halfDay && startDate !== endDate) {
+    res.status(422).json({ error: "A half-day request must use one calendar date only." });
     return;
   }
 
@@ -1275,7 +1279,7 @@ router.get("/leave-preview", async (req, res): Promise<void> => {
   if (!eligible) warnings.push(`${policy.name} requires ${policy.minimumServiceMonths} completed month(s) of service.`);
   if (policy.certificateRequired) warnings.push("A certificate reference is required before submission.");
   if (policy.code === "paternity") {
-    const max = paternityWorkingDayEquivalent(policy.entitlementWeeks, calendar.workdays.length);
+    const max = paternityWorkingDayEquivalent(policy.entitlementWeeks, calendar.weeklyWorkdays);
     if (requestedDays > max) warnings.push(`This exceeds 2 weeks (${max} working days on the configured schedule). The conversion is subject to legal review.`);
     warnings.push("Statutory entitlement is stored in weeks; working-day conversion is flagged for legal review.");
   }
@@ -1296,7 +1300,7 @@ router.get("/leave-preview", async (req, res): Promise<void> => {
         request.leaveType === policy!.code &&
         ["pending", "recommended"].includes(request.status) &&
         request.startDate.getUTCFullYear() === year)
-        .reduce((total, request) => total + Math.round((request.halfDay ? 0.5 : request.days) * 4), 0);
+        .reduce((total, request) => total + Math.round((request.days) * 4), 0);
       availableDays = daysFromQuarterDays(quarterBalance - reserved);
     } else {
       const storedRows = await db.select({ quantity: leaveLedgerTable.quantityQuarterDays })
@@ -1319,7 +1323,7 @@ router.get("/leave-preview", async (req, res): Promise<void> => {
         gte(leaveRequestsTable.startDate, `${year}-01-01`),
         lte(leaveRequestsTable.startDate, `${year}-12-31`),
       ));
-      const reservedQuarterDays = pendingRows.reduce((total, row) => total + (row.halfDay ? 2 : row.days * 4), 0);
+      const reservedQuarterDays = pendingRows.reduce((total, row) => total + Math.round(row.days * 4), 0);
       availableDays = daysFromQuarterDays(ledgerQuarterDays - reservedQuarterDays);
     }
     if (availableDays < requestedDays) warnings.push(`Only ${Math.max(0, availableDays)} annual leave day(s) are available before this request.`);
@@ -1369,6 +1373,10 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     : "";
   if (endDate < startDate) {
     res.status(400).json({ error: "End date must be on or after the start date." });
+    return;
+  }
+  if (halfDay && startDate !== endDate) {
+    res.status(422).json({ error: "A half-day request must use one calendar date only." });
     return;
   }
 
@@ -1432,7 +1440,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       return;
     }
     if (policy.code === "paternity") {
-      const maximum = paternityWorkingDayEquivalent(policy.entitlementWeeks, effectiveCalendar.workdays.length);
+      const maximum = paternityWorkingDayEquivalent(policy.entitlementWeeks, effectiveCalendar.weeklyWorkdays);
       if (requestedDays > maximum) {
         res.status(422).json({
           error: `Paternity leave is capped at ${policy.entitlementWeeks} weeks (${maximum} working days on this schedule). The working-day conversion is subject to legal review.`,
@@ -1466,7 +1474,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
           ["pending", "approved"].includes(request.status) &&
           dateOnly(request.startDate).slice(0, 4) === startDate.slice(0, 4))
         .filter((request) => request.status === "pending")
-        .reduce((total, request) => total + Math.round((request.halfDay ? 0.5 : request.days) * 4), 0);
+        .reduce((total, request) => total + Math.round((request.days) * 4), 0);
       if (ledgerBalanceQuarterDays - reservedQuarterDays < quantityQuarterDays) {
         res.status(409).json({
           error: `This request exceeds the available ${policy.name} ledger balance. ${daysFromQuarterDays(Math.max(0, ledgerBalanceQuarterDays - reservedQuarterDays))} day(s) are available.`,
@@ -1482,7 +1490,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       leaveType: policy.code,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
-      days: workingDays,
+      days: requestedDays,
       halfDay,
       certificateReference: certificateReference || null,
       reason: input.reason,
@@ -1572,7 +1580,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     return;
   }
   if (effectivePolicy.code === "paternity") {
-    const maximum = paternityWorkingDayEquivalent(effectivePolicy.entitlementWeeks, effectiveCalendar.workdays.length);
+    const maximum = paternityWorkingDayEquivalent(effectivePolicy.entitlementWeeks, effectiveCalendar.weeklyWorkdays);
     if (requestedDays > maximum) {
       res.status(422).json({
         error: `Paternity leave is capped at ${effectivePolicy.entitlementWeeks} weeks (${maximum} working days on this schedule). The working-day conversion is subject to legal review.`,
@@ -1648,7 +1656,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
           gte(leaveRequestsTable.startDate, `${new Date(startDate).getUTCFullYear()}-01-01`),
           lte(leaveRequestsTable.startDate, `${new Date(startDate).getUTCFullYear()}-12-31`),
         ));
-      const pendingQuarterDays = pending.reduce((total, request) => total + (request.halfDay ? 2 : request.days * 4), 0);
+      const pendingQuarterDays = pending.reduce((total, request) => total + Math.round(request.days * 4), 0);
       if (ledgerBalance - pendingQuarterDays < quantityQuarterDays) {
         return {
           kind: "insufficient_balance" as const,
@@ -1667,7 +1675,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         leaveType: policy.code,
         startDate,
         endDate,
-        days: workingDays,
+        days: requestedDays,
         halfDay,
         certificateReference: certificateReference || null,
         reason: input.reason,
@@ -1835,7 +1843,7 @@ router.post(
         res.status(404).json({ error: "Leave policy or employee record is unavailable." });
         return;
       }
-      const requestedDays = target.halfDay ? 0.5 : target.days;
+      const requestedDays = target.days;
       const year = target.startDate.getUTCFullYear();
       const ledgerBalance = DEMO_LEAVE_LEDGER
         .filter((entry) => entry.organizationId === membership.organizationId &&
@@ -1848,7 +1856,7 @@ router.post(
           item.leaveType === target.leaveType &&
           item.status === "pending" &&
           item.startDate.getUTCFullYear() === year)
-        .reduce((total, item) => total + (item.halfDay ? 0.5 : item.days), 0);
+        .reduce((total, item) => total + item.days, 0);
       const availableDays = policy.code === "annual"
         ? Math.max(0, ledgerBalance - otherPending)
         : requestedDays;
@@ -1940,7 +1948,7 @@ router.post(
       res.status(404).json({ error: "Leave policy or employee record is unavailable." });
       return;
     }
-    const requestedDays = request.halfDay ? 0.5 : request.days;
+    const requestedDays = request.days;
     const year = Number(request.startDate.slice(0, 4));
     let availableDays = requestedDays;
     let policyCompliant = true;
@@ -1980,7 +1988,7 @@ router.post(
         ));
       const otherReservation = pendingOther
         .filter((item) => item.id !== request.id)
-        .reduce((total, item) => total + (item.halfDay ? 0.5 : item.days), 0);
+        .reduce((total, item) => total + item.days, 0);
       availableDays = Math.max(0, ledgerBalance - otherReservation);
       policyCompliant = availableDays >= requestedDays;
     }
@@ -2118,7 +2126,7 @@ router.post(
         return;
       }
       if (target.status === "approved" && body.data.decision === "approve") {
-        res.json(DecideLeaveRequestResponse.parse({ ...target, days: target.halfDay ? 0.5 : target.days }));
+        res.json(DecideLeaveRequestResponse.parse({ ...target, days: target.days }));
         return;
       }
       if (!["recommended", "pending"].includes(target.status) ||
@@ -2150,7 +2158,7 @@ router.post(
           leaveType: target.leaveType,
           requestId: target.id,
           entryType: "deduction",
-          quantityQuarterDays: -Math.round((target.halfDay ? 0.5 : target.days) * 4),
+          quantityQuarterDays: -Math.round(target.days * 4),
           effectiveDate: dateOnly(target.startDate),
           idempotencyKey: `approval:${target.id}`,
           note: "Approved leave balance deduction.",
@@ -2172,7 +2180,7 @@ router.post(
         critical: true,
         isDemo: true,
       });
-      res.json(DecideLeaveRequestResponse.parse({ ...target, days: target.halfDay ? 0.5 : target.days }));
+      res.json(DecideLeaveRequestResponse.parse({ ...target, days: target.days }));
       return;
     }
 
@@ -2227,7 +2235,7 @@ router.post(
       }
       const nextStatus = body.data.decision === "approve" ? "approved" : "rejected";
       if (nextStatus === "approved") {
-        const quantityQuarterDays = request.halfDay ? 2 : request.days * 4;
+        const quantityQuarterDays = Math.round(request.days * 4);
         await tx.insert(leaveLedgerTable).values({
           organizationId: membership.organizationId,
           employeeId: request.employeeId,
@@ -2327,7 +2335,7 @@ router.post(
         return;
       }
       if (request.status === "cancelled") {
-        res.json({ ...request, days: request.halfDay ? 0.5 : request.days });
+        res.json({ ...request, days: request.days });
         return;
       }
       if (request.status !== "approved") {
@@ -2370,7 +2378,7 @@ router.post(
         critical: true,
         isDemo: true,
       });
-      res.json({ ...request, days: request.halfDay ? 0.5 : request.days });
+      res.json({ ...request, days: request.days });
       return;
     }
 
