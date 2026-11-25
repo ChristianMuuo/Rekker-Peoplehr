@@ -1290,12 +1290,12 @@ function SettingsPage() {
   return <div>
     <PageHeading
       eyebrow={isDiagnosticsView ? 'Operations / System health' : 'Workspace / Configuration'}
-      title={isDiagnosticsView ? 'System Diagnostics' : 'Settings & Diagnostics'}
-      description="Role access, runtime readiness, subsystem telemetry, integration registry, and security controls for Rekker PeopleOS."
+      title={isDiagnosticsView ? 'System Diagnostics' : 'Workspace Settings'}
+      description={isDiagnosticsView ? 'Live API, database, authentication and integration health checks for administrators.' : 'Review your workspace access profile, security posture and connected service configuration.'}
       action={canInspectDiagnostics ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
     />
     {!canInspectDiagnostics ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect workspace configuration and system diagnostics." /></div> : <>
-      <section className="surface p-5 md:p-7" data-testid="section-system-diagnostics">
+      {isDiagnosticsView && <section className="surface p-5 md:p-7" data-testid="section-system-diagnostics">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#C71D1D]"><Activity size={18} /></div>
@@ -1384,6 +1384,8 @@ function SettingsPage() {
         )}
       </section>
 
+      </section>}
+      {!isDiagnosticsView && <>
       <section className="surface mt-4 p-5 md:p-7" data-testid="section-role-access">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#a91919]"><ShieldCheck size={18} /></div><div><h2 className="font-display text-lg font-semibold text-stone-900">Your access profile</h2><p className="text-xs text-stone-500">Permissions are supplied by the PeopleOS authorization service.</p></div></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1413,6 +1415,7 @@ function SettingsPage() {
           <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">AI provider setup</h2><p className="mt-1 text-xs text-stone-500">Provider credentials are not editable in this interface.</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${provider.data?.configured ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`} data-testid="status-settings-provider">{provider.data?.configured ? 'Configured' : 'Setup required'}</span></div>
           <div className="mt-4 rounded-xl bg-[#f7f4ef] p-4"><p className="text-sm font-semibold text-stone-700">Provider: {provider.data?.provider || 'Not configured'}</p><p className="mt-1 text-xs text-stone-500">{provider.data?.message || 'No provider key has been supplied. No model calls are made.'}</p><p className="mt-2 text-[10px] text-stone-400">Set up through the approved server environment process. Never paste provider secrets into the browser.</p></div>
         </section>
+      </>}
       </>}
     </>}
   </div>;
