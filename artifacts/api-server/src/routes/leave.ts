@@ -152,7 +152,8 @@ async function ensureKenyaDefaultPolicies(organizationId: string): Promise<void>
     .limit(1);
   if (existing.length) return;
 
-  await db.insert(leavePoliciesTable).values(
+  const effectiveFrom = new Date().toISOString().slice(0, 10);
+  const createdPolicies = await db.insert(leavePoliciesTable).values(
     DEFAULT_KENYA_LEAVE_POLICIES.map((policy) => ({
       organizationId,
       code: policy.code,
@@ -161,15 +162,29 @@ async function ensureKenyaDefaultPolicies(organizationId: string): Promise<void>
       entitlementQuantity: policy.entitlementQuantity,
       entitlementUnit: policy.entitlementUnit,
       jurisdiction: "KE",
-      effectiveFrom: new Date().toISOString().slice(0, 10),
+      effectiveFrom,
       sourceUrl: policy.sourceUrl,
+      verifiedOn: effectiveFrom,
       needsLegalReview: policy.needsLegalReview,
       policyMetadataJson: policy.policyMetadataJson,
       accrualMethod: policy.accrualMethod,
       active: true,
       createdByUserId: "system:kenya-default-policy-pack",
     })),
-  ).onConflictDoNothing();
+  ).onConflictDoNothing().returning();
+
+  if (createdPolicies.length) {
+    await db.insert(leavePolicyVersionsTable).values(
+      createdPolicies.map((policy) => ({
+        organizationId,
+        policyId: policy.id,
+        version: 1,
+        snapshotJson: JSON.stringify(policy),
+        effectiveFrom,
+        changedByUserId: "system:kenya-default-policy-pack",
+      })),
+    ).onConflictDoNothing();
+  }
 }
 const approverRoles = [
   PEOPLEOS_ROLES.hrAdmin,
