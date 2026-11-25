@@ -11,6 +11,7 @@ import {
   getListLeavePoliciesQueryKey, getListLeaveRequestsQueryKey,
   useCreateEmployee, useCreateLeavePolicy, useCreateLeaveRequest, useDecideLeaveRequest,
   useGetAgentProviderStatus,
+  setBaseUrl,
   useGetAuthContext, useGetEmployee, useGetPeopleOsOverview, useListApprovals, useListAuditEvents,
   useListDepartments, useListEmployees, useListLeaveBalances, useListLeavePolicies,
   useListLeaveRequests, useUpdateEmployee, useUpdateLeavePolicy,
@@ -45,12 +46,10 @@ const WorkforceErpPage = lazy(() => import('@/pages/WorkforceErpPage').then(m =>
 const HrCasesPage = lazy(() => import('@/pages/HrCasesPage').then(m => ({ default: m.HrCasesPage })));
 import { apiGet, apiPost, triggerCsvDownload } from '@/lib/api';
 import { BulkImportDialog } from '@/components/phase2/BulkImportDialog';
-import { handleFallbackApi } from '@workspace/api-client-react';
-
-// Demo-mode fallback auth context — used as React Query placeholderData so the
-// AppFrame never enters the error state on static Vercel deployments where there
-// is no backend. The real API value replaces this as soon as a live server responds.
-const FALLBACK_AUTH = handleFallbackApi('/api/auth/context') as import('@workspace/api-client-react').AuthContext;
+// Configure an explicit remote API origin at build time for deployments where
+// the Express API is hosted separately from the static Vite frontend.
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+if (apiBaseUrl) setBaseUrl(apiBaseUrl);
 import { Employee360View } from '@/components/phase2/Employee360View';
 import { OrganizationDesignerView } from '@/components/phase2/OrganizationDesignerView';
 import { LeaveCoverageAndCalendarPanel } from '@/components/phase2/LeaveCoverageAndCalendarPanel';
@@ -239,7 +238,6 @@ function AppFrame() {
   const { data: auth, isLoading, isError, refetch } = useGetAuthContext({
     query: {
       queryKey: getGetAuthContextQueryKey(),
-      placeholderData: FALLBACK_AUTH,
       retry: 2,
     },
   });
