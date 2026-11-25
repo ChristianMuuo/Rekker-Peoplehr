@@ -22,7 +22,7 @@ export function AgentHubPage() {
       id: 'init-1',
       sender: 'agent',
       agentRole: 'supervisor',
-      text: `Hello! I am the **Rekker AI Multi-Agent Supervisor** coordinating **10 specialist HR intelligence agents**:\n\n• **HR Copilot, Onboarding & Learning** — Workforce operations, 30-60-90 checklists & ML skills-gap analysis\n• **Recruitment & Performance** — Explainable TF-IDF candidate matching & OKR momentum\n• **Payroll & Attendance** — Configurable Kenyan PAYE/NSSF/SHIF/AHL & IsolationForest anomaly detection\n• **Retention, Compliance & Executive** — XGBoost attrition risk, NLP sentiment, Ridge demand forecasting & ODPC/Employment Act RAG\n\nSelect any agent on the left or ask me directly. High-impact actions are always held for human signoff.`,
+      text: `**Concept preview, not a live multi-agent run.**\n\nThis workspace sketches possible HR assistant roles and approval patterns. A local fallback can generate illustrative responses, but it does not call a trained model, query a live knowledge base, or execute tools. Use only verified API responses for operational decisions.\n\nSelect a concept role on the left to explore the interface. High-impact actions require human review.`,
       timestamp: 'Online',
     },
   ]);
@@ -93,9 +93,19 @@ export function AgentHubPage() {
         qc.invalidateQueries({ queryKey: ['ai-approvals'] });
       }
       qc.invalidateQueries({ queryKey: ['ai-telemetry'] });
-    } catch {
+    } catch (error) {
       const fallback = processAgentQuery(q, activeRole);
-      setMessages((prev) => [...prev, fallback]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          ...fallback,
+          text: `**SIMULATED PREVIEW RESPONSE.** This answer was generated locally because the connected API did not respond. It is not a live model result and must not be used as an HR decision.\n\n${fallback.text}`,
+          provider: "Local preview",
+          model: "rule-based mock response",
+          toolsCalled: [],
+          collaboratorsConsulted: [],
+        },
+      ]);
     } finally {
       setIsTyping(false);
     }
@@ -114,9 +124,12 @@ export function AgentHubPage() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900" data-testid="banner-agent-concept">
+        <strong>Concept preview.</strong> Local fallback text is simulated and is not evidence of a live agent, RAG knowledge base, model, or tool execution. The chat displays connected provider/model telemetry only when the API returns it.
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">Multi-Agent AI Intelligence</p>
+          <p className="text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">AI agent concepts</p>
           <h1 className="font-display text-2xl font-semibold tracking-[-.03em] text-stone-900">
             Rekker AI Agent Hub & Governance
           </h1>
@@ -126,7 +139,7 @@ export function AgentHubPage() {
             onClick={() => setActiveTab('chat')}
             className={`btn min-h-9 px-3 text-xs ${activeTab === 'chat' ? 'btn-primary' : 'btn-secondary'}`}
           >
-            <Sparkles size={14} /> 10-Agent Workspace
+            <Sparkles size={14} /> Concept preview
           </button>
           {canViewGovernance && (
             <>
