@@ -1056,21 +1056,113 @@ function ApprovalsPage() {
 
 function AuditPage() {
   const auth = useGetAuthContext();
-  const audit = useListAuditEvents({ limit: 100 }, { query: { enabled: !!auth.data?.canViewAudit, queryKey: getListAuditEventsQueryKey({ limit: 100 }) } });
+  const [actorFilter, setActorFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('');
+  const [targetTypeFilter, setTargetTypeFilter] = useState('');
+  const [fromFilter, setFromFilter] = useState('');
+  const [toFilter, setToFilter] = useState('');
+  const [auditActionError, setAuditActionError] = useState('');
+  const filters = useMemo(() => {
+    const params = new URLSearchParams();
+    if (actorFilter.trim()) params.set('actor', actorFilter.trim());
+    if (actionFilter.trim()) params.set('action', actionFilter.trim());
+    if (targetTypeFilter.trim()) params.set('targetType', targetTypeFilter.trim());
+    if (fromFilter) params.set('from', new Date(`${fromFilter}T00:00:00.000Z`).toISOString());
+    if (toFilter) params.set('to', new Date(`${toFilter}T23:59:59.999Z`).toISOString());
+    params.set('limit', '100');
+    return params.toString();
+  }, [actorFilter, actionFilter, targetTypeFilter, fromFilter, toFilter]);
+  const audit = useQuery({
+    queryKey: ['audit-events', filters],
+    queryFn: () => apiGet<Array<{
+      id: string;
+      occurredAt: string;
+      actor: string;
+      action: string;
+      targetType: string;
+      targetId: string;
+      summary: string;
+      isDemo: boolean;
+    }>>(`/api/audit-events?${filters}`),
+    enabled: Boolean(auth.data?.canViewAudit),
+  });
+  const integrity = useQuery({
+    queryKey: ['audit-integrity'],
+    queryFn: () => apiGet<{
+      status: string;
+      integrityValid: boolean;
+      checkedAt: string;
+      recordsChecked: number;
+      verifiedHashedEntries: number;
+      legacyUnhashedEntries: number;
+      truncated: boolean;
+      invalidEventId: string | null;
+      message: string;
+    }>('/api/audit-events/integrity'),
+    enabled: Boolean(auth.data?.canViewAudit),
+    staleTime: 0,
+  });
   if (auth.isLoading) return <LoadingScreen label="Checking audit access" />;
   if (!auth.data?.canViewAudit) return <div><PageHeading eyebrow="Governance" title="Audit trail" /><div className="surface"><EmptyState title="Restricted area" message="Audit events are available only to designated audit roles. Ask your system administrator if your role should include this access." /></div></div>;
   if (audit.isLoading) return <LoadingScreen label="Loading audit events" />;
-  if (audit.isError) return <ErrorState title="Audit events could not load" onRetry={() => audit.refetch()} />;
-  return <div><PageHeading eyebrow="Governance / Record of changes" title="Audit trail" description="A chronological record of actions returned for your authorized audit view." />
-    {!audit.data?.length ? <div className="surface"><EmptyState title="No audit events" message="No events were returned for this timeline." /></div> :
-    <div className="surface divide-y divide-stone-100">{audit.data.map((event,i) => <div className="flex gap-4 p-4 md:p-5" key={event.id} data-testid={`row-audit-event-${event.id}`}>
-      <div className="flex w-20 shrink-0 flex-col items-end pt-1 text-right"><span className="text-[10px] font-bold text-stone-700">{formatDate(event.occurredAt)}</span><span className="mt-1 text-[10px] text-stone-400">{new Date(event.occurredAt).toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'})}</span></div>
-      <div className="relative flex w-5 shrink-0 justify-center"><span className={`mt-1 h-2.5 w-2.5 rounded-full ${i === 0 ? 'bg-[#C71D1D]' : 'bg-stone-300'}`} />{i !== (audit.data?.length ?? 0) - 1 && <span className="absolute top-4 h-full w-px bg-stone-200" />}</div>
-      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold text-stone-800">{event.action}</span><ModeBadge demo={event.isDemo} /></div><p className="mt-1 text-xs leading-5 text-stone-600">{event.summary}</p><p className="mt-2 text-[10px] text-stone-400">By {event.actor} · {event.targetType} · Ref {event.targetId}</p></div>
-    </div>)}</div>}
+
+  return <div>
+    <PageHeading
+      eyebrow="Governance / Record of changes"
+      title="Audit trail"
+      description="Organisation-scoped activity history with export and hash-chain verification."
+      action={<button className="btn btn-secondary" onClick={async () => {
+        try {
+          setAuditActionError('');
+          await triggerCsvDownload(`/api/audit-events/export.csv?${filters.replace('limit=100', '')}`, 'peopleos-audit-events.csv');
+        } catch (error) {
+          setAuditActionError(error instanceof Error ? error.message : 'Audit export failed.');
+        }
+      }} data-testid="button-export-audit"><Download size={14} /> Export CSV</button>}
+    />
+    <section className="surface mb-4 p-4 md:p-5" data-testid="section-audit-filters">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <label><span className="label">Actor</span><input className="field" value={actorFilter} onChange={event => setActorFilter(event.target.value)} placeholder="Search actor" data-testid="input-audit-actor" /></label>
+        <label><span className="label">Action</span><input className="field" value={actionFilter} onChange={event => setActionFilter(event.target.value)} placeholder="e.g. leave_request" data-testid="input-audit-action" /></label>
+        <label><span className="label">Entity type</span><input className="field" value={targetTypeFilter} onChange={event => setTargetTypeFilter(event.target.value)} placeholder="e.g. leave_request" data-testid="input-audit-target" /></label>
+        <label><span className="label">From</span><input className="field" type="date" value={fromFilter} onChange={event => setFromFilter(event.target.value)} data-testid="input-audit-from" /></label>
+        <label><span className="label">To</span><input className="field" type="date" value={toFilter} onChange={event => setToFilter(event.target.value)} data-testid="input-audit-to" /></label>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] text-stone-500">{audit.data?.length ?? 0} event(s) returned · maximum 100 in this view</p>
+        <button className="btn btn-ghost min-h-8 px-2 text-xs" onClick={() => {
+          setActorFilter('');
+          setActionFilter('');
+          setTargetTypeFilter('');
+          setFromFilter('');
+          setToFilter('');
+        }} data-testid="button-reset-audit-filters">Clear filters</button>
+      </div>
+      {auditActionError && <p className="mt-2 text-xs text-red-700" role="alert">{auditActionError}</p>}
+      {audit.isError && <p className="mt-2 text-xs text-red-700">Audit records could not be loaded. {audit.error instanceof Error ? audit.error.message : ''}</p>}
+    </section>
+    <section className="surface mb-4 p-4 md:p-5" data-testid="section-audit-integrity">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-base font-semibold text-stone-900">Audit hash-chain verification</h2>
+            {integrity.data && <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${integrity.data.integrityValid ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>{integrity.data.status.replaceAll('_', ' ')}</span>}
+          </div>
+          <p className="mt-1 text-xs leading-5 text-stone-500">{integrity.data?.message ?? 'Verify stored hashes and predecessor links. Legacy audit rows without hashes are identified separately.'}</p>
+          {integrity.data && <p className="mt-1 text-[10px] text-stone-400">{integrity.data.recordsChecked} checked · {integrity.data.verifiedHashedEntries} verified · {integrity.data.legacyUnhashedEntries} legacy without hashes · {formatDate(integrity.data.checkedAt)}</p>}
+        </div>
+        <button className="btn btn-secondary min-h-9 shrink-0 px-3" disabled={integrity.isFetching} onClick={() => integrity.refetch()} data-testid="button-verify-audit-chain"><ShieldCheck size={14} /> {integrity.isFetching ? 'Verifying…' : 'Verify chain'}</button>
+      </div>
+      {integrity.isError && <p className="mt-2 text-xs text-red-700">Hash-chain verification endpoint could not be reached.</p>}
+    </section>
+    {!audit.data?.length ? <div className="surface"><EmptyState title="No audit events" message="No events matched the current filters." /></div> :
+      <div className="surface divide-y divide-stone-100">{audit.data.map((event, i) => <div className="flex gap-4 p-4 md:p-5" key={event.id} data-testid={`row-audit-event-${event.id}`}>
+        <div className="flex w-20 shrink-0 flex-col items-end pt-1 text-right"><span className="text-[10px] font-bold text-stone-700">{formatDate(event.occurredAt)}</span><span className="mt-1 text-[10px] text-stone-400">{new Date(event.occurredAt).toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'})}</span></div>
+        <div className="relative flex w-5 shrink-0 justify-center"><span className={`mt-1 h-2.5 w-2.5 rounded-full ${i === 0 ? 'bg-[#C71D1D]' : 'bg-stone-300'}`} />{i !== (audit.data?.length ?? 0) - 1 && <span className="absolute top-4 h-full w-px bg-stone-200" />}</div>
+        <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-bold text-stone-800">{event.action}</span><ModeBadge demo={event.isDemo} /></div><p className="mt-1 text-xs leading-5 text-stone-600">{event.summary}</p><p className="mt-2 text-[10px] text-stone-400">By {event.actor} · {event.targetType} · Ref {event.targetId}</p></div>
+      </div>)}</div>}
   </div>;
 }
-
 
 
 interface DiagnosticSubsystem {
