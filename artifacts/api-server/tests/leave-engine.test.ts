@@ -18,6 +18,8 @@ describe("Kenya leave engine", () => {
     assert.equal(countScheduledWorkingDays("2026-11-23", "2026-11-27"), 5);
     assert.equal(countScheduledWorkingDays("2026-11-23", "2026-11-27", [1, 2, 3, 4, 5], ["2026-11-25"]), 4);
     assert.equal(countScheduledWorkingDays("2026-11-23", "2026-11-28", [1, 2, 3, 4, 5, 6]), 6);
+    assert.equal(countScheduledWorkingDays("2026-11-23", "2026-11-28", [1, 2, 3, 4, 5, 6], [], [6]), 5.5);
+    assert.equal(countScheduledWorkingDays("2026-11-23", "2026-11-28", [1, 2, 3, 4, 5, 6], ["2026-11-25"], [6]), 4.5);
   });
 
   test("rejects reversed or malformed date ranges", () => {
@@ -27,6 +29,8 @@ describe("Kenya leave engine", () => {
 
   test("represents half days in quarter-day units without floating point ledger values", () => {
     assert.equal(requestQuarterDays(1, true), 2);
+    assert.equal(requestQuarterDays(0.5, true), 1);
+    assert.equal(daysFromQuarterDays(requestQuarterDays(0.5, true)), 0.25);
     assert.equal(daysFromQuarterDays(2), 0.5);
     assert.equal(requestQuarterDays(3), 12);
     assert.throws(() => requestQuarterDays(2, true));
