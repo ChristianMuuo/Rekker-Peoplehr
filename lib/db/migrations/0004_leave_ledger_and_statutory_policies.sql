@@ -27,6 +27,21 @@ ALTER TABLE "peopleos_audit_events"
   ADD COLUMN IF NOT EXISTS "prev_hash" text,
   ADD COLUMN IF NOT EXISTS "hash" text;
 
+CREATE TABLE IF NOT EXISTS "peopleos_leave_policy_versions" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "organization_id" text NOT NULL REFERENCES "peopleos_organizations"("id") ON DELETE CASCADE,
+  "policy_id" uuid NOT NULL REFERENCES "peopleos_leave_policies"("id") ON DELETE CASCADE,
+  "version_number" integer NOT NULL,
+  "snapshot_json" text NOT NULL,
+  "effective_from" date NOT NULL,
+  "effective_to" date,
+  "changed_by_user_id" text,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "peopleos_leave_policy_version_number_uq" UNIQUE ("policy_id", "version_number")
+);
+CREATE INDEX IF NOT EXISTS "peopleos_leave_policy_versions_org_idx"
+  ON "peopleos_leave_policy_versions" ("organization_id", "policy_id", "created_at");
+
 CREATE TABLE IF NOT EXISTS "peopleos_leave_ledger" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "organization_id" text NOT NULL REFERENCES "peopleos_organizations"("id") ON DELETE CASCADE,
