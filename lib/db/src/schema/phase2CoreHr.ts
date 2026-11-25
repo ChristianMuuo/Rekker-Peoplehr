@@ -388,6 +388,7 @@ export const workCalendarsTable = pgTable(
     location: text("location"),
     timezone: text("timezone").notNull().default("Africa/Nairobi"),
     workdaysJson: text("workdays_json").notNull().default("[1,2,3,4,5]"),
+    halfWorkdaysJson: text("half_workdays_json").notNull().default("[]"),
     holidaysJson: text("holidays_json").notNull().default("[]"),
     shiftStartTime: text("shift_start_time").notNull().default("08:00"),
     shiftEndTime: text("shift_end_time").notNull().default("17:00"),
