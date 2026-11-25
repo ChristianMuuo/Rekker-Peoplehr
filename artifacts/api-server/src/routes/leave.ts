@@ -62,7 +62,7 @@ export interface DemoLeavePolicyItem {
 }
 
 const KENYA_EMPLOYMENT_ACT_SOURCE =
-  "https://new.kenyalaw.org/akn/ke/act/2007/11/eng%402007-11-09/source.pdf";
+  "https://new.kenyalaw.org/akn/ke/act/2007/11/eng%402024-04-26/source.pdf";
 
 const DEFAULT_KENYA_LEAVE_POLICIES = [
   {
@@ -107,7 +107,7 @@ const DEFAULT_KENYA_LEAVE_POLICIES = [
     accrualMethod: "annual" as const,
     needsLegalReview: true,
     sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
-    policyMetadataJson: JSON.stringify({ section: "29(8)", statutoryUnit: "weeks", calendarDays: 14, workingDayConversionNeedsLegalReview: true }),
+    policyMetadataJson: JSON.stringify({ section: "29(8)", statutoryUnit: "weeks", calendarDays: 14, workingDayConversionNeedsLegalReview: true, implementingRule: "Employment (General) Rules, 2014, rule 11", annualAggregateWeeks: 2, birthEvidenceRequired: true }),
   },
   {
     code: "pre-adoptive",
