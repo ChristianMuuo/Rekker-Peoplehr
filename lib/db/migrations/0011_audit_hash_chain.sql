@@ -12,6 +12,58 @@ ALTER TABLE "peopleos_audit_events"
   ADD COLUMN IF NOT EXISTS "prev_hash" text,
   ADD COLUMN IF NOT EXISTS "hash" text;
 
+-- Backfill a continuous hash chain for all pre-existing audit rows before
+-- installing the no-mutation trigger.
+DO $
+DECLARE
+  audit_row record;
+  previous_org text := NULL;
+  previous_hash text := '';
+  computed_hash text;
+BEGIN
+  FOR audit_row IN
+    SELECT *
+    FROM "peopleos_audit_events"
+    ORDER BY "organization_id", "occurred_at", "id"
+  LOOP
+    IF previous_org IS DISTINCT FROM audit_row."organization_id" THEN
+      previous_org := audit_row."organization_id";
+      previous_hash := '';
+    END IF;
+
+    computed_hash := encode(
+      digest(
+        concat_ws(
+          '|',
+          previous_hash,
+          audit_row."id"::text,
+          audit_row."organization_id",
+          COALESCE(audit_row."actor_user_id", ''),
+          audit_row."actor",
+          audit_row."action",
+          audit_row."target_type",
+          audit_row."target_id",
+          audit_row."summary",
+          COALESCE(audit_row."before_json", ''),
+          COALESCE(audit_row."after_json", ''),
+          COALESCE(audit_row."reason", ''),
+          COALESCE(audit_row."request_id", ''),
+          audit_row."occurred_at"::text
+        ),
+        'sha256'
+      ),
+      'hex'
+    );
+
+    UPDATE "peopleos_audit_events"
+    SET "prev_hash" = previous_hash, "hash" = computed_hash
+    WHERE "id" = audit_row."id";
+
+    previous_hash := computed_hash;
+  END LOOP;
+END;
+$;
+
 CREATE OR REPLACE FUNCTION peopleos_audit_chain_and_immutability()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
