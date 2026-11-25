@@ -167,19 +167,24 @@ export async function recordAuditEvent(params: {
   }
 
   if (process.env.DATABASE_URL) {
-    const sink = params.tx ?? db;
-    try {
-      // Serialise organisation audit writes so the hash chain has one predecessor.
-      if (params.tx) {
-        await sink.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${params.organizationId}))`);
-      }
+    const persist = async (sink: AuditSink): Promise<void> => {
+      // All audit writes use one transaction and an organisation-scoped advisory
+      // lock. Monotonic timestamps make the hash chain deterministic under concurrency.
+      await sink.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${params.organizationId}))`);
       const [previous] = await sink
-        .select({ hash: auditEventsTable.hash })
+        .select({
+          hash: auditEventsTable.hash,
+          occurredAt: auditEventsTable.occurredAt,
+        })
         .from(auditEventsTable)
         .where(eq(auditEventsTable.organizationId, params.organizationId))
-        .orderBy(desc(auditEventsTable.occurredAt), desc(auditEventsTable.id))
+        .orderBy(desc(auditEventsTable.occurredAt))
         .limit(1);
       const prevHash = previous?.hash ?? null;
+      const candidateTime = Date.parse(entry.occurredAt);
+      const previousTime = previous?.occurredAt?.getTime() ?? 0;
+      const occurredAt = new Date(Math.max(candidateTime, previousTime + 1)).toISOString();
+      entry.occurredAt = occurredAt;
       const hash = crypto
         .createHash("sha256")
         .update(JSON.stringify({
@@ -190,7 +195,7 @@ export async function recordAuditEvent(params: {
           targetType: params.targetType,
           targetId: params.targetId,
           summary: fullSummary,
-          occurredAt: entry.occurredAt,
+          occurredAt,
           prevHash,
         }))
         .digest("hex");
@@ -204,10 +209,19 @@ export async function recordAuditEvent(params: {
         targetType: params.targetType,
         targetId: params.targetId,
         summary: fullSummary,
+        occurredAt: new Date(occurredAt),
         prevHash,
         hash,
         isDemo: params.isDemo ?? false,
       });
+    };
+
+    try {
+      if (params.tx) {
+        await persist(params.tx);
+      } else {
+        await db.transaction(async (tx) => persist(tx));
+      }
     } catch (err) {
       logger.error(
         {
