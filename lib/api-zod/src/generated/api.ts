@@ -524,11 +524,11 @@ export const ListLeaveBalancesResponseItem = zod.object({
   "leaveType": zod.string(),
   "leaveTypeName": zod.string(),
   "year": zod.number().int(),
-  "entitlementDays": zod.number().int(),
-  "accruedDays": zod.number().int(),
-  "usedDays": zod.number().int(),
-  "pendingDays": zod.number().int(),
-  "remainingDays": zod.number().int(),
+  "entitlementDays": zod.number(),
+  "accruedDays": zod.number(),
+  "usedDays": zod.number(),
+  "pendingDays": zod.number(),
+  "remainingDays": zod.number(),
   "accrualMethod": zod.enum(['annual', 'monthly']),
   "active": zod.boolean()
 })
