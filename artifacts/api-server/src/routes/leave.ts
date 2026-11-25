@@ -259,7 +259,7 @@ export interface DemoLeaveItem {
   endDate: Date;
   days: number;
   reason: string;
-  status: "pending" | "approved" | "rejected" | "cancelled";
+  status: "pending" | "recommended" | "approved" | "rejected" | "cancelled";
   approverId: string | null;
   decisionComment: string | null;
   submittedAt: Date;
@@ -1569,6 +1569,310 @@ router.get("/approvals", async (req, res): Promise<void> => {
 });
 
 router.post(
+  "/leave-requests/:requestId/recommendation",
+  async (req, res): Promise<void> => {
+    const params = DecideLeaveRequestParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const decision = req.body?.decision;
+    const comment = typeof req.body?.comment === "string" ? req.body.comment.trim().slice(0, 1000) : "";
+    if (decision !== "recommend" && decision !== "not_recommend") {
+      res.status(400).json({ error: "Decision must be 'recommend' or 'not_recommend'." });
+      return;
+    }
+    const membership = await requireRoles(req, res, approverRoles);
+    if (!membership) return;
+
+    if (!process.env.DATABASE_URL) {
+      ensureDemoLeaveLedger(membership.organizationId);
+      const target = DEMO_LEAVE_STORE.find((item) => item.id === params.data.requestId);
+      if (!target) {
+        res.status(404).json({ error: "Leave request not found." });
+        return;
+      }
+      if (target.status !== "pending") {
+        res.status(409).json({ error: "This request is not awaiting a recommendation." });
+        return;
+      }
+      if (membership.employeeId && membership.employeeId === target.employeeId) {
+        res.status(403).json({ error: "You cannot recommend your own leave request." });
+        return;
+      }
+      if (membership.role === PEOPLEOS_ROLES.departmentManager) {
+        const employee = DEMO_EMPLOYEES_LIST.find((item) => item.id === target.employeeId);
+        if (!employee || employee.managerId !== membership.employeeId) {
+          res.status(403).json({ error: "You can only recommend leave for your direct reports." });
+          return;
+        }
+      }
+      const policy = DEMO_LEAVE_POLICIES.find((item) =>
+        item.organizationId === membership.organizationId && item.code === target.leaveType);
+      const employee = DEMO_EMPLOYEES_LIST.find((item) => item.id === target.employeeId);
+      if (!policy || !employee) {
+        res.status(404).json({ error: "Leave policy or employee record is unavailable." });
+        return;
+      }
+      const requestedDays = target.halfDay ? 0.5 : target.days;
+      const year = target.startDate.getUTCFullYear();
+      const ledgerBalance = DEMO_LEAVE_LEDGER
+        .filter((entry) => entry.organizationId === membership.organizationId &&
+          entry.employeeId === target.employeeId && entry.leaveType === target.leaveType &&
+          entry.effectiveDate.slice(0, 4) === String(year))
+        .reduce((total, entry) => total + entry.quantityQuarterDays, 0) / 4;
+      const otherPending = DEMO_LEAVE_STORE
+        .filter((item) => item.id !== target.id &&
+          item.employeeId === target.employeeId &&
+          item.leaveType === target.leaveType &&
+          item.status === "pending" &&
+          item.startDate.getUTCFullYear() === year)
+        .reduce((total, item) => total + (item.halfDay ? 0.5 : item.days), 0);
+      const availableDays = policy.code === "annual"
+        ? Math.max(0, ledgerBalance - otherPending)
+        : requestedDays;
+      const eligible = completedServiceMonths(employee.startDate, dateOnly(target.startDate)) >= policy.minimumServiceMonths;
+      const advisor = adviseOnLeave({
+        eligible,
+        availableDays,
+        requestedDays,
+        policyCompliant: policy.code !== "annual" || availableDays >= requestedDays,
+      });
+      target.recommendation = {
+        label: advisor.label,
+        suggestion: advisor.suggestion,
+        reasons: [...advisor.reasons, comment ? `Manager comment: ${comment}` : ""].filter(Boolean),
+        rulesFired: advisor.rulesFired,
+      };
+      target.status = decision === "recommend" ? "recommended" : "pending";
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: decision === "recommend" ? "leave_request_recommended" : "leave_request_not_recommended",
+        targetType: "leave_request",
+        targetId: target.id,
+        summary: `Leave request recommendation recorded: ${decision}.`,
+        correlationId: req.correlationId,
+        isDemo: true,
+      });
+      res.json({
+        ...target,
+        days: requestedDays,
+        recommendationLabel: advisor.label,
+        recommendationSuggestion: advisor.suggestion,
+        recommendationReasons: advisor.reasons,
+        rulesFired: advisor.rulesFired,
+      });
+      return;
+    }
+
+    const [request] = await db
+      .select()
+      .from(leaveRequestsTable)
+      .where(and(
+        eq(leaveRequestsTable.id, params.data.requestId),
+        eq(leaveRequestsTable.organizationId, membership.organizationId),
+      ))
+      .limit(1);
+    if (!request) {
+      res.status(404).json({ error: "Leave request not found." });
+      return;
+    }
+    if (request.status !== "pending") {
+      res.status(409).json({ error: "This request is not awaiting a recommendation." });
+      return;
+    }
+    if (request.createdByUserId === membership.userId) {
+      res.status(403).json({ error: "You cannot recommend your own leave request." });
+      return;
+    }
+    if (
+      membership.role === PEOPLEOS_ROLES.departmentManager &&
+      !(await canManageRequest(
+        membership.organizationId,
+        membership.employeeId ?? "",
+        membership.role,
+        request.employeeId,
+      ))
+    ) {
+      res.status(403).json({ error: "You can only recommend leave for your direct reports." });
+      return;
+    }
+    const [employee] = await db
+      .select()
+      .from(employeesTable)
+      .where(and(
+        eq(employeesTable.id, request.employeeId),
+        eq(employeesTable.organizationId, membership.organizationId),
+      ))
+      .limit(1);
+    const [policy] = await db
+      .select()
+      .from(leavePoliciesTable)
+      .where(and(
+        eq(leavePoliciesTable.organizationId, membership.organizationId),
+        eq(leavePoliciesTable.code, request.leaveType),
+      ))
+      .limit(1);
+    if (!employee || !policy) {
+      res.status(404).json({ error: "Leave policy or employee record is unavailable." });
+      return;
+    }
+    const requestedDays = request.halfDay ? 0.5 : request.days;
+    const year = Number(request.startDate.slice(0, 4));
+    let availableDays = requestedDays;
+    let policyCompliant = true;
+    if (policy.code === "annual") {
+      const [entries, pending] = await Promise.all([
+        db.select({ quantityQuarterDays: leaveLedgerTable.quantityQuarterDays })
+          .from(leaveLedgerTable)
+          .where(and(
+            eq(leaveLedgerTable.organizationId, membership.organizationId),
+            eq(leaveLedgerTable.employeeId, employee.id),
+            eq(leaveLedgerTable.leaveType, policy.code),
+            gte(leaveLedgerTable.effectiveDate, `${year}-01-01`),
+            lte(leaveLedgerTable.effectiveDate, `${year}-12-31`),
+          )),
+        db.select({ days: leaveRequestsTable.days, halfDay: leaveRequestsTable.halfDay })
+          .from(leaveRequestsTable)
+          .where(and(
+            eq(leaveRequestsTable.organizationId, membership.organizationId),
+            eq(leaveRequestsTable.employeeId, employee.id),
+            eq(leaveRequestsTable.leaveType, policy.code),
+            inArray(leaveRequestsTable.status, ["pending", "recommended"]),
+            lte(leaveRequestsTable.startDate, `${year}-12-31`),
+            gte(leaveRequestsTable.endDate, `${year}-01-01`),
+            // The current request is already reserved; remove it for the advisor's available-before-request value.
+          )),
+      ]);
+      const ledgerBalance = entries.reduce((total, entry) => total + entry.quantityQuarterDays, 0) / 4;
+      const pendingOther = await db.select({ id: leaveRequestsTable.id, days: leaveRequestsTable.days, halfDay: leaveRequestsTable.halfDay })
+        .from(leaveRequestsTable)
+        .where(and(
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
+          eq(leaveRequestsTable.employeeId, employee.id),
+          eq(leaveRequestsTable.leaveType, policy.code),
+          inArray(leaveRequestsTable.status, ["pending", "recommended"]),
+          lte(leaveRequestsTable.startDate, `${year}-12-31`),
+          gte(leaveRequestsTable.endDate, `${year}-01-01`),
+        ));
+      const otherReservation = pendingOther
+        .filter((item) => item.id !== request.id)
+        .reduce((total, item) => total + (item.halfDay ? 0.5 : item.days), 0);
+      availableDays = Math.max(0, ledgerBalance - otherReservation);
+      policyCompliant = availableDays >= requestedDays;
+    }
+    const eligible = completedServiceMonths(employee.startDate, request.startDate) >= policy.minimumServiceMonths;
+    const teamMembers = await db
+      .select({ id: employeesTable.id })
+      .from(employeesTable)
+      .where(and(
+        eq(employeesTable.organizationId, membership.organizationId),
+        eq(employeesTable.departmentId, employee.departmentId),
+        eq(employeesTable.status, "active"),
+      ));
+    const approvedTeamLeave = await db
+      .select({ employeeId: leaveRequestsTable.employeeId })
+      .from(leaveRequestsTable)
+      .where(and(
+        eq(leaveRequestsTable.organizationId, membership.organizationId),
+        inArray(leaveRequestsTable.status, ["approved"]),
+        lte(leaveRequestsTable.startDate, request.endDate),
+        gte(leaveRequestsTable.endDate, request.startDate),
+      ));
+    const onLeave = new Set(approvedTeamLeave.map((item) => item.employeeId));
+    const teamCoveragePct = teamMembers.length
+      ? Math.max(0, teamMembers.length - onLeave.size - 1) / teamMembers.length * 100
+      : null;
+    const advisor = adviseOnLeave({
+      eligible,
+      availableDays,
+      requestedDays,
+      teamCoveragePct,
+      policyCompliant,
+    });
+    const recommendationJson = JSON.stringify({
+      ...advisor,
+      decision,
+      comment,
+      recommendedByUserId: membership.userId,
+      recommendedAt: new Date().toISOString(),
+    });
+    const updated = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select()
+        .from(leaveRequestsTable)
+        .where(and(
+          eq(leaveRequestsTable.id, request.id),
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
+        ))
+        .for("update")
+        .limit(1);
+      if (!locked || locked.status !== "pending") return null;
+      const [existingStep] = await tx
+        .select({ id: leaveApprovalStepsTable.id })
+        .from(leaveApprovalStepsTable)
+        .where(and(
+          eq(leaveApprovalStepsTable.requestId, request.id),
+          eq(leaveApprovalStepsTable.step, "manager_recommendation"),
+        ))
+        .limit(1);
+      if (existingStep) return null;
+      const [result] = await tx
+        .update(leaveRequestsTable)
+        .set({
+          status: decision === "recommend" ? "recommended" : "pending",
+          recommendedByUserId: membership.userId,
+          recommendedAt: new Date(),
+          recommendationJson,
+        })
+        .where(and(
+          eq(leaveRequestsTable.id, request.id),
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
+        ))
+        .returning();
+      if (!result) return null;
+      await tx.insert(leaveApprovalStepsTable).values({
+        organizationId: membership.organizationId,
+        requestId: request.id,
+        step: "manager_recommendation",
+        decision,
+        actorUserId: membership.userId,
+        actorRole: membership.role,
+        comment,
+        advisoryJson: JSON.stringify(advisor),
+      });
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: decision === "recommend" ? "leave_request_recommended" : "leave_request_not_recommended",
+        targetType: "leave_request",
+        targetId: request.id,
+        summary: "A rule-based leave recommendation was recorded.",
+        correlationId: req.correlationId,
+        isDemo: request.isDemo,
+        tx,
+        critical: true,
+      });
+      return result;
+    });
+    if (!updated) {
+      res.status(409).json({ error: "A recommendation already exists or the request changed. Refresh and review the latest state." });
+      return;
+    }
+    res.json({
+      ...(await serializeRequests(membership.organizationId, [updated]))[0],
+      recommendationLabel: advisor.label,
+      recommendationSuggestion: advisor.suggestion,
+      recommendationReasons: advisor.reasons,
+      rulesFired: advisor.rulesFired,
+    });
+  },
+);
+
+router.post(
   "/leave-requests/:requestId/decision",
   async (req, res): Promise<void> => {
     const params = DecideLeaveRequestParams.safeParse(req.params);
@@ -1581,19 +1885,57 @@ router.post(
       res.status(400).json({ error: body.error.message });
       return;
     }
-    const membership = await requireRoles(req, res, approverRoles);
+    const singleStep = process.env.PEOPLEOS_LEAVE_APPROVAL_MODE === "single";
+    const membership = await requireRoles(req, res, singleStep ? approverRoles : adminRoles);
     if (!membership) return;
+
     if (!process.env.DATABASE_URL) {
-      const target = DEMO_LEAVE_STORE.find((r) => r.id === params.data.requestId);
+      ensureDemoLeaveLedger(membership.organizationId);
+      const target = DEMO_LEAVE_STORE.find((item) => item.id === params.data.requestId);
       if (!target) {
         res.status(404).json({ error: "Leave request not found." });
         return;
       }
-      if (target.status !== "pending") {
-        res.status(409).json({ error: "This request has already been decided." });
+      if (target.status === "approved" && body.data.decision === "approve") {
+        res.json(DecideLeaveRequestResponse.parse({ ...target, days: target.halfDay ? 0.5 : target.days }));
         return;
       }
-      target.status = body.data.decision === "approve" ? "approved" : "rejected";
+      if (!["recommended", "pending"].includes(target.status) ||
+        (!singleStep && !target.recommendation)) {
+        res.status(409).json({ error: "A manager recommendation is required before HR can decide this request." });
+        return;
+      }
+      if (membership.employeeId && target.employeeId === membership.employeeId) {
+        res.status(403).json({ error: "You cannot approve a leave request you submitted." });
+        return;
+      }
+      if (membership.role === PEOPLEOS_ROLES.departmentManager && !singleStep) {
+        res.status(403).json({ error: "Final leave approval is restricted to HR administrators." });
+        return;
+      }
+      if (
+        target.recommendation?.suggestion === "decline" &&
+        body.data.decision === "approve" &&
+        !(body.data.comment ?? "").trim()
+      ) {
+        res.status(422).json({ error: "An HR override of a decline recommendation requires a reason." });
+        return;
+      }
+      const nextStatus = body.data.decision === "approve" ? "approved" : "rejected";
+      if (nextStatus === "approved") {
+        appendDemoLedgerEntry({
+          organizationId: membership.organizationId,
+          employeeId: target.employeeId,
+          leaveType: target.leaveType,
+          requestId: target.id,
+          entryType: "deduction",
+          quantityQuarterDays: -Math.round((target.halfDay ? 0.5 : target.days) * 4),
+          effectiveDate: dateOnly(target.startDate),
+          idempotencyKey: `approval:${target.id}`,
+          note: "Approved leave balance deduction.",
+        });
+      }
+      target.status = nextStatus;
       target.decisionComment = body.data.comment ?? null;
       target.decidedAt = new Date();
       target.approverId = membership.userId;
@@ -1601,92 +1943,388 @@ router.post(
         organizationId: membership.organizationId,
         actorUserId: membership.userId,
         actor: membership.role,
-        action: target.status === "approved" ? "leave_request_approved" : "leave_request_rejected",
+        action: nextStatus === "approved" ? "leave_request_approved" : "leave_request_rejected",
         targetType: "leave_request",
         targetId: target.id,
-        summary: `Leave request for ${target.employeeName} was ${target.status}.`,
+        summary: `Leave request was ${nextStatus} by an authorized human approver.`,
         correlationId: req.correlationId,
         critical: true,
         isDemo: true,
       });
-      res.json(DecideLeaveRequestResponse.parse(target));
+      res.json(DecideLeaveRequestResponse.parse({ ...target, days: target.halfDay ? 0.5 : target.days }));
       return;
     }
-    const [request] = await db
-      .select()
-      .from(leaveRequestsTable)
-      .where(
-        and(
+
+    const outcome = await db.transaction(async (tx) => {
+      const [request] = await tx
+        .select()
+        .from(leaveRequestsTable)
+        .where(and(
           eq(leaveRequestsTable.id, params.data.requestId),
           eq(leaveRequestsTable.organizationId, membership.organizationId),
-        ),
-      )
-      .limit(1);
-    if (!request) {
-      res.status(404).json({ error: "Leave request not found." });
-      return;
-    }
-    if (request.status !== "pending") {
-      res.status(409).json({ error: "This request has already been decided." });
-      return;
-    }
-    if (
-      membership.role === PEOPLEOS_ROLES.departmentManager &&
-      !(await canManageRequest(
-        membership.organizationId,
-        membership.employeeId ?? "",
-        membership.role,
-        request.employeeId,
-      ))
-    ) {
-      res.status(403).json({ error: "You cannot approve leave for this employee." });
-      return;
-    }
-    if (request.createdByUserId === membership.userId) {
-      res.status(403).json({ error: "You cannot approve a leave request you submitted." });
-      return;
-    }
-    const status = body.data.decision === "approve" ? "approved" : "rejected";
-    const updated = await db.transaction(async (tx) => {
-      const [result] = await tx
+        ))
+        .for("update")
+        .limit(1);
+      if (!request) return { kind: "missing" as const };
+      if (request.status === "approved" && body.data.decision === "approve") {
+        return { kind: "already_approved" as const, request };
+      }
+      if (!["pending", "recommended"].includes(request.status)) {
+        return { kind: "conflict" as const };
+      }
+      if (request.createdByUserId === membership.userId) {
+        return { kind: "self_approval" as const };
+      }
+      if (
+        membership.role === PEOPLEOS_ROLES.departmentManager &&
+        !(await canManageRequest(
+          membership.organizationId,
+          membership.employeeId ?? "",
+          membership.role,
+          request.employeeId,
+        ))
+      ) {
+        return { kind: "forbidden" as const };
+      }
+      const [recommendationStep] = await tx
+        .select()
+        .from(leaveApprovalStepsTable)
+        .where(and(
+          eq(leaveApprovalStepsTable.requestId, request.id),
+          eq(leaveApprovalStepsTable.step, "manager_recommendation"),
+        ))
+        .limit(1);
+      if (!singleStep && !recommendationStep) return { kind: "recommendation_required" as const };
+      let recommendationDeclined = false;
+      try {
+        recommendationDeclined = JSON.parse(request.recommendationJson ?? "{}").suggestion === "decline";
+      } catch {
+        recommendationDeclined = false;
+      }
+      if (recommendationDeclined && body.data.decision === "approve" && !(body.data.comment ?? "").trim()) {
+        return { kind: "override_reason_required" as const };
+      }
+      const nextStatus = body.data.decision === "approve" ? "approved" : "rejected";
+      if (nextStatus === "approved") {
+        const quantityQuarterDays = request.halfDay ? 2 : request.days * 4;
+        await tx.insert(leaveLedgerTable).values({
+          organizationId: membership.organizationId,
+          employeeId: request.employeeId,
+          leaveType: request.leaveType,
+          requestId: request.id,
+          entryType: "deduction",
+          quantityQuarterDays: -quantityQuarterDays,
+          effectiveDate: request.startDate,
+          idempotencyKey: `approval:${request.id}`,
+          note: "Approved leave balance deduction.",
+          createdByUserId: membership.userId,
+          isDemo: request.isDemo,
+        }).onConflictDoNothing();
+      }
+      const [updated] = await tx
         .update(leaveRequestsTable)
         .set({
-          status,
+          status: nextStatus,
           approverUserId: membership.userId,
           decisionComment: body.data.comment ?? null,
           decidedAt: new Date(),
         })
-        .where(
-          and(
-            eq(leaveRequestsTable.id, request.id),
-            eq(leaveRequestsTable.organizationId, membership.organizationId),
-            eq(leaveRequestsTable.status, "pending"),
-          ),
-        )
+        .where(and(
+          eq(leaveRequestsTable.id, request.id),
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
+        ))
         .returning();
-      if (!result) return null;
-      await tx.insert(auditEventsTable).values({
+      if (!updated) return { kind: "conflict" as const };
+      await tx.insert(leaveApprovalStepsTable).values({
+        organizationId: membership.organizationId,
+        requestId: request.id,
+        step: "hr_decision",
+        decision: body.data.decision,
+        actorUserId: membership.userId,
+        actorRole: membership.role,
+        comment: body.data.comment ?? "",
+        advisoryJson: request.recommendationJson ?? null,
+      }).onConflictDoNothing();
+      await recordAuditEvent({
         organizationId: membership.organizationId,
         actorUserId: membership.userId,
         actor: membership.role,
-        action: status === "approved" ? "leave_request_approved" : "leave_request_rejected",
+        action: nextStatus === "approved" ? "leave_request_approved" : "leave_request_rejected",
         targetType: "leave_request",
         targetId: request.id,
-        summary: `A leave request was ${status}.`,
+        summary: `Leave request was ${nextStatus} by an authorized human approver.`,
+        correlationId: req.correlationId,
         isDemo: request.isDemo,
+        tx,
+        critical: true,
       });
-      return result;
+      return { kind: "updated" as const, request: updated };
     });
-    if (!updated) {
-      res.status(409).json({ error: "This request has already been decided." });
+
+    if (outcome.kind === "missing") {
+      res.status(404).json({ error: "Leave request not found." });
       return;
     }
-    const [response] = await serializeRequests(membership.organizationId, [
-      updated,
-    ]);
+    if (outcome.kind === "self_approval" || outcome.kind === "forbidden") {
+      res.status(403).json({ error: outcome.kind === "self_approval" ? "You cannot approve a leave request you submitted." : "You cannot approve leave for this employee." });
+      return;
+    }
+    if (outcome.kind === "recommendation_required") {
+      res.status(409).json({ error: "A manager recommendation is required before HR can decide this request." });
+      return;
+    }
+    if (outcome.kind === "override_reason_required") {
+      res.status(422).json({ error: "An HR override of a decline recommendation requires a reason." });
+      return;
+    }
+    if (outcome.kind === "conflict") {
+      res.status(409).json({ error: "This request has already been decided or is no longer actionable." });
+      return;
+    }
+    const responseRequest = outcome.request;
+    const [response] = await serializeRequests(membership.organizationId, [responseRequest]);
     res.json(DecideLeaveRequestResponse.parse(response));
   },
 );
+
+router.post(
+  "/leave-requests/:requestId/cancel",
+  async (req, res): Promise<void> => {
+    const params = DecideLeaveRequestParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: params.error.message });
+      return;
+    }
+    const membership = await ensureMembership(req, res);
+    if (!membership) return;
+
+    if (!process.env.DATABASE_URL) {
+      ensureDemoLeaveLedger(membership.organizationId);
+      const request = DEMO_LEAVE_STORE.find((item) => item.id === params.data.requestId);
+      if (!request) {
+        res.status(404).json({ error: "Leave request not found." });
+        return;
+      }
+      if (request.status === "cancelled") {
+        res.json({ ...request, days: request.halfDay ? 0.5 : request.days });
+        return;
+      }
+      if (request.status !== "approved") {
+        res.status(409).json({ error: "Only approved leave can be cancelled." });
+        return;
+      }
+      const canCancel = adminRoles.includes(membership.role) || membership.employeeId === request.employeeId;
+      if (!canCancel) {
+        res.status(403).json({ error: "You cannot cancel this leave request." });
+        return;
+      }
+      const original = DEMO_LEAVE_LEDGER.find((entry) => entry.idempotencyKey === `approval:${request.id}`);
+      if (!original) {
+        res.status(409).json({ error: "The original leave deduction is missing; contact an administrator." });
+        return;
+      }
+      appendDemoLedgerEntry({
+        organizationId: membership.organizationId,
+        employeeId: request.employeeId,
+        leaveType: request.leaveType,
+        requestId: request.id,
+        entryType: "reversal",
+        quantityQuarterDays: Math.abs(original.quantityQuarterDays),
+        effectiveDate: addDaysIso(0),
+        idempotencyKey: `cancel:${request.id}`,
+        note: "Approved leave cancellation reversal.",
+      });
+      request.status = "cancelled";
+      request.decidedAt = new Date();
+      request.decisionComment = "Cancelled; balance restored by a reversing ledger entry.";
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "leave_request_cancelled",
+        targetType: "leave_request",
+        targetId: request.id,
+        summary: "Approved leave was cancelled and its ledger deduction reversed.",
+        correlationId: req.correlationId,
+        critical: true,
+        isDemo: true,
+      });
+      res.json({ ...request, days: request.halfDay ? 0.5 : request.days });
+      return;
+    }
+
+    const outcome = await db.transaction(async (tx) => {
+      const [request] = await tx
+        .select()
+        .from(leaveRequestsTable)
+        .where(and(
+          eq(leaveRequestsTable.id, params.data.requestId),
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
+        ))
+        .for("update")
+        .limit(1);
+      if (!request) return { kind: "missing" as const };
+      if (request.status === "cancelled") return { kind: "already_cancelled" as const, request };
+      if (request.status !== "approved") return { kind: "not_approved" as const };
+      const canCancel = adminRoles.includes(membership.role) || membership.employeeId === request.employeeId;
+      if (!canCancel) return { kind: "forbidden" as const };
+      const [original] = await tx
+        .select()
+        .from(leaveLedgerTable)
+        .where(and(
+          eq(leaveLedgerTable.organizationId, membership.organizationId),
+          eq(leaveLedgerTable.requestId, request.id),
+          eq(leaveLedgerTable.entryType, "deduction"),
+        ))
+        .limit(1);
+      if (!original) return { kind: "missing_deduction" as const };
+      await tx.insert(leaveLedgerTable).values({
+        organizationId: membership.organizationId,
+        employeeId: request.employeeId,
+        leaveType: request.leaveType,
+        requestId: request.id,
+        entryType: "reversal",
+        quantityQuarterDays: Math.abs(original.quantityQuarterDays),
+        effectiveDate: new Date().toISOString().slice(0, 10),
+        idempotencyKey: `cancel:${request.id}`,
+        note: "Approved leave cancellation reversal.",
+        createdByUserId: membership.userId,
+        isDemo: request.isDemo,
+      }).onConflictDoNothing();
+      const [updated] = await tx
+        .update(leaveRequestsTable)
+        .set({ status: "cancelled", decisionComment: "Cancelled; balance restored by a reversing ledger entry.", decidedAt: new Date() })
+        .where(eq(leaveRequestsTable.id, request.id))
+        .returning();
+      if (!updated) return { kind: "conflict" as const };
+      await tx.insert(leaveApprovalStepsTable).values({
+        organizationId: membership.organizationId,
+        requestId: request.id,
+        step: "cancellation",
+        decision: "cancelled",
+        actorUserId: membership.userId,
+        actorRole: membership.role,
+        comment: "Approved leave cancelled and ledger reversed.",
+      }).onConflictDoNothing();
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "leave_request_cancelled",
+        targetType: "leave_request",
+        targetId: request.id,
+        summary: "Approved leave was cancelled and its ledger deduction reversed.",
+        correlationId: req.correlationId,
+        isDemo: request.isDemo,
+        tx,
+        critical: true,
+      });
+      return { kind: "cancelled" as const, request: updated };
+    });
+    if (outcome.kind === "missing") {
+      res.status(404).json({ error: "Leave request not found." });
+      return;
+    }
+    if (outcome.kind === "forbidden") {
+      res.status(403).json({ error: "You cannot cancel this leave request." });
+      return;
+    }
+    if (outcome.kind === "missing_deduction") {
+      res.status(409).json({ error: "The original leave deduction is missing; contact an administrator." });
+      return;
+    }
+    if (outcome.kind === "not_approved" || outcome.kind === "conflict") {
+      res.status(409).json({ error: "Only approved leave can be cancelled." });
+      return;
+    }
+    const [response] = await serializeRequests(membership.organizationId, [outcome.request]);
+    res.json(response);
+  },
+);
+
+router.get("/leave-ledger", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const requestedEmployeeId = typeof req.query.employeeId === "string" ? req.query.employeeId : undefined;
+  const leaveType = typeof req.query.leaveType === "string" ? req.query.leaveType : undefined;
+
+  if (!process.env.DATABASE_URL) {
+    ensureDemoLeaveLedger(membership.organizationId);
+    let allowed = adminRoles.includes(membership.role)
+      ? DEMO_EMPLOYEES_LIST.map((employee) => employee.id)
+      : membership.role === PEOPLEOS_ROLES.departmentManager && membership.employeeId
+        ? DEMO_EMPLOYEES_LIST.filter((employee) => employee.managerId === membership.employeeId || employee.id === membership.employeeId).map((employee) => employee.id)
+        : membership.employeeId ? [membership.employeeId] : [];
+    if (requestedEmployeeId && !allowed.includes(requestedEmployeeId)) {
+      res.status(403).json({ error: "You cannot view this employee's leave ledger." });
+      return;
+    }
+    if (requestedEmployeeId) allowed = [requestedEmployeeId];
+    res.json(DEMO_LEAVE_LEDGER
+      .filter((entry) => entry.organizationId === membership.organizationId &&
+        allowed.includes(entry.employeeId) &&
+        (!leaveType || entry.leaveType === leaveType))
+      .map((entry) => ({
+        id: entry.id,
+        employeeId: entry.employeeId,
+        leaveType: entry.leaveType,
+        requestId: entry.requestId,
+        entryType: entry.entryType,
+        quantityQuarterDays: entry.quantityQuarterDays,
+        quantityDays: daysFromQuarterDays(entry.quantityQuarterDays),
+        effectiveDate: entry.effectiveDate,
+        note: entry.note,
+        createdAt: entry.createdAt.toISOString(),
+        isDemo: true,
+      })));
+    return;
+  }
+
+  let allowedEmployeeIds: string[] = [];
+  if (adminRoles.includes(membership.role)) {
+    const employees = await db
+      .select({ id: employeesTable.id })
+      .from(employeesTable)
+      .where(eq(employeesTable.organizationId, membership.organizationId));
+    allowedEmployeeIds = employees.map((employee) => employee.id);
+  } else if (membership.role === PEOPLEOS_ROLES.departmentManager && membership.employeeId) {
+    const reports = await db
+      .select({ id: employeesTable.id })
+      .from(employeesTable)
+      .where(and(
+        eq(employeesTable.organizationId, membership.organizationId),
+        eq(employeesTable.managerId, membership.employeeId),
+      ));
+    allowedEmployeeIds = [membership.employeeId, ...reports.map((employee) => employee.id)];
+  } else if (membership.employeeId) {
+    allowedEmployeeIds = [membership.employeeId];
+  }
+  if (requestedEmployeeId && !allowedEmployeeIds.includes(requestedEmployeeId)) {
+    res.status(403).json({ error: "You cannot view this employee's leave ledger." });
+    return;
+  }
+  const filters = [
+    eq(leaveLedgerTable.organizationId, membership.organizationId),
+    inArray(leaveLedgerTable.employeeId, requestedEmployeeId ? [requestedEmployeeId] : allowedEmployeeIds),
+  ];
+  if (leaveType) filters.push(eq(leaveLedgerTable.leaveType, leaveType));
+  const entries = allowedEmployeeIds.length
+    ? await db.select().from(leaveLedgerTable).where(and(...filters)).orderBy(desc(leaveLedgerTable.createdAt)).limit(500)
+    : [];
+  res.json(entries.map((entry) => ({
+    id: entry.id,
+    employeeId: entry.employeeId,
+    leaveType: entry.leaveType,
+    requestId: entry.requestId,
+    entryType: entry.entryType,
+    quantityQuarterDays: entry.quantityQuarterDays,
+    quantityDays: daysFromQuarterDays(entry.quantityQuarterDays),
+    effectiveDate: entry.effectiveDate,
+    note: entry.note,
+    createdAt: entry.createdAt.toISOString(),
+    isDemo: entry.isDemo,
+  })));
+});
 
 router.get("/leave/department-coverage", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
