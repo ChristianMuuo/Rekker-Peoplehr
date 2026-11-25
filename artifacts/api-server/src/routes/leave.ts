@@ -324,6 +324,50 @@ function addMonthsClamped(date: Date, months: number): Date {
   return result;
 }
 
+function calendarDaysBetween(start: string, end: string): number {
+  const first = new Date(`${start}T00:00:00.000Z`);
+  const last = new Date(`${end}T00:00:00.000Z`);
+  return Math.max(0, Math.floor((last.getTime() - first.getTime()) / 86_400_000) + 1);
+}
+
+function calendarDaysForYear(start: string, end: string, year: number): number {
+  const clippedStart = start < `${year}-01-01` ? `${year}-01-01` : start;
+  const clippedEnd = end > `${year}-12-31` ? `${year}-12-31` : end;
+  return clippedStart > clippedEnd ? 0 : calendarDaysBetween(clippedStart, clippedEnd);
+}
+
+function calendarDaysByYear(start: string, end: string): Map<number, number> {
+  const result = new Map<number, number>();
+  const firstYear = Number(start.slice(0, 4));
+  const lastYear = Number(end.slice(0, 4));
+  for (let year = firstYear; year <= lastYear; year += 1) {
+    result.set(year, calendarDaysForYear(start, end, year));
+  }
+  return result;
+}
+
+function isEventBasedLeave(policyCode: string): boolean {
+  return ["maternity", "paternity", "pre-adoptive"].includes(policyCode);
+}
+
+function eventEntitlementCalendarDays(
+  policy: { entitlementDays: number; entitlementQuantity?: number; entitlementUnit?: string },
+  startDate: string,
+): number {
+  if (policy.entitlementUnit === "weeks") {
+    return (policy.entitlementQuantity ?? 0) * 7;
+  }
+  if (policy.entitlementUnit === "months") {
+    const endExclusive = addMonthsClamped(
+      new Date(`${startDate}T00:00:00.000Z`),
+      policy.entitlementQuantity ?? 0,
+    );
+    const start = new Date(`${startDate}T00:00:00.000Z`);
+    return Math.max(0, Math.round((endExclusive.getTime() - start.getTime()) / 86_400_000));
+  }
+  return policy.entitlementDays;
+}
+
 function completedServiceMonths(startDate: string, asOf: Date): number {
   const start = new Date(`${startDate}T00:00:00.000Z`);
   if (start.getTime() > asOf.getTime()) return 0;
