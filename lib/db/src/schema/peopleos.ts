@@ -232,6 +232,38 @@ export const leaveRequestsTable = pgTable(
   ],
 );
 
+export const leavePolicyVersionsTable = pgTable(
+  "peopleos_leave_policy_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    policyId: uuid("policy_id")
+      .notNull()
+      .references(() => leavePoliciesTable.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    effectiveFrom: date("effective_from", { mode: "string" }).notNull(),
+    effectiveTo: date("effective_to", { mode: "string" }),
+    changedByUserId: text("changed_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_policy_version_number_uq").on(
+      table.policyId,
+      table.versionNumber,
+    ),
+    index("peopleos_leave_policy_versions_org_idx").on(
+      table.organizationId,
+      table.policyId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const leaveLedgerTable = pgTable(
   "peopleos_leave_ledger",
   {
