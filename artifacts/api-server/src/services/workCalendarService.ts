@@ -88,7 +88,9 @@ export async function resolveEffectiveWorkCalendar(
         })
         .from(publicHolidaysTable)
         .where(eq(publicHolidaysTable.organizationId, organizationId))
-    : [];
+    : phase2MemoryStore.publicHolidays
+        .filter((holiday) => holiday.organizationId === organizationId)
+        .map((holiday) => ({ date: holiday.holidayDate, name: holiday.name }));
   const byLoc = location
     ? calendars.find((c) => c.location && c.location.toLowerCase() === location.toLowerCase())
     : undefined;
