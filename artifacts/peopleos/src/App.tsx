@@ -46,6 +46,8 @@ const TradePage = lazy(() => import('@/pages/TradePage').then(m => ({ default: m
 import { apiGet, apiPost, triggerCsvDownload } from '@/lib/api';
 import { BulkImportDialog } from '@/components/phase2/BulkImportDialog';
 import { handleFallbackApi } from '@workspace/api-client-react';
+import { FEATURE_REGISTRY, featureStatusLabel } from '@/data/featureRegistry';
+import { formatRoleLabel } from '@/lib/presentation';
 
 // Demo-mode fallback auth context — used as React Query placeholderData so the
 // AppFrame never enters the error state on static Vercel deployments where there
@@ -213,12 +215,15 @@ const workNav: NavItem[] = [
   { label: 'Performance', href: '/performance', icon: ArrowUpRight },
   { label: 'Learning', href: '/learning', icon: FileText },
   { label: 'Documents', href: '/documents', icon: FileText },
-  { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
   { label: 'Reports & Analytics', href: '/reports', icon: ArrowDownRight },
 ];
 const workforceErpNav: NavItem[] = [
-  { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
   { label: 'HR Cases', href: '/hr-cases', icon: ShieldAlert },
+];
+const roadmapNav: NavItem[] = [
+  { label: 'Workforce ERP', href: '/workforce-erp', icon: Factory },
+  { label: 'ML intelligence', href: '/ml', icon: BrainCircuit },
+  { label: 'Agent hub', href: '/agent-hub', icon: Sparkles },
 ];
 
 function AppHomeRedirect() { return <><Show when="signed-in"><Redirect to="/overview" /></Show><Show when="signed-out"><Home /></Show></>; }
@@ -277,7 +282,7 @@ function AppFrame() {
   // On Vercel static deployments, the placeholder fills in immediately.
   if (!auth) return <ErrorState onRetry={() => refetch()} title="Workspace access unavailable" />;
   const visibleWorkNav = workNav.filter(item => item.permission !== 'canViewPayroll' || auth.canViewPayroll);
-  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, { label: 'Agent hub', href: '/agent-hub', icon: Sparkles }, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings || auth.canViewAudit ? [{ label: 'Diagnostics', href: '/diagnostics', icon: Activity }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
+  const nav = [...primaryNav, ...visibleWorkNav, ...workforceErpNav, ...roadmapNav, ...(auth.canViewAudit ? [{ label: 'Audit trail', href: '/audit', icon: ShieldCheck, permission: 'canViewAudit' as const }] : []), ...(auth.canManageSettings || auth.canViewAudit ? [{ label: 'Diagnostics', href: '/diagnostics', icon: Activity }] : []), ...(auth.canManageSettings ? [{ label: 'Settings', href: '/settings', icon: Settings2, permission: 'canManageSettings' as const }] : [])];
 
   const pendingApprovals = Array.isArray(approvalsQuery.data) ? approvalsQuery.data : [];
   const pendingAiApprovals = (aiApprovalsQuery.data?.items ?? []).filter(a => a.status === 'pending');
@@ -291,7 +296,8 @@ function AppFrame() {
     const Icon = item.icon;
     return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} data-testid={`link-nav-${item.href.slice(1)}`}
       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${location === item.href || (item.href === '/people' && location.startsWith('/people/')) ? 'bg-[#f9e9e6] text-[#a91919]' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-950'}`}>
-      <Icon size={17} strokeWidth={1.8} /><span>{item.label}</span>
+      <Icon size={17} strokeWidth={1.8} /><span className="min-w-0 flex-1">{item.label}</span>
+      {FEATURE_REGISTRY[item.href] && <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[9px] font-semibold capitalize text-stone-500" data-testid={`badge-feature-${FEATURE_REGISTRY[item.href].id}`}>{featureStatusLabel(FEATURE_REGISTRY[item.href].status)}</span>}
       {item.href === '/approvals' && <span className="ml-auto rounded-full bg-[#f5d8d4] px-2 py-0.5 text-[10px] text-[#a91919]" data-testid="badge-approvals-nav">{notificationCount > 0 ? notificationCount : 'Open'}</span>}
     </Link>;
   });
@@ -361,7 +367,7 @@ function AppFrame() {
                 </div>
                 <div className="hidden sm:block text-left text-xs">
                   <p className="font-bold text-stone-800 leading-tight">{auth.displayName}</p>
-                  <p className="text-[10px] text-stone-400 capitalize">{auth.role.replaceAll('_', ' ')}</p>
+                  <p className="text-[10px] text-stone-400 capitalize">{formatRoleLabel(auth.role)}</p>
                 </div>
               </div>
             </div>
@@ -399,8 +405,9 @@ function AppFrame() {
         </div>
         <div className="mt-6 flex-1 overflow-y-auto px-3">
           <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">People operations</div>{renderNav(visibleWorkNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workforce ERP &amp; Relations</div>{renderNav(workforceErpNav)}
-          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length))}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Workforce &amp; Relations</div>{renderNav(workforceErpNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Roadmap &amp; previews</div>{renderNav(roadmapNav)}
+          <div className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-stone-400">Governance</div>{renderNav(nav.slice(primaryNav.length + visibleWorkNav.length + workforceErpNav.length + roadmapNav.length))}
         </div>
         <div className="border-t border-stone-100 p-3">
           <div className="mb-2 grid grid-cols-3 gap-1">
@@ -1390,7 +1397,7 @@ function SettingsPage() {
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#a91919]"><ShieldCheck size={18} /></div><div><h2 className="font-display text-lg font-semibold text-stone-900">Your access profile</h2><p className="text-xs text-stone-500">Permissions are supplied by the PeopleOS authorization service.</p></div></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            ['Organization role', auth.data?.role.replaceAll('_',' ') ?? '—', true],
+            ['Organization role', auth.data?.role ? formatRoleLabel(auth.data.role) : '—', true],
             ['Manage people', auth.data?.canManagePeople, auth.data?.canManagePeople],
             ['Approve leave', auth.data?.canApproveLeave, auth.data?.canApproveLeave],
             ['View audit', auth.data?.canViewAudit, auth.data?.canViewAudit],
