@@ -1582,6 +1582,18 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       targetType: "leave_request",
       targetId: created.id,
       summary: "A leave request was submitted.",
+      afterJson: JSON.stringify({
+        status: "pending",
+        leaveType: created.leaveType,
+        startDate: created.startDate,
+        endDate: created.endDate,
+        days: created.days,
+        halfDay: created.halfDay,
+      }),
+      reason: "Employee submitted a leave request.",
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") ?? null,
+      requestId: req.correlationId ?? null,
       isDemo: organization.isDemo,
     });
     return { kind: "created" as const, request: created };
@@ -1974,6 +1986,16 @@ router.post(
         targetType: "leave_request",
         targetId: request.id,
         summary: `A leave request was ${recommended ? "recommended" : "not recommended"} by a human reviewer.`,
+        beforeJson: JSON.stringify({ recommendationStatus: "not_assessed" }),
+        afterJson: JSON.stringify({
+          recommendationStatus: recommended ? "recommended" : "not_recommended",
+          recommendationByUserId: membership.userId,
+          recommendationAt: new Date().toISOString(),
+        }),
+        reason: comment,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent") ?? null,
+        requestId: req.correlationId ?? null,
         isDemo: request.isDemo,
       });
       return result;
@@ -2196,6 +2218,18 @@ router.post(
         targetType: "leave_request",
         targetId: request.id,
         summary: `A leave request was ${targetStatus}.`,
+        beforeJson: JSON.stringify({
+          status: request.status,
+          recommendationStatus: request.recommendationStatus,
+        }),
+        afterJson: JSON.stringify({
+          status: targetStatus,
+          approverUserId: membership.userId,
+        }),
+        reason: body.data.comment ?? null,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent") ?? null,
+        requestId: req.correlationId ?? null,
         isDemo: request.isDemo,
       });
       return { kind: "updated" as const, request: updated };
@@ -2349,6 +2383,12 @@ router.post(
         targetType: "leave_request",
         targetId: request.id,
         summary: "A leave request was cancelled and any approved deduction was reversed.",
+        beforeJson: JSON.stringify({ status: request.status }),
+        afterJson: JSON.stringify({ status: "cancelled" }),
+        reason: "Cancelled by requester or authorized HR user.",
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent") ?? null,
+        requestId: req.correlationId ?? null,
         isDemo: request.isDemo,
       });
       return { kind: "cancelled" as const, request: updated };
