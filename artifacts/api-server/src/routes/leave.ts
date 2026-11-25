@@ -2044,6 +2044,17 @@ router.post(
         requestId: req.correlationId ?? null,
         isDemo: request.isDemo,
       });
+      await tx.insert(leaveApprovalsTable).values({
+        organizationId: membership.organizationId,
+        leaveRequestId: request.id,
+        stepIndex: 1,
+        stepType: "manager_recommendation",
+        assignedRole: membership.role,
+        reviewerUserId: membership.userId,
+        decision: recommended ? "recommended" : "not_recommended",
+        comment,
+        decidedAt: new Date(),
+      }).onConflictDoNothing();
       return result;
     });
     if (!updated) {
@@ -2278,6 +2289,17 @@ router.post(
         requestId: req.correlationId ?? null,
         isDemo: request.isDemo,
       });
+      await tx.insert(leaveApprovalsTable).values({
+        organizationId: membership.organizationId,
+        leaveRequestId: request.id,
+        stepIndex: 2,
+        stepType: "hr_approval",
+        assignedRole: membership.role,
+        reviewerUserId: membership.userId,
+        decision: targetStatus,
+        comment: body.data.comment ?? null,
+        decidedAt: new Date(),
+      }).onConflictDoNothing();
       return { kind: "updated" as const, request: updated };
     });
 
