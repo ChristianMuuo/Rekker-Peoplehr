@@ -243,16 +243,14 @@ router.get("/auth/context", async (req, res): Promise<void> => {
   const displayName = displayNameMap[role] ?? "Rekker Teammate";
 
   const response = {
+    userId: membership.userId,
+    employeeId: membership.employeeId ?? null,
     role,
     displayName,
     organizationName: organization.name,
     canManagePeople: isAdmin,
-    canApproveLeave:
-      isAdmin ||
-      role === PEOPLEOS_ROLES.departmentManager ||
-      role === PEOPLEOS_ROLES.productionSupervisor ||
-      role === PEOPLEOS_ROLES.warehouseSupervisor ||
-      role === PEOPLEOS_ROLES.salesManager,
+    // Department managers may recommend; final approval is reserved for HR roles.
+    canApproveLeave: isAdmin || role === PEOPLEOS_ROLES.departmentManager,
     canViewAudit: hasModulePermission(role, "auditTrail", "read"),
     canViewPayroll:
       hasModulePermission(role, "payrollAndJournal", "read") ||
