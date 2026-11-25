@@ -100,10 +100,17 @@ router.get("/audit-events", async (req, res): Promise<void> => {
   if (!membership) return;
 
   const limit = query.data.limit ?? 30;
+  const { actor, action, validFrom, validTo } = auditFilters(req);
   if (!process.env.DATABASE_URL) {
+    const events = listDemoAuditEvents(membership.organizationId, 500)
+      .filter((event) => !actor || event.actor.toLowerCase().includes(actor.toLowerCase()))
+      .filter((event) => !action || event.action.toLowerCase().includes(action.toLowerCase()))
+      .filter((event) => !validFrom || new Date(event.occurredAt) >= validFrom)
+      .filter((event) => !validTo || new Date(event.occurredAt) <= validTo)
+      .slice(0, limit);
     res.json(
       ListAuditEventsResponse.parse(
-        listDemoAuditEvents(membership.organizationId, limit).map((event) => ({
+        events.map((event) => ({
           id: event.id,
           occurredAt: event.occurredAt,
           actor: event.actor,
