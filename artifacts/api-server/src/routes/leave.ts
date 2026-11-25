@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
   CreateLeavePolicyBody,
@@ -1129,102 +1129,133 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
   const input = body.data;
   const startDate = dateOnly(input.startDate);
   const endDate = dateOnly(input.endDate);
+  const halfDay = input.halfDay === true;
+  const certificateReference = typeof input.certificateReference === "string"
+    ? input.certificateReference.trim()
+    : "";
   if (endDate < startDate) {
     res.status(400).json({ error: "End date must be on or after the start date." });
     return;
   }
-  const effectiveCalendar = await resolveEffectiveWorkCalendar(
-    membership.organizationId,
-  );
-  const calendarDaysResult = countCalendarWorkingDays(
-    startDate,
-    endDate,
-    effectiveCalendar,
-  );
-  const days = calendarDaysResult.workingDays;
-  if (days < 1) {
+
+  const effectiveCalendar = await resolveEffectiveWorkCalendar(membership.organizationId);
+  const calendarDaysResult = countCalendarWorkingDays(startDate, endDate, effectiveCalendar);
+  const workingDays = calendarDaysResult.workingDays;
+  if (workingDays < 1) {
     res.status(400).json({
-      error:
-        "Choose at least one working day (excluding configured rest days and public holidays).",
+      error: "Choose at least one working day (excluding configured rest days and public holidays).",
     });
     return;
   }
+  let quantityQuarterDays: number;
+  try {
+    quantityQuarterDays = requestQuarterDays(workingDays, halfDay);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Invalid half-day request." });
+    return;
+  }
+  const requestedDays = daysFromQuarterDays(quantityQuarterDays);
+  const today = new Date().toISOString().slice(0, 10);
+  const approvalMode = process.env.PEOPLEOS_LEAVE_APPROVAL_MODE === "single" ? "single" : "two_step";
+
   if (!process.env.DATABASE_URL) {
-    const demoEmp = DEMO_EMPLOYEES_LIST.find((e) => e.id === input.employeeId);
+    ensureDemoLeaveLedger(membership.organizationId);
+    const demoEmp = DEMO_EMPLOYEES_LIST.find((employee) => employee.id === input.employeeId);
     if (!demoEmp) {
       res.status(404).json({ error: "Employee not found in this organization." });
       return;
     }
-    const policy = DEMO_LEAVE_POLICIES.find(
-      (p) =>
-        p.organizationId === membership.organizationId &&
-        p.code === input.leaveType &&
-        p.active,
-    );
+    if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId !== demoEmp.id) {
+      res.status(403).json({ error: "Employees may only request leave for themselves." });
+      return;
+    }
+    if (
+      membership.role === PEOPLEOS_ROLES.departmentManager &&
+      membership.employeeId !== demoEmp.managerId &&
+      membership.employeeId !== demoEmp.id
+    ) {
+      res.status(403).json({ error: "Managers may only request leave for themselves or their direct reports." });
+      return;
+    }
+    const policy = DEMO_LEAVE_POLICIES.find((item) =>
+      item.organizationId === membership.organizationId &&
+      item.code === input.leaveType &&
+      item.active);
     if (!policy) {
-      res.status(400).json({
-        error: "Choose an active leave type configured by your organization.",
+      res.status(400).json({ error: "Choose an active leave type configured by your organization." });
+      return;
+    }
+    if (completedServiceMonths(demoEmp.startDate, startDate) < policy.minimumServiceMonths) {
+      res.status(422).json({
+        error: `${policy.name} requires at least ${policy.minimumServiceMonths} completed month(s) of service before the leave start date.`,
       });
       return;
     }
-    const overlap = DEMO_LEAVE_STORE.some(
-      (r) =>
-        r.employeeId === demoEmp.id &&
-        (r.status === "pending" || r.status === "approved") &&
-        dateOnly(r.startDate) <= endDate &&
-        dateOnly(r.endDate) >= startDate,
-    );
-    if (overlap) {
-      res.status(409).json({
-        error: "This request overlaps an existing pending or approved leave request.",
+    if (policy.certificateRequired && certificateReference.length < 3) {
+      res.status(422).json({
+        error: `${policy.name} requires a medical or statutory certificate reference before submission.`,
       });
       return;
     }
-    const existingRequests = DEMO_LEAVE_STORE.filter(
-      (r) =>
-        r.employeeId === demoEmp.id &&
-        r.leaveType === policy.code &&
-        (r.status === "pending" || r.status === "approved"),
-    );
-    const requestYearDays = businessDaysByYear(startDate, endDate);
-    for (const [year, requestDaysForYear] of requestYearDays) {
-      const leaveYearStart = `${year}-01-01`;
-      const now = new Date();
-      const requestedStart = new Date(`${startDate}T00:00:00.000Z`);
-      const asOf =
-        startDate.slice(0, 4) === String(year)
-          ? new Date(Math.max(requestedStart.getTime(), now.getTime()))
-          : new Date(`${leaveYearStart}T00:00:00.000Z`);
-      const accrued = accruedDaysForYear(policy, year, asOf);
-      const reservedDays = existingRequests.reduce(
-        (total, request) =>
-          total +
-          businessDaysForYear(
-            dateOnly(request.startDate),
-            dateOnly(request.endDate),
-            year,
-          ),
-        0,
-      );
-      if (reservedDays + requestDaysForYear > accrued) {
-        res.status(409).json({
-          error: `This request exceeds the available ${policy.name} balance for ${year}. ${accrued - reservedDays} day(s) are available.`,
+    if (policy.code === "paternity") {
+      const maximum = paternityWorkingDayEquivalent(policy.entitlementWeeks, effectiveCalendar.workdays.length);
+      if (requestedDays > maximum) {
+        res.status(422).json({
+          error: `Paternity leave is capped at ${policy.entitlementWeeks} weeks (${maximum} working days on this schedule). The working-day conversion is subject to legal review.`,
+          statutoryUnit: "weeks",
+          entitlementWeeks: policy.entitlementWeeks,
+          needsLegalReview: true,
         });
         return;
       }
     }
+    const overlap = DEMO_LEAVE_STORE.some((request) =>
+      request.employeeId === demoEmp.id &&
+      ["pending", "approved"].includes(request.status) &&
+      dateOnly(request.startDate) <= endDate &&
+      dateOnly(request.endDate) >= startDate);
+    if (overlap) {
+      res.status(409).json({ error: "This request overlaps an existing pending or approved leave request." });
+      return;
+    }
+
+    if (policy.code === "annual") {
+      const ledgerBalanceQuarterDays = DEMO_LEAVE_LEDGER
+        .filter((entry) => entry.organizationId === membership.organizationId &&
+          entry.employeeId === demoEmp.id && entry.leaveType === policy.code &&
+          entry.effectiveDate >= `${new Date(startDate).getUTCFullYear()}-01-01` &&
+          entry.effectiveDate <= `${new Date(startDate).getUTCFullYear()}-12-31`)
+        .reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+      const reservedQuarterDays = DEMO_LEAVE_STORE
+        .filter((request) => request.employeeId === demoEmp.id &&
+          request.leaveType === policy.code &&
+          ["pending", "approved"].includes(request.status) &&
+          dateOnly(request.startDate).slice(0, 4) === startDate.slice(0, 4))
+        .filter((request) => request.status === "pending")
+        .reduce((total, request) => total + Math.round((request.halfDay ? 0.5 : request.days) * 4), 0);
+      if (ledgerBalanceQuarterDays - reservedQuarterDays < quantityQuarterDays) {
+        res.status(409).json({
+          error: `This request exceeds the available ${policy.name} ledger balance. ${daysFromQuarterDays(Math.max(0, ledgerBalanceQuarterDays - reservedQuarterDays))} day(s) are available.`,
+        });
+        return;
+      }
+    }
+
     const newReq: DemoLeaveItem = {
-      id: `leave-${Date.now()}`,
+      id: `leave-${crypto.randomUUID()}`,
       employeeId: demoEmp.id,
       employeeName: `${demoEmp.firstName} ${demoEmp.lastName}`,
       leaveType: policy.code,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
-      days,
+      days: workingDays,
+      halfDay,
+      certificateReference: certificateReference || null,
       reason: input.reason,
       status: "pending",
       approverId: null,
       decisionComment: null,
+      recommendation: null,
       submittedAt: new Date(),
       decidedAt: null,
       isDemo: true,
@@ -1237,33 +1268,36 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       action: "leave_request_submitted",
       targetType: "leave_request",
       targetId: newReq.id,
-      summary: `Leave request submitted for ${newReq.employeeName}.`,
+      summary: "A leave request was submitted.",
+      correlationId: req.correlationId,
       isDemo: true,
     });
-    res.status(201).json(CreateLeaveRequestResponse.parse(newReq));
+    res.status(201).json(CreateLeaveRequestResponse.parse({
+      ...newReq,
+      days: requestedDays,
+      halfDay,
+    }));
     return;
   }
 
+  await ensureKenyaDefaultLeavePolicies(organization.id, membership.userId);
   const [employee] = await db
     .select()
     .from(employeesTable)
-    .where(
-      and(
-        eq(employeesTable.id, input.employeeId),
-        eq(employeesTable.organizationId, organization.id),
-      ),
-    )
+    .where(and(
+      eq(employeesTable.id, input.employeeId),
+      eq(employeesTable.organizationId, organization.id),
+    ))
     .limit(1);
   if (!employee) {
     res.status(404).json({ error: "Employee not found in this organization." });
     return;
   }
-  if (membership.role === PEOPLEOS_ROLES.employee) {
-    if (membership.employeeId !== employee.id) {
-      res.status(403).json({ error: "Employees may only request leave for themselves." });
-      return;
-    }
-  } else if (
+  if (membership.role === PEOPLEOS_ROLES.employee && membership.employeeId !== employee.id) {
+    res.status(403).json({ error: "Employees may only request leave for themselves." });
+    return;
+  }
+  if (
     membership.role === PEOPLEOS_ROLES.departmentManager &&
     membership.employeeId !== employee.managerId &&
     membership.employeeId !== employee.id
@@ -1271,89 +1305,122 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     res.status(403).json({ error: "Managers may only request leave for themselves or their direct reports." });
     return;
   }
-  if (
-    organization.isDemo &&
-    !employee.workEmail.toLowerCase().endsWith("@rekker-demo.invalid")
-  ) {
+  if (organization.isDemo && !employee.workEmail.toLowerCase().endsWith("@rekker-demo.invalid")) {
     res.status(400).json({ error: "Leave requests in demo mode must use synthetic employee records." });
     return;
   }
+
+  const [effectivePolicy] = await db
+    .select()
+    .from(leavePoliciesTable)
+    .where(and(
+      eq(leavePoliciesTable.organizationId, organization.id),
+      eq(leavePoliciesTable.code, input.leaveType),
+      eq(leavePoliciesTable.active, true),
+      lte(leavePoliciesTable.effectiveFrom, startDate),
+      or(isNull(leavePoliciesTable.effectiveTo), gte(leavePoliciesTable.effectiveTo, startDate)),
+    ))
+    .limit(1);
+  if (!effectivePolicy) {
+    res.status(400).json({ error: "No active leave policy is effective for the selected leave start date." });
+    return;
+  }
+  if (completedServiceMonths(employee.startDate, startDate) < effectivePolicy.minimumServiceMonths) {
+    res.status(422).json({
+      error: `${effectivePolicy.name} requires at least ${effectivePolicy.minimumServiceMonths} completed month(s) of service before the leave start date.`,
+    });
+    return;
+  }
+  if (effectivePolicy.certificateRequired && certificateReference.length < 3) {
+    res.status(422).json({
+      error: `${effectivePolicy.name} requires a certificate reference before submission. A reference alone is not a document upload.`,
+    });
+    return;
+  }
+  if (effectivePolicy.code === "paternity") {
+    const maximum = paternityWorkingDayEquivalent(effectivePolicy.entitlementWeeks, effectiveCalendar.workdays.length);
+    if (requestedDays > maximum) {
+      res.status(422).json({
+        error: `Paternity leave is capped at ${effectivePolicy.entitlementWeeks} weeks (${maximum} working days on this schedule). The working-day conversion is subject to legal review.`,
+        statutoryUnit: "weeks",
+        entitlementWeeks: effectivePolicy.entitlementWeeks,
+        needsLegalReview: true,
+      });
+      return;
+    }
+  }
+  if (effectivePolicy.code === "annual" && effectivePolicy.accrualMethod === "monthly") {
+    await ensureMonthlyAnnualLeaveAccrual(organization.id, employee, effectivePolicy);
+  }
+
   const requestResult = await db.transaction(async (tx) => {
     const [lockedEmployee] = await tx
       .select({ id: employeesTable.id })
       .from(employeesTable)
-      .where(
-        and(
-          eq(employeesTable.id, employee.id),
-          eq(employeesTable.organizationId, organization.id),
-        ),
-      )
+      .where(and(
+        eq(employeesTable.id, employee.id),
+        eq(employeesTable.organizationId, organization.id),
+      ))
       .for("update");
     if (!lockedEmployee) return { kind: "employee_missing" as const };
 
     const [policy] = await tx
       .select()
       .from(leavePoliciesTable)
-      .where(
-        and(
-          eq(leavePoliciesTable.organizationId, organization.id),
-          eq(leavePoliciesTable.code, input.leaveType),
-          eq(leavePoliciesTable.active, true),
-        ),
-      )
-      .limit(1);
+      .where(and(
+        eq(leavePoliciesTable.organizationId, organization.id),
+        eq(leavePoliciesTable.code, input.leaveType),
+        eq(leavePoliciesTable.active, true),
+        lte(leavePoliciesTable.effectiveFrom, startDate),
+        or(isNull(leavePoliciesTable.effectiveTo), gte(leavePoliciesTable.effectiveTo, startDate)),
+      ))
+      .limit(1)
+      .for("share");
     if (!policy) return { kind: "policy_unavailable" as const };
 
     const overlaps = await tx
       .select({ id: leaveRequestsTable.id })
       .from(leaveRequestsTable)
-      .where(
-        and(
-          eq(leaveRequestsTable.organizationId, organization.id),
-          eq(leaveRequestsTable.employeeId, employee.id),
-          inArray(leaveRequestsTable.status, ["pending", "approved"]),
-          lte(leaveRequestsTable.startDate, endDate),
-          gte(leaveRequestsTable.endDate, startDate),
-        ),
-      )
+      .where(and(
+        eq(leaveRequestsTable.organizationId, organization.id),
+        eq(leaveRequestsTable.employeeId, employee.id),
+        inArray(leaveRequestsTable.status, ["pending", "recommended", "approved"]),
+        lte(leaveRequestsTable.startDate, endDate),
+        gte(leaveRequestsTable.endDate, startDate),
+      ))
       .limit(1);
     if (overlaps.length) return { kind: "overlap" as const };
 
-    const existingRequests = await tx
-      .select({
-        startDate: leaveRequestsTable.startDate,
-        endDate: leaveRequestsTable.endDate,
-      })
-      .from(leaveRequestsTable)
-      .where(
-        and(
+    if (policy.code === "annual") {
+      const ledgerEntries = await tx
+        .select({ quantityQuarterDays: leaveLedgerTable.quantityQuarterDays })
+        .from(leaveLedgerTable)
+        .where(and(
+          eq(leaveLedgerTable.organizationId, organization.id),
+          eq(leaveLedgerTable.employeeId, employee.id),
+          eq(leaveLedgerTable.leaveType, policy.code),
+          gte(leaveLedgerTable.effectiveDate, `${new Date(startDate).getUTCFullYear()}-01-01`),
+          lte(leaveLedgerTable.effectiveDate, `${new Date(startDate).getUTCFullYear()}-12-31`),
+        ));
+      const ledgerBalance = ledgerEntries.reduce((total, entry) => total + entry.quantityQuarterDays, 0);
+      const pending = await tx
+        .select({ days: leaveRequestsTable.days, halfDay: leaveRequestsTable.halfDay })
+        .from(leaveRequestsTable)
+        .where(and(
           eq(leaveRequestsTable.organizationId, organization.id),
           eq(leaveRequestsTable.employeeId, employee.id),
           eq(leaveRequestsTable.leaveType, policy.code),
-          inArray(leaveRequestsTable.status, ["pending", "approved"]),
-        ),
-      );
-    const requestYearDays = businessDaysByYear(startDate, endDate);
-    for (const [year, requestDaysForYear] of requestYearDays) {
-      const leaveYearStart = `${year}-01-01`;
-      const now = new Date();
-      const requestedStart = new Date(`${startDate}T00:00:00.000Z`);
-      const asOf =
-        startDate.slice(0, 4) === String(year)
-          ? new Date(Math.max(requestedStart.getTime(), now.getTime()))
-          : new Date(`${leaveYearStart}T00:00:00.000Z`);
-      const accrued = accruedDaysForYear(policy, year, asOf);
-      const reservedDays = existingRequests.reduce(
-        (total, request) =>
-          total + businessDaysForYear(request.startDate, request.endDate, year),
-        0,
-      );
-      if (reservedDays + requestDaysForYear > accrued) {
+          inArray(leaveRequestsTable.status, ["pending", "recommended"]),
+          gte(leaveRequestsTable.startDate, `${new Date(startDate).getUTCFullYear()}-01-01`),
+          lte(leaveRequestsTable.startDate, `${new Date(startDate).getUTCFullYear()}-12-31`),
+        ));
+      const pendingQuarterDays = pending.reduce((total, request) => total + (request.halfDay ? 2 : request.days * 4), 0);
+      if (ledgerBalance - pendingQuarterDays < quantityQuarterDays) {
         return {
           kind: "insufficient_balance" as const,
-          year,
-          remainingDays: accrued - reservedDays,
+          remainingDays: daysFromQuarterDays(Math.max(0, ledgerBalance - pendingQuarterDays)),
           leaveTypeName: policy.name,
+          year: new Date(startDate).getUTCFullYear(),
         };
       }
     }
@@ -1366,7 +1433,9 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         leaveType: policy.code,
         startDate,
         endDate,
-        days,
+        days: workingDays,
+        halfDay,
+        certificateReference: certificateReference || null,
         reason: input.reason,
         status: "pending",
         createdByUserId: membership.userId,
@@ -1374,7 +1443,16 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       })
       .returning();
     if (!created) return { kind: "insert_failed" as const };
-    await tx.insert(auditEventsTable).values({
+    await tx.insert(leaveApprovalStepsTable).values({
+      organizationId: organization.id,
+      requestId: created.id,
+      step: "submission",
+      decision: "submitted",
+      actorUserId: membership.userId,
+      actorRole: membership.role,
+      comment: "Leave request submitted.",
+    });
+    await recordAuditEvent({
       organizationId: organization.id,
       actorUserId: membership.userId,
       actor: membership.role,
@@ -1382,20 +1460,20 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       targetType: "leave_request",
       targetId: created.id,
       summary: "A leave request was submitted.",
+      correlationId: req.correlationId,
       isDemo: organization.isDemo,
+      tx,
+      critical: true,
     });
     return { kind: "created" as const, request: created };
   });
+
   if (requestResult.kind === "policy_unavailable") {
-    res.status(400).json({
-      error: "Choose an active leave type configured by your organization.",
-    });
+    res.status(400).json({ error: "Choose an active leave type configured by your organization." });
     return;
   }
   if (requestResult.kind === "overlap") {
-    res.status(409).json({
-      error: "This request overlaps an existing pending or approved leave request.",
-    });
+    res.status(409).json({ error: "This request overlaps an existing pending or approved leave request." });
     return;
   }
   if (requestResult.kind === "insufficient_balance") {
@@ -1412,9 +1490,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Leave request could not be submitted." });
     return;
   }
-  const [response] = await serializeRequests(organization.id, [
-    requestResult.request,
-  ]);
+  const [response] = await serializeRequests(organization.id, [requestResult.request]);
   res.status(201).json(CreateLeaveRequestResponse.parse(response));
 });
 
