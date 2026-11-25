@@ -1476,6 +1476,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       .select({
         startDate: leaveRequestsTable.startDate,
         endDate: leaveRequestsTable.endDate,
+        halfDay: leaveRequestsTable.halfDay,
       })
       .from(leaveRequestsTable)
       .where(
@@ -1483,11 +1484,14 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
           eq(leaveRequestsTable.organizationId, organization.id),
           eq(leaveRequestsTable.employeeId, employee.id),
           eq(leaveRequestsTable.leaveType, policy.code),
-          inArray(leaveRequestsTable.status, ["pending", "approved"]),
+          eq(leaveRequestsTable.status, "pending"),
         ),
       );
     const requestYearDays = businessDaysByYear(startDate, endDate);
     for (const [year, requestDaysForYear] of requestYearDays) {
+      const requestedDaysInYear =
+        requestDaysForYear -
+        (input.halfDay && startDate.slice(0, 4) === String(year) ? 0.5 : 0);
       const pendingReserved = existingRequests.reduce(
         (total, request) =>
           total +
@@ -1531,7 +1535,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       }
 
       const remainingDays = Math.round((availableDays - pendingReserved) * 100) / 100;
-      if (pendingReserved + requestDaysForYear > availableDays || requestDaysForYear > policy.entitlementDays) {
+      if (pendingReserved + requestedDaysInYear > availableDays || requestedDaysInYear > policy.entitlementDays) {
         return {
           kind: "insufficient_balance" as const,
           year,
