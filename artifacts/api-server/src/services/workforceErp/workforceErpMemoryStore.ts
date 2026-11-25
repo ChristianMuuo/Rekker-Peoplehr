@@ -222,7 +222,11 @@ export function getOrCreateWorkforceStore(organizationId: string): OrgWorkforceS
 }
 
 function createInitialWorkforceStore(organizationId: string): OrgWorkforceStore {
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const previousMonth = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth() - 1, 1));
+  const demoSalesPeriod = `${previousMonth.getUTCFullYear()}-${String(previousMonth.getUTCMonth() + 1).padStart(2, "0")}`;
+  const todayIso = now.slice(0, 10);
   const store: OrgWorkforceStore = {
     lines: new Map(),
     templates: new Map(),
@@ -709,12 +713,12 @@ function createInitialWorkforceStore(organizationId: string): OrgWorkforceStore 
     territoryName: terr1.name,
     employeeId: "10000000-0000-4000-8000-000000000005",
     repName: "Brenda Mutheu",
-    effectiveFrom: "2026-01-01",
+    effectiveFrom: todayIso,
     effectiveTo: null,
     monthlyTargetKes: 2500000,
     actualAttributedKes: 2310000,
     commissionRatePct: "2.5",
-    reportingPeriod: "2026-03",
+    reportingPeriod: demoSalesPeriod,
     status: "active",
     attributionSource: "CRM Pipeline Target (Phase 1 Ecosystem)",
     createdAt: now,
@@ -728,12 +732,12 @@ function createInitialWorkforceStore(organizationId: string): OrgWorkforceStore 
     territoryName: terr2.name,
     employeeId: "10000000-0000-4000-8000-000000000006",
     repName: "Brian Kiprotich",
-    effectiveFrom: "2026-01-01",
+    effectiveFrom: todayIso,
     effectiveTo: null,
     monthlyTargetKes: 1400000,
     actualAttributedKes: 1180000,
     commissionRatePct: "3.0",
-    reportingPeriod: "2026-03",
+    reportingPeriod: demoSalesPeriod,
     status: "active",
     attributionSource: "CRM Pipeline Target (Phase 1 Ecosystem)",
     createdAt: now,
