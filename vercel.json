@@ -4,15 +4,18 @@
   "buildCommand": "pnpm --filter @workspace/peopleos run build",
   "outputDirectory": "artifacts/peopleos/dist/public",
   "cleanUrls": true,
-  "rewrites": [
+  "headers": [
     {
-      "source": "/api/(.*)",
-      "destination": "/index.html"
-    },
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    }
+  ],
+  "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
 }
-
