@@ -616,6 +616,22 @@ export const UpdateLeavePolicyResponse = zod.object({
 
 
 /**
+ * @summary Calculate scheduled leave days, eligibility and available balance before submission
+ */
+export const previewLeaveRequestQueryHalfDayDefault = false;
+
+export const PreviewLeaveRequestQueryParams = zod.object({
+  "employeeId": zod.coerce.string(),
+  "leaveType": zod.coerce.string(),
+  "startDate": zod.date(),
+  "endDate": zod.date(),
+  "halfDay": zod.coerce.boolean().default(previewLeaveRequestQueryHalfDayDefault)
+})
+
+export const PreviewLeaveRequestResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
  * @summary Get leave balances visible to the signed-in user
  */
 export const listLeaveBalancesQueryYearMin = 2000;

@@ -54,6 +54,8 @@ export * from './peopleOsOverview';
 export * from './peopleOsOverviewDataMode';
 export * from './peopleOsOverviewMonthlyHeadcountItem';
 export * from './peopleOsOverviewStats';
+export * from './previewLeaveRequest200';
+export * from './previewLeaveRequestParams';
 export * from './verifyAuditEventIntegrity200';
 export * from './workforcePriority';
 export * from './workforcePriorityCategory';

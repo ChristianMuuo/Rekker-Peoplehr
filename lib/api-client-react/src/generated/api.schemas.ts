@@ -679,6 +679,16 @@ status?: LeaveRequestStatus;
 employeeId?: string;
 };
 
+export type PreviewLeaveRequestParams = {
+employeeId: string;
+leaveType: string;
+startDate: string;
+endDate: string;
+halfDay?: boolean;
+};
+
+export type PreviewLeaveRequest200 = { [key: string]: unknown };
+
 export type ListLeaveBalancesParams = {
 employeeId?: string;
 /**

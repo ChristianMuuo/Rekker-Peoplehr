@@ -47,6 +47,8 @@ import type {
   ListLeaveLedgerParams,
   ListLeaveRequestsParams,
   PeopleOsOverview,
+  PreviewLeaveRequest200,
+  PreviewLeaveRequestParams,
   VerifyAuditEventIntegrity200
 } from './api.schemas';
 
@@ -1149,6 +1151,90 @@ export const useUpdateLeavePolicy = <TError = ErrorType<void>,
       > => {
       return useMutation(getUpdateLeavePolicyMutationOptions(options));
     }
+
+export const getPreviewLeaveRequestUrl = (params: PreviewLeaveRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/leave-preview?${stringifiedParams}` : `/api/leave-preview`
+}
+
+/**
+ * @summary Calculate scheduled leave days, eligibility and available balance before submission
+ */
+export const previewLeaveRequest = async (params: PreviewLeaveRequestParams, options?: Parameters<typeof customFetch>[1]): Promise<PreviewLeaveRequest200> => {
+
+  return customFetch<PreviewLeaveRequest200>(getPreviewLeaveRequestUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewLeaveRequestQueryKey = (params?: PreviewLeaveRequestParams,) => {
+    return [
+    `/api/leave-preview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getPreviewLeaveRequestQueryOptions = <TData = Awaited<ReturnType<typeof previewLeaveRequest>>, TError = ErrorType<void>>(params: PreviewLeaveRequestParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewLeaveRequest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPreviewLeaveRequestQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof previewLeaveRequest>>> = ({ signal }) => previewLeaveRequest(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof previewLeaveRequest>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type PreviewLeaveRequestQueryResult = NonNullable<Awaited<ReturnType<typeof previewLeaveRequest>>>
+export type PreviewLeaveRequestQueryError = ErrorType<void>
+
+
+/**
+ * @summary Calculate scheduled leave days, eligibility and available balance before submission
+ */
+
+export function usePreviewLeaveRequest<TData = Awaited<ReturnType<typeof previewLeaveRequest>>, TError = ErrorType<void>>(
+ params: PreviewLeaveRequestParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewLeaveRequest>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getPreviewLeaveRequestQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListLeaveBalancesUrl = (params?: ListLeaveBalancesParams,) => {
   const normalizedParams = new URLSearchParams();
