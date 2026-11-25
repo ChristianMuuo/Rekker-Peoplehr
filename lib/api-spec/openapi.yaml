@@ -714,6 +714,8 @@ components:
         submittedAt: { type: string, format: date-time }
         decidedAt: { type: ["string", "null"], format: date-time }
         isDemo: { type: boolean }
+        recommendationStatus: { type: string, enum: [not_assessed, recommended, not_recommended] }
+        recommendationComment: { type: [ "string", "null" ] }
     LeaveRequestInput:
       type: object
       required: [employeeId, leaveType, startDate, endDate, reason]
@@ -723,6 +725,7 @@ components:
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         reason: { type: string, minLength: 3, maxLength: 1000 }
+        halfDay: { type: boolean, default: false }
     LeaveAccrualMethod:
       type: string
       enum: [annual, monthly]
@@ -734,6 +737,9 @@ components:
         code: { type: string }
         name: { type: string }
         entitlementDays: { type: integer, minimum: 0 }
+        entitlementQuantity: { type: integer, minimum: 0 }
+        entitlementUnit: { type: string, enum: [days, weeks, months] }
+        needsLegalReview: { type: boolean }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
     LeavePolicyInput:
@@ -742,6 +748,8 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        entitlementQuantity: { type: integer, minimum: 0, maximum: 366 }
+        entitlementUnit: { type: string, enum: [days, weeks, months] }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
     LeavePolicyUpdate:
       type: object
@@ -749,6 +757,8 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        entitlementQuantity: { type: integer, minimum: 0, maximum: 366 }
+        entitlementUnit: { type: string, enum: [days, weeks, months] }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
     LeaveBalance:
