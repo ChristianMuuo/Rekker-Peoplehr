@@ -1,4 +1,4 @@
-// REKKER PeopleOS 10-Agent + Supervisor AI Intelligence Architecture
+// Rekker PeopleOS agent-role catalogue. Registry entries describe intended scope, not deployment status.
 
 import { peopleOsStore, calculateKenyaPayroll } from './mockStore';
 
@@ -31,7 +31,7 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
     tagline: 'StateGraph Intent Router & RBAC Guard',
     avatarColor: 'bg-red-700 text-white',
     description:
-      'Coordinates all 10 specialist HR intelligence agents, enforces role-based data boundaries, and gates high-impact actions for human signoff.',
+      'Coordinates intended role-specific workflows. Registry entries are a design catalogue and do not prove that every specialist is deployed.',
     sampleQueries: [
       'Give me an executive workforce intelligence briefing',
       'Calculate Kenya statutory deductions on KES 220,000',
@@ -108,9 +108,9 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   retention: {
     id: 'retention',
     name: 'Employee Retention Agent',
-    tagline: 'XGBoost Attrition & Burnout Early Warning',
+    tagline: 'Retention signals · roadmap',
     avatarColor: 'bg-orange-700 text-white',
-    description: 'Predicts attrition risk drivers with XGBoost + NLP sentiment analysis on workforce signals.',
+    description: 'Roadmap concept: review workforce retention signals. No individual attrition prediction is presented as live by this agent catalogue.',
     sampleQueries: [
       'Run attrition risk predictions and top retention drivers',
       'Scan employee feedback sentiment for burnout risk signals',
@@ -130,7 +130,7 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   compliance: {
     id: 'compliance',
     name: 'Compliance Monitoring Agent',
-    tagline: 'Kenya Employment Act & ODPC Privacy RAG',
+    tagline: 'Policy source Q&A · roadmap',
     avatarColor: 'bg-purple-700 text-white',
     description: 'Retrieves verified policy citations on Kenyan labor governance, ODPC privacy, and contract compliance.',
     sampleQueries: [
@@ -171,6 +171,7 @@ export interface ChatMessage {
   };
 }
 
+// Example-only demo simulator. Do not use this function as a live API fallback.
 export function processAgentQuery(query: string, selectedRole: AgentRole = 'supervisor'): ChatMessage {
   const lower = query.toLowerCase();
   let role: AgentRole = selectedRole;
