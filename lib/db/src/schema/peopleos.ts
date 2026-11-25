@@ -153,7 +153,20 @@ export const leavePoliciesTable = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     entitlementDays: integer("entitlement_days").notNull().default(0),
+    entitlementWeeks: integer("entitlement_weeks").notNull().default(0),
+    entitlementMonths: integer("entitlement_months").notNull().default(0),
+    sickFullPayDays: integer("sick_full_pay_days").notNull().default(0),
+    sickHalfPayDays: integer("sick_half_pay_days").notNull().default(0),
     accrualMethod: text("accrual_method").notNull().default("annual"),
+    minimumServiceMonths: integer("minimum_service_months").notNull().default(0),
+    certificateRequired: boolean("certificate_required").notNull().default(false),
+    paidPercentage: integer("paid_percentage").notNull().default(100),
+    jurisdiction: text("jurisdiction").notNull().default("KE"),
+    effectiveFrom: date("effective_from", { mode: "string" }).notNull().default("2026-01-01"),
+    effectiveTo: date("effective_to", { mode: "string" }),
+    sourceUrl: text("source_url").notNull().default(""),
+    verifiedOn: date("verified_on", { mode: "string" }).notNull().default("2026-11-25"),
+    needsLegalReview: boolean("needs_legal_review").notNull().default(true),
     active: boolean("active").notNull().default(true),
     createdByUserId: text("created_by_user_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -190,9 +203,13 @@ export const leaveRequestsTable = pgTable(
     startDate: date("start_date", { mode: "string" }).notNull(),
     endDate: date("end_date", { mode: "string" }).notNull(),
     days: integer("days").notNull(),
+    halfDay: boolean("half_day").notNull().default(false),
     reason: text("reason").notNull(),
     status: text("status").notNull().default("pending"),
     createdByUserId: text("created_by_user_id"),
+    recommendedByUserId: text("recommended_by_user_id"),
+    recommendedAt: timestamp("recommended_at", { withTimezone: true }),
+    recommendationJson: text("recommendation_json"),
     approverUserId: text("approver_user_id"),
     decisionComment: text("decision_comment"),
     submittedAt: timestamp("submitted_at", { withTimezone: true })
@@ -213,6 +230,74 @@ export const leaveRequestsTable = pgTable(
   ],
 );
 
+export const leaveLedgerTable = pgTable(
+  "peopleos_leave_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .references(() => employeesTable.id, { onDelete: "restrict" }),
+    leaveType: text("leave_type").notNull(),
+    requestId: uuid("request_id").references(() => leaveRequestsTable.id, { onDelete: "restrict" }),
+    entryType: text("entry_type").notNull(),
+    quantityQuarterDays: integer("quantity_quarter_days").notNull(),
+    effectiveDate: date("effective_date", { mode: "string" }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    note: text("note").notNull().default(""),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    isDemo: boolean("is_demo").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_ledger_org_idempotency_uq").on(
+      table.organizationId,
+      table.idempotencyKey,
+    ),
+    index("peopleos_leave_ledger_org_employee_idx").on(
+      table.organizationId,
+      table.employeeId,
+    ),
+    index("peopleos_leave_ledger_request_idx").on(table.requestId),
+  ],
+);
+
+export const leaveApprovalStepsTable = pgTable(
+  "peopleos_leave_approval_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => leaveRequestsTable.id, { onDelete: "cascade" }),
+    step: text("step").notNull(),
+    decision: text("decision").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
+    actorRole: text("actor_role").notNull(),
+    comment: text("comment").notNull().default(""),
+    advisoryJson: text("advisory_json"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_approval_request_step_uq").on(
+      table.requestId,
+      table.step,
+    ),
+    index("peopleos_leave_approval_org_time_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const auditEventsTable = pgTable(
   "peopleos_audit_events",
   {
@@ -226,6 +311,8 @@ export const auditEventsTable = pgTable(
     targetType: text("target_type").notNull(),
     targetId: text("target_id").notNull(),
     summary: text("summary").notNull(),
+    prevHash: text("prev_hash"),
+    hash: text("hash"),
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
