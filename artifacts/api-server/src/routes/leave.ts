@@ -1286,14 +1286,15 @@ router.get("/leave-preview", async (req, res): Promise<void> => {
         .reduce((total, request) => total + Math.round((request.halfDay ? 0.5 : request.days) * 4), 0);
       availableDays = daysFromQuarterDays(quarterBalance - reserved);
     } else {
-      const [stored] = await db.select({ quantity: leaveLedgerTable.quantityQuarterDays })
+      const storedRows = await db.select({ quantity: leaveLedgerTable.quantityQuarterDays })
         .from(leaveLedgerTable).where(and(
           eq(leaveLedgerTable.organizationId, membership.organizationId),
           eq(leaveLedgerTable.employeeId, employee.id),
           eq(leaveLedgerTable.leaveType, policy.code),
           gte(leaveLedgerTable.effectiveDate, `${year}-01-01`),
           lte(leaveLedgerTable.effectiveDate, `${year}-12-31`),
-        )).then(async (rows) => [{ quantity: rows.reduce((total, row) => total + row.quantity, 0) }]);
+        ));
+      const ledgerQuarterDays = storedRows.reduce((total, row) => total + row.quantity, 0);
       const pendingRows = await db.select({
         days: leaveRequestsTable.days,
         halfDay: leaveRequestsTable.halfDay,
@@ -1306,7 +1307,7 @@ router.get("/leave-preview", async (req, res): Promise<void> => {
         lte(leaveRequestsTable.startDate, `${year}-12-31`),
       ));
       const reservedQuarterDays = pendingRows.reduce((total, row) => total + (row.halfDay ? 2 : row.days * 4), 0);
-      availableDays = daysFromQuarterDays(stored?.quantity ?? 0 - reservedQuarterDays);
+      availableDays = daysFromQuarterDays(ledgerQuarterDays - reservedQuarterDays);
     }
     if (availableDays < requestedDays) warnings.push(`Only ${Math.max(0, availableDays)} annual leave day(s) are available before this request.`);
   }
