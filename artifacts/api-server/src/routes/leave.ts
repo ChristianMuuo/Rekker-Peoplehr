@@ -593,8 +593,14 @@ router.get("/leave/public-holidays", async (req, res): Promise<void> => {
       .filter((holiday) => holiday.organizationId === membership.organizationId)
       .filter((holiday) => !from || holiday.holidayDate >= from)
       .filter((holiday) => !to || holiday.holidayDate <= to)
-      .sort((a, b) => a.date.localeCompare(b.date));
-    res.json(items);
+      .sort((a, b) => a.holidayDate.localeCompare(b.holidayDate));
+    res.json(items.map((item) => ({
+      id: item.id,
+      date: item.holidayDate,
+      name: item.name,
+      sourceUrl: item.sourceUrl,
+      isGazetted: item.isGazetted,
+    })));
     return;
   }
 
@@ -646,7 +652,7 @@ router.post("/leave/public-holidays", async (req, res): Promise<void> => {
       res.status(409).json({ error: "A holiday is already configured for this date." });
       return;
     }
-    const created: DemoPublicHoliday = {
+    const created: (typeof phase2MemoryStore.publicHolidays)[number] = {
       id: `holiday-${crypto.randomUUID()}`,
       organizationId: membership.organizationId,
       holidayDate: date,
@@ -662,11 +668,17 @@ router.post("/leave/public-holidays", async (req, res): Promise<void> => {
       action: "public_holiday.created",
       targetType: "public_holiday",
       targetId: created.id,
-      summary: `Configured public holiday '${created.name}' for ${created.date}.`,
+      summary: `Configured public holiday '${created.name}' for ${created.holidayDate}.`,
       after: created,
       isDemo: true,
     });
-    res.status(201).json(created);
+    res.status(201).json({
+      id: created.id,
+      date: created.holidayDate,
+      name: created.name,
+      sourceUrl: created.sourceUrl,
+      isGazetted: created.isGazetted,
+    });
     return;
   }
 
