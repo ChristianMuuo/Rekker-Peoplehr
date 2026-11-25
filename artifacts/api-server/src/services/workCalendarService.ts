@@ -241,13 +241,18 @@ export function countCalendarWorkingDays(
   endIso: string,
   calendar: {
     workdays: number[];
+    halfWorkdays?: number[];
     holidays: Array<{ date: string; name: string }>;
   },
 ): { workingDays: number; excludedHolidayCount: number } {
   const workdaySet = new Set(calendar.workdays);
+  const halfWorkdaySet = new Set(calendar.halfWorkdays ?? []);
   const holidaySet = new Set(calendar.holidays.map((h) => h.date));
   const cursor = new Date(`${startIso}T00:00:00.000Z`);
   const final = new Date(`${endIso}T00:00:00.000Z`);
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(final.getTime()) || final < cursor) {
+    throw new Error("Invalid calendar date range.");
+  }
   let workingDays = 0;
   let excludedHolidayCount = 0;
 
@@ -258,7 +263,7 @@ export function countCalendarWorkingDays(
       if (holidaySet.has(iso)) {
         excludedHolidayCount += 1;
       } else {
-        workingDays += 1;
+        workingDays += halfWorkdaySet.has(weekday) ? 0.5 : 1;
       }
     }
     cursor.setUTCDate(cursor.getUTCDate() + 1);
