@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
   CreateLeavePolicyBody,
@@ -25,8 +25,23 @@ import {
   employeesTable,
   leavePoliciesTable,
   leaveRequestsTable,
+  leaveLedgerTable,
+  leaveApprovalStepsTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
+import {
+  KENYA_LEAVE_POLICY_DEFAULTS,
+  adviseOnLeave,
+  completedServiceMonths,
+  daysFromQuarterDays,
+  paternityWorkingDayEquivalent,
+  requestQuarterDays,
+  validateKenyaStatutoryFloor,
+} from "../services/leaveEngine";
+import {
+  ensureKenyaDefaultLeavePolicies,
+  ensureMonthlyAnnualLeaveAccrual,
+} from "../services/leavePolicyService";
 import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "./peopleos";
 import {
   countCalendarWorkingDays,
@@ -47,8 +62,121 @@ export interface DemoLeavePolicyItem {
   code: string;
   name: string;
   entitlementDays: number;
+  entitlementWeeks: number;
+  entitlementMonths: number;
+  sickFullPayDays: number;
+  sickHalfPayDays: number;
+  minimumServiceMonths: number;
+  certificateRequired: boolean;
+  paidPercentage: number;
+  jurisdiction: "KE";
+  sourceUrl: string;
+  verifiedOn: string;
+  needsLegalReview: boolean;
   accrualMethod: "annual" | "monthly";
   active: boolean;
+}
+
+interface DemoLeaveLedgerItem {
+  id: string;
+  organizationId: string;
+  employeeId: string;
+  leaveType: string;
+  requestId: string | null;
+  entryType: "accrual" | "deduction" | "adjustment" | "reversal" | "opening" | "expiry" | "carry_over";
+  quantityQuarterDays: number;
+  effectiveDate: string;
+  idempotencyKey: string;
+  note: string;
+  createdAt: Date;
+}
+
+export const DEMO_LEAVE_LEDGER: DemoLeaveLedgerItem[] = [];
+
+function addDaysIso(offset: number): string {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function ensureDemoKenyaDefaultPolicies(organizationId: string): void {
+  if (DEMO_LEAVE_POLICIES.some((policy) => policy.organizationId === organizationId)) return;
+  for (const policy of KENYA_LEAVE_POLICY_DEFAULTS) {
+    DEMO_LEAVE_POLICIES.push({
+      id: `demo-policy-${organizationId}-${policy.code}`,
+      organizationId,
+      code: policy.code,
+      name: policy.name,
+      entitlementDays: policy.entitlementDays,
+      entitlementWeeks: policy.entitlementWeeks,
+      entitlementMonths: policy.entitlementMonths,
+      sickFullPayDays: policy.sickFullPayDays,
+      sickHalfPayDays: policy.sickHalfPayDays,
+      minimumServiceMonths: policy.minimumServiceMonths,
+      certificateRequired: policy.certificateRequired,
+      paidPercentage: policy.paidPercentage,
+      jurisdiction: "KE",
+      sourceUrl: policy.sourceUrl,
+      verifiedOn: policy.verifiedOn,
+      needsLegalReview: policy.needsLegalReview,
+      accrualMethod: policy.accrualMethod,
+      active: true,
+    });
+  }
+}
+
+function appendDemoLedgerEntry(entry: Omit<DemoLeaveLedgerItem, "id" | "createdAt">): void {
+  if (DEMO_LEAVE_LEDGER.some((item) => item.organizationId === entry.organizationId && item.idempotencyKey === entry.idempotencyKey)) return;
+  DEMO_LEAVE_LEDGER.unshift({ ...entry, id: crypto.randomUUID(), createdAt: new Date() });
+}
+
+function ensureDemoLeaveLedger(organizationId: string): void {
+  ensureDemoKenyaDefaultPolicies(organizationId);
+  const year = new Date().getUTCFullYear();
+  const today = addDaysIso(0);
+  for (const employee of DEMO_EMPLOYEES_LIST) {
+    const startDate = employee.startDate;
+    const effectiveStart = startDate > `${year}-01-01` ? startDate : `${year}-01-01`;
+    for (let month = 1; month <= 12; month += 1) {
+      const effectiveDate = new Date(`${effectiveStart}T00:00:00.000Z`);
+      const requestedDay = effectiveDate.getUTCDate();
+      effectiveDate.setUTCDate(1);
+      effectiveDate.setUTCMonth(effectiveDate.getUTCMonth() + month);
+      const endOfMonth = new Date(Date.UTC(effectiveDate.getUTCFullYear(), effectiveDate.getUTCMonth() + 1, 0)).getUTCDate();
+      effectiveDate.setUTCDate(Math.min(requestedDay, endOfMonth));
+      const effectiveIso = effectiveDate.toISOString().slice(0, 10);
+      if (effectiveIso > today || effectiveIso.slice(0, 4) !== String(year)) break;
+      const annualPolicy = KENYA_LEAVE_POLICY_DEFAULTS.find((policy) => policy.code === "annual");
+      if (!annualPolicy) continue;
+      const quarterDays = Math.round((annualPolicy.entitlementDays * 4) / 12);
+      appendDemoLedgerEntry({
+        organizationId,
+        employeeId: employee.id,
+        leaveType: "annual",
+        requestId: null,
+        entryType: "accrual",
+        quantityQuarterDays: quarterDays,
+        effectiveDate: effectiveIso,
+        idempotencyKey: `accrual:${employee.id}:annual:${effectiveIso.slice(0, 7)}`,
+        note: "Monthly annual leave accrual (demo fixture).",
+      });
+    }
+  }
+  for (const request of DEMO_LEAVE_STORE) {
+    if (request.status !== "approved") continue;
+    appendDemoLedgerEntry({
+      organizationId,
+      employeeId: request.employeeId,
+      leaveType: request.leaveType,
+      requestId: request.id,
+      entryType: "deduction",
+      quantityQuarterDays: -Math.round(request.days * 4),
+      effectiveDate: dateOnly(request.startDate),
+      idempotencyKey: `approval:${request.id}`,
+      note: "Approved demo leave deduction.",
+    });
+  }
 }
 
 // Per-organization leave policies start empty by design (never prefilled with statutory amounts).
@@ -84,50 +212,50 @@ export interface DemoLeaveItem {
 
 export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
   {
-    id: "leave-001",
+    id: "leave-demo-approved",
     employeeId: "10000000-0000-4000-8000-000000000004",
-    employeeName: "Wanjiku Kimani",
+    employeeName: "Demo Employee 04",
     leaveType: "annual",
-    startDate: new Date("2026-03-02"),
-    endDate: new Date("2026-03-13"),
-    days: 10,
-    reason: "Annual rest and family leave",
+    startDate: new Date(addDaysIso(-34)),
+    endDate: new Date(addDaysIso(-25)),
+    days: 8,
+    reason: "Annual rest and personal time",
     status: "approved",
-    approverId: "10000000-0000-4000-8000-000000000007",
-    decisionComment: "Approved. Fleet coverage confirmed.",
-    submittedAt: new Date("2026-02-15T08:30:00Z"),
-    decidedAt: new Date("2026-02-16T10:00:00Z"),
+    approverId: "user_demo_hr_admin",
+    decisionComment: "Approved after team coverage review.",
+    submittedAt: new Date(Date.now() - 45 * 86400000),
+    decidedAt: new Date(Date.now() - 44 * 86400000),
     isDemo: true,
   },
   {
-    id: "leave-002",
+    id: "leave-demo-pending",
     employeeId: "10000000-0000-4000-8000-000000000006",
-    employeeName: "Brian Kiprotich",
+    employeeName: "Demo Employee 06",
     leaveType: "annual",
-    startDate: new Date("2026-03-20"),
-    endDate: new Date("2026-03-27"),
-    days: 6,
-    reason: "Professional certification exam study period",
+    startDate: new Date(addDaysIso(14)),
+    endDate: new Date(addDaysIso(19)),
+    days: 4,
+    reason: "Family commitment",
     status: "pending",
     approverId: null,
     decisionComment: null,
-    submittedAt: new Date("2026-03-01T11:45:00Z"),
+    submittedAt: new Date(Date.now() - 2 * 86400000),
     decidedAt: null,
     isDemo: true,
   },
   {
-    id: "leave-003",
+    id: "leave-demo-paternity",
     employeeId: "10000000-0000-4000-8000-000000000002",
-    employeeName: "Mwangi Kariuki",
-    leaveType: "parental",
-    startDate: new Date("2026-04-06"),
-    endDate: new Date("2026-04-17"),
+    employeeName: "Demo Employee 02",
+    leaveType: "paternity",
+    startDate: new Date(addDaysIso(28)),
+    endDate: new Date(addDaysIso(41)),
     days: 10,
-    reason: "Paternity leave under Employment Act 2007",
+    reason: "Paternity leave: statutory entitlement 2 weeks (10 working days on this 5-day schedule).",
     status: "pending",
     approverId: null,
     decisionComment: null,
-    submittedAt: new Date("2026-03-04T09:15:00Z"),
+    submittedAt: new Date(Date.now() - 1 * 86400000),
     decidedAt: null,
     isDemo: true,
   },
