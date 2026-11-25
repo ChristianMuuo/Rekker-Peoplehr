@@ -1642,6 +1642,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     res.status(503).json({ error: "PeopleOS organization is not initialized." });
     return;
   }
+  await ensureKenyaDefaultPolicies(membership.organizationId);
   const input = body.data;
   const startDate = dateOnly(input.startDate);
   const endDate = dateOnly(input.endDate);
@@ -1727,7 +1728,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     }
     const requestedDays = eventBased ? calendarDaysBetween(startDate, endDate) : days;
     const requestYearDays = eventBased
-      ? new Map([[Number(startDate.slice(0, 4)), requestedDays]])
+      ? calendarDaysByYear(startDate, endDate)
       : businessDaysByYear(startDate, endDate);
     const eventCap = eventBased ? eventEntitlementCalendarDays(policy, startDate) : policy.entitlementDays;
     for (const [year, requestDaysForYear] of requestYearDays) {
@@ -1743,7 +1744,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         (total, request) =>
           total +
           (eventBased
-            ? calendarDaysBetween(dateOnly(request.startDate), dateOnly(request.endDate))
+            ? calendarDaysForYear(dateOnly(request.startDate), dateOnly(request.endDate), year)
             : Math.max(
                 0,
                 businessDaysForYear(
@@ -1920,7 +1921,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     }
     const requestedDays = eventBased ? calendarDaysBetween(startDate, endDate) : days;
     const requestYearDays = eventBased
-      ? new Map([[Number(startDate.slice(0, 4)), requestedDays]])
+      ? calendarDaysByYear(startDate, endDate)
       : businessDaysByYear(startDate, endDate);
     const eventCap = eventBased ? eventEntitlementCalendarDays(policy, startDate) : policy.entitlementDays;
     for (const [year, requestDaysForYear] of requestYearDays) {
@@ -1931,7 +1932,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         (total, request) =>
           total +
           (eventBased
-            ? calendarDaysBetween(request.startDate, request.endDate)
+            ? calendarDaysForYear(request.startDate, request.endDate, year)
             : Math.max(
                 0,
                 businessDaysForYear(request.startDate, request.endDate, year) -
@@ -1949,6 +1950,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
               eq(leaveLedgerTable.organizationId, organization.id),
               eq(leaveLedgerTable.employeeId, employee.id),
               eq(leaveLedgerTable.leaveType, policy.code),
+              eq(leaveLedgerTable.leaveYear, year),
             ),
           );
         availableDays =
