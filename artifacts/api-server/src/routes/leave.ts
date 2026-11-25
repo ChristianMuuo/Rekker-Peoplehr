@@ -192,6 +192,32 @@ function ensureDemoLeaveLedger(organizationId: string): void {
 
 // Demo policies are seeded with a reviewable Kenya default pack on first access.
 export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] = [];
+
+interface DemoLeavePolicyVersion {
+  id: string;
+  organizationId: string;
+  policyId: string;
+  versionNumber: number;
+  snapshot: DemoLeavePolicyItem;
+  createdAt: Date;
+  changedByUserId: string;
+}
+export const DEMO_LEAVE_POLICY_VERSIONS: DemoLeavePolicyVersion[] = [];
+
+function appendDemoPolicyVersion(policy: DemoLeavePolicyItem, actorUserId: string): void {
+  const versionNumber = DEMO_LEAVE_POLICY_VERSIONS
+    .filter((version) => version.organizationId === policy.organizationId && version.policyId === policy.id)
+    .reduce((maxVersion, version) => Math.max(maxVersion, version.versionNumber), 0) + 1;
+  DEMO_LEAVE_POLICY_VERSIONS.unshift({
+    id: crypto.randomUUID(),
+    organizationId: policy.organizationId,
+    policyId: policy.id,
+    versionNumber,
+    snapshot: { ...policy },
+    createdAt: new Date(),
+    changedByUserId: actorUserId,
+  });
+}
 const approverRoles = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrManager,
