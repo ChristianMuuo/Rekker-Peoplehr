@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
   CreateLeavePolicyBody,
@@ -26,6 +26,8 @@ import {
   leavePoliciesTable,
   leaveRequestsTable,
   leaveLedgerTable,
+  leaveApprovalsTable,
+  leavePolicyVersionsTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
 import {
@@ -764,6 +766,14 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       })
       .returning();
     if (!created) return null;
+    await tx.insert(leavePolicyVersionsTable).values({
+      organizationId: membership.organizationId,
+      policyId: created.id,
+      version: 1,
+      snapshotJson: JSON.stringify(created),
+      effectiveFrom: created.effectiveFrom ?? new Date().toISOString().slice(0, 10),
+      changedByUserId: membership.userId,
+    });
     await tx.insert(auditEventsTable).values({
       organizationId: membership.organizationId,
       actorUserId: membership.userId,
@@ -881,6 +891,18 @@ router.patch(
       return;
     }
     const updated = await db.transaction(async (tx) => {
+      const [previousVersion] = await tx
+        .select({ version: leavePolicyVersionsTable.version })
+        .from(leavePolicyVersionsTable)
+        .where(
+          and(
+            eq(leavePolicyVersionsTable.organizationId, membership.organizationId),
+            eq(leavePolicyVersionsTable.policyId, params.data.policyId),
+          ),
+        )
+        .orderBy(desc(leavePolicyVersionsTable.version))
+        .limit(1);
+      const effectiveFrom = new Date().toISOString().slice(0, 10);
       const [policy] = await tx
         .update(leavePoliciesTable)
         .set({
@@ -890,6 +912,7 @@ router.patch(
           entitlementUnit,
           sourceUrl: floor.sourceUrl,
           needsLegalReview: true,
+          effectiveFrom,
           active: body.data.active,
         })
         .where(
@@ -900,6 +923,14 @@ router.patch(
         )
         .returning();
       if (!policy) return null;
+      await tx.insert(leavePolicyVersionsTable).values({
+        organizationId: membership.organizationId,
+        policyId: policy.id,
+        version: (previousVersion?.version ?? 0) + 1,
+        snapshotJson: JSON.stringify(policy),
+        effectiveFrom,
+        changedByUserId: membership.userId,
+      });
       await tx.insert(auditEventsTable).values({
         organizationId: membership.organizationId,
         actorUserId: membership.userId,
