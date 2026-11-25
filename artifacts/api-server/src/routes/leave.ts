@@ -1403,7 +1403,16 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         r.leaveType === policy.code &&
         (r.status === "pending" || r.status === "approved"),
     );
-    const requestYearDays = businessDaysByYear(startDate, endDate);
+    const eventBased = isEventBasedLeave(policy.code);
+    if (eventBased && input.halfDay) {
+      res.status(400).json({ error: "Event-based statutory leave is requested in full calendar periods, not half-day increments." });
+      return;
+    }
+    const requestedDays = eventBased ? calendarDaysBetween(startDate, endDate) : days;
+    const requestYearDays = eventBased
+      ? new Map([[Number(startDate.slice(0, 4)), requestedDays]])
+      : businessDaysByYear(startDate, endDate);
+    const eventCap = eventBased ? eventEntitlementCalendarDays(policy, startDate) : policy.entitlementDays;
     for (const [year, requestDaysForYear] of requestYearDays) {
       const leaveYearStart = `${year}-01-01`;
       const now = new Date();
@@ -1412,22 +1421,23 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         startDate.slice(0, 4) === String(year)
           ? new Date(Math.max(requestedStart.getTime(), now.getTime()))
           : new Date(`${leaveYearStart}T00:00:00.000Z`);
-      const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
-      const accrued = eventBased ? policy.entitlementDays : accruedDaysForYear(policy, year, asOf, demoEmp.startDate);
+      const accrued = eventBased ? eventCap : accruedDaysForYear(policy, year, asOf, demoEmp.startDate);
       const reservedDays = existingRequests.reduce(
         (total, request) =>
           total +
-          Math.max(
-            0,
-            businessDaysForYear(
-              dateOnly(request.startDate),
-              dateOnly(request.endDate),
-              year,
-            ) - (request.halfDay && dateOnly(request.startDate).slice(0, 4) === String(year) ? 0.5 : 0),
-          ),
+          (eventBased
+            ? calendarDaysBetween(dateOnly(request.startDate), dateOnly(request.endDate))
+            : Math.max(
+                0,
+                businessDaysForYear(
+                  dateOnly(request.startDate),
+                  dateOnly(request.endDate),
+                  year,
+                ) - (request.halfDay && dateOnly(request.startDate).slice(0, 4) === String(year) ? 0.5 : 0),
+              )),
         0,
       );
-      if (reservedDays + requestDaysForYear > accrued || requestDaysForYear > policy.entitlementDays) {
+      if (reservedDays + requestDaysForYear > accrued || requestDaysForYear > accrued) {
         res.status(409).json({
           error: `This request exceeds the available ${policy.name} balance for ${year}. ${Math.round((accrued - reservedDays) * 100) / 100} day(s) are available.`,
         });
@@ -1441,7 +1451,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       leaveType: policy.code,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
-      days,
+      days: requestedDays,
       reason: input.reason,
       status: "pending",
       approverId: null,
@@ -1455,8 +1465,6 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       recommendationComment: null,
       recommendationByUserId: null,
       recommendationAt: null,
-      recommendationStatus: "not_assessed",
-      recommendationComment: null,
     };
     DEMO_LEAVE_STORE.unshift(newReq);
     await recordAuditEvent({
@@ -1589,23 +1597,31 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
           eq(leaveRequestsTable.status, "pending"),
         ),
       );
-    const requestYearDays = businessDaysByYear(startDate, endDate);
+    const eventBased = isEventBasedLeave(policy.code);
+    if (eventBased && input.halfDay) {
+      return { kind: "event_half_day_not_supported" as const };
+    }
+    const requestedDays = eventBased ? calendarDaysBetween(startDate, endDate) : days;
+    const requestYearDays = eventBased
+      ? new Map([[Number(startDate.slice(0, 4)), requestedDays]])
+      : businessDaysByYear(startDate, endDate);
+    const eventCap = eventBased ? eventEntitlementCalendarDays(policy, startDate) : policy.entitlementDays;
     for (const [year, requestDaysForYear] of requestYearDays) {
-      const requestedDaysInYear =
-        requestDaysForYear -
-        (input.halfDay && startDate.slice(0, 4) === String(year) ? 0.5 : 0);
+      const requestedDaysInYear = eventBased
+        ? requestDaysForYear
+        : requestDaysForYear - (input.halfDay && startDate.slice(0, 4) === String(year) ? 0.5 : 0);
       const pendingReserved = existingRequests.reduce(
         (total, request) =>
           total +
-          Math.max(
-            0,
-            businessDaysForYear(request.startDate, request.endDate, year) -
-              (request.halfDay && request.startDate.slice(0, 4) === String(year) ? 0.5 : 0),
-          ),
+          (eventBased
+            ? calendarDaysBetween(request.startDate, request.endDate)
+            : Math.max(
+                0,
+                businessDaysForYear(request.startDate, request.endDate, year) -
+                  (request.halfDay && request.startDate.slice(0, 4) === String(year) ? 0.5 : 0),
+              )),
         0,
       );
-
-      const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
       let availableDays = 0;
       if (eventBased) {
         const usageEntries = await tx
@@ -1619,7 +1635,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
             ),
           );
         availableDays =
-          policy.entitlementDays -
+          eventCap -
           Math.max(0, -sumLeaveLedgerDays(usageEntries));
       } else {
         const entries = await tx
@@ -1637,7 +1653,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       }
 
       const remainingDays = Math.round((availableDays - pendingReserved) * 100) / 100;
-      if (pendingReserved + requestedDaysInYear > availableDays || requestedDaysInYear > policy.entitlementDays) {
+      if (pendingReserved + requestedDaysInYear > availableDays || requestedDaysInYear > eventCap) {
         return {
           kind: "insufficient_balance" as const,
           year,
@@ -1655,7 +1671,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         leaveType: policy.code,
         startDate,
         endDate,
-        days,
+        days: requestedDays,
         halfDay: input.halfDay ?? false,
         reason: input.reason,
         status: "pending",
@@ -1688,6 +1704,10 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     });
     return { kind: "created" as const, request: created };
   });
+  if (requestResult.kind === "event_half_day_not_supported") {
+    res.status(400).json({ error: "Event-based statutory leave is requested in full calendar periods, not half-day increments." });
+    return;
+  }
   if (requestResult.kind === "policy_unavailable") {
     res.status(400).json({
       error: "Choose an active leave type configured by your organization.",
