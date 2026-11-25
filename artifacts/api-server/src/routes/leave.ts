@@ -1631,7 +1631,7 @@ router.post(
       const availableDays = policy.code === "annual"
         ? Math.max(0, ledgerBalance - otherPending)
         : requestedDays;
-      const eligible = completedServiceMonths(employee.startDate, dateOnly(target.startDate)) >= policy.minimumServiceMonths;
+      const eligible = completedServiceMonths(dateOnly(employee.startDate), dateOnly(target.startDate)) >= policy.minimumServiceMonths;
       const advisor = adviseOnLeave({
         eligible,
         availableDays,
@@ -1763,7 +1763,7 @@ router.post(
       availableDays = Math.max(0, ledgerBalance - otherReservation);
       policyCompliant = availableDays >= requestedDays;
     }
-    const eligible = completedServiceMonths(employee.startDate, request.startDate) >= policy.minimumServiceMonths;
+    const eligible = completedServiceMonths(dateOnly(employee.startDate), dateOnly(request.startDate)) >= policy.minimumServiceMonths;
     const teamMembers = await db
       .select({ id: employeesTable.id })
       .from(employeesTable)
