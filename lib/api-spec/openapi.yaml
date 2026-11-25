@@ -542,8 +542,10 @@ components:
       enum: [employee, department_manager, hr_admin, hr_director, hr_manager, hr_officer, recruiter, payroll_officer, finance_manager, production_supervisor, warehouse_supervisor, sales_manager, system_admin, read_only_executive, auditor]
     AuthContext:
       type: object
-      required: [role, displayName, organizationName, canManagePeople, canApproveLeave, canViewAudit, canViewPayroll, canManageSettings, isDemo]
+      required: [userId, employeeId, role, displayName, organizationName, canManagePeople, canApproveLeave, canViewAudit, canViewPayroll, canManageSettings, isDemo]
       properties:
+        userId: { type: string }
+        employeeId: { type: [ "string", "null" ] }
         role: { $ref: "#/components/schemas/OrganizationRole" }
         displayName: { type: string }
         organizationName: { type: string }
