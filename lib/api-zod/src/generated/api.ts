@@ -367,7 +367,10 @@ export const ListLeaveRequestsResponseItem = zod.object({
   "decidedAt": zod.coerce.date().nullish(),
   "isDemo": zod.boolean(),
   "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
-  "recommendationComment": zod.string().nullish()
+  "recommendationComment": zod.string().nullish(),
+  "recommendationByUserId": zod.string().nullish(),
+  "recommendationAt": zod.coerce.date().nullish(),
+  "halfDay": zod.boolean().optional()
 })
 export const ListLeaveRequestsResponse = zod.array(ListLeaveRequestsResponseItem)
 
@@ -407,7 +410,10 @@ export const CreateLeaveRequestResponse = zod.object({
   "decidedAt": zod.coerce.date().nullish(),
   "isDemo": zod.boolean(),
   "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
-  "recommendationComment": zod.string().nullish()
+  "recommendationComment": zod.string().nullish(),
+  "recommendationByUserId": zod.string().nullish(),
+  "recommendationAt": zod.coerce.date().nullish(),
+  "halfDay": zod.boolean().optional()
 })
 
 
@@ -569,7 +575,10 @@ export const DecideLeaveRequestResponse = zod.object({
   "decidedAt": zod.coerce.date().nullish(),
   "isDemo": zod.boolean(),
   "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
-  "recommendationComment": zod.string().nullish()
+  "recommendationComment": zod.string().nullish(),
+  "recommendationByUserId": zod.string().nullish(),
+  "recommendationAt": zod.coerce.date().nullish(),
+  "halfDay": zod.boolean().optional()
 })
 
 
