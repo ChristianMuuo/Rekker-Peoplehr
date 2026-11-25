@@ -73,11 +73,11 @@ function getEnvVar(key: string): string | undefined {
 export function isStaticFallbackPermitted(): boolean {
   if (_testFallbackOverride !== null) return _testFallbackOverride;
   if (getEnvVar("VITE_PEOPLEOS_STRICT_API") === "true") return false;
-  if (getEnvVar("VITE_PEOPLEOS_DEMO_FALLBACK") === "true") return true;
-  if (getEnvVar("VITE_API_BASE_URL")) return false;
-  // Static preview fallback allowed in browser SPA deployments when explicitly non-strict
-  const mode = getEnvVar("MODE") ?? getEnvVar("NODE_ENV");
-  return mode !== "test";
+  if (getEnvVar("VITE_PEOPLEOS_DEMO_FALLBACK") === "true") {
+    return getEnvVar("MODE") !== "production" && getEnvVar("NODE_ENV") !== "production";
+  }
+  // Static fixtures are opt-in only; a missing API is surfaced as an error by default.
+  return false;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -416,7 +416,12 @@ export async function customFetch<T = unknown>(
   const allowFallback = isStaticFallbackPermitted();
 
   try {
-    const response = await fetch(input, { ...init, method, headers });
+    const response = await fetch(input, {
+      ...init,
+      method,
+      headers,
+      credentials: init.credentials ?? (_baseUrl ? "include" : "same-origin"),
+    });
     const contentType = response.headers.get("content-type") || "";
     const isHtmlResponse = contentType.includes("text/html");
 
