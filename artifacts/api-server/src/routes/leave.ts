@@ -31,6 +31,7 @@ import {
   publicHolidaysTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
+import { phase2MemoryStore } from "../services/phase2MemoryStore";
 import {
   entitlementToCalendarDays,
   recommendLeave,
@@ -124,17 +125,6 @@ const DEFAULT_KENYA_LEAVE_POLICIES = [
     policyMetadataJson: JSON.stringify({ section: "29A", verifyCurrentConsolidatedText: true }),
   },
 ];
-
-interface DemoPublicHoliday {
-  id: string;
-  organizationId: string;
-  date: string;
-  name: string;
-  sourceUrl: string | null;
-  isGazetted: boolean;
-}
-
-const DEMO_PUBLIC_HOLIDAYS: DemoPublicHoliday[] = [];
 
 function isValidIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -599,10 +589,10 @@ router.get("/leave/public-holidays", async (req, res): Promise<void> => {
   }
 
   if (!process.env.DATABASE_URL) {
-    const items = DEMO_PUBLIC_HOLIDAYS
+    const items = phase2MemoryStore.publicHolidays
       .filter((holiday) => holiday.organizationId === membership.organizationId)
-      .filter((holiday) => !from || holiday.date >= from)
-      .filter((holiday) => !to || holiday.date <= to)
+      .filter((holiday) => !from || holiday.holidayDate >= from)
+      .filter((holiday) => !to || holiday.holidayDate <= to)
       .sort((a, b) => a.date.localeCompare(b.date));
     res.json(items);
     return;
@@ -649,8 +639,8 @@ router.post("/leave/public-holidays", async (req, res): Promise<void> => {
   }
 
   if (!process.env.DATABASE_URL) {
-    const existing = DEMO_PUBLIC_HOLIDAYS.find(
-      (item) => item.organizationId === membership.organizationId && item.date === date,
+    const existing = phase2MemoryStore.publicHolidays.find(
+      (item) => item.organizationId === membership.organizationId && item.holidayDate === date,
     );
     if (existing) {
       res.status(409).json({ error: "A holiday is already configured for this date." });
@@ -659,12 +649,12 @@ router.post("/leave/public-holidays", async (req, res): Promise<void> => {
     const created: DemoPublicHoliday = {
       id: `holiday-${crypto.randomUUID()}`,
       organizationId: membership.organizationId,
-      date,
+      holidayDate: date,
       name,
       sourceUrl,
       isGazetted,
     };
-    DEMO_PUBLIC_HOLIDAYS.push(created);
+    phase2MemoryStore.publicHolidays.push(created);
     await recordAuditEvent({
       organizationId: membership.organizationId,
       actorUserId: membership.userId,
@@ -742,22 +732,22 @@ router.patch("/leave/public-holidays/:holidayId", async (req, res): Promise<void
     return;
   }
   if (!process.env.DATABASE_URL) {
-    const target = DEMO_PUBLIC_HOLIDAYS.find(
+    const target = phase2MemoryStore.publicHolidays.find(
       (item) => item.id === holidayId && item.organizationId === membership.organizationId,
     );
     if (!target) {
       res.status(404).json({ error: "Public holiday not found." });
       return;
     }
-    const duplicate = DEMO_PUBLIC_HOLIDAYS.some(
-      (item) => item.id !== holidayId && item.organizationId === membership.organizationId && item.date === date,
+    const duplicate = phase2MemoryStore.publicHolidays.some(
+      (item) => item.id !== holidayId && item.organizationId === membership.organizationId && item.holidayDate === date,
     );
     if (duplicate) {
       res.status(409).json({ error: "Another holiday is already configured for this date." });
       return;
     }
     const before = { ...target };
-    target.date = date;
+    target.holidayDate = date;
     target.name = name;
     target.sourceUrl = sourceUrl;
     target.isGazetted = body.isGazetted === true;
@@ -768,7 +758,7 @@ router.patch("/leave/public-holidays/:holidayId", async (req, res): Promise<void
       action: "public_holiday.updated",
       targetType: "public_holiday",
       targetId: target.id,
-      summary: `Updated public holiday '${target.name}' for ${target.date}.`,
+      summary: `Updated public holiday '${target.name}' for ${target.holidayDate}.`,
       before,
       after: target,
       isDemo: true,
@@ -824,14 +814,14 @@ router.delete("/leave/public-holidays/:holidayId", async (req, res): Promise<voi
     return;
   }
   if (!process.env.DATABASE_URL) {
-    const index = DEMO_PUBLIC_HOLIDAYS.findIndex(
+    const index = phase2MemoryStore.publicHolidays.findIndex(
       (item) => item.id === holidayId && item.organizationId === membership.organizationId,
     );
     if (index < 0) {
       res.status(404).json({ error: "Public holiday not found." });
       return;
     }
-    const [removed] = DEMO_PUBLIC_HOLIDAYS.splice(index, 1);
+    const [removed] = phase2MemoryStore.publicHolidays.splice(index, 1);
     await recordAuditEvent({
       organizationId: membership.organizationId,
       actorUserId: membership.userId,
