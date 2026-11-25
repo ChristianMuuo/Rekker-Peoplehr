@@ -1198,7 +1198,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Choose an active leave type configured by your organization." });
       return;
     }
-    if (completedServiceMonths(demoEmp.startDate, startDate) < policy.minimumServiceMonths) {
+    if (completedServiceMonths(dateOnly(demoEmp.startDate), startDate) < policy.minimumServiceMonths) {
       res.status(422).json({
         error: `${policy.name} requires at least ${policy.minimumServiceMonths} completed month(s) of service before the leave start date.`,
       });
