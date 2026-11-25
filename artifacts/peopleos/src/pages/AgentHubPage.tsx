@@ -94,7 +94,7 @@ export function AgentHubPage() {
         qc.invalidateQueries({ queryKey: ['ai-approvals'] });
       }
       qc.invalidateQueries({ queryKey: ['ai-telemetry'] });
-    } catch (error) {
+    } catch {
       const fallback = processAgentQuery(q, activeRole);
       setMessages((prev) => [
         ...prev,
