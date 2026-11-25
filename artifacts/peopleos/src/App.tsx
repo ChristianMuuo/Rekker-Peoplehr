@@ -373,7 +373,7 @@ function AppFrame() {
             <Route path="/ai" component={AgentHubPage} />
             <Route path="/agent-hub" component={AgentHubPage} />
             <Route path="/settings" component={SettingsPage} />
-            <Route path="/diagnostics" component={SettingsPage} />
+            <Route path="/diagnostics" component={DiagnosticsPage} />
             <Route path="/recruitment" component={RecruitmentPage} />
             <Route path="/onboarding" component={OnboardingPage} />
             <Route path="/attendance" component={AttendancePage} />
@@ -1081,8 +1081,92 @@ interface ReadyzPayload {
 }
 
 function SettingsPage() {
-  const [location] = useLocation();
-  const isDiagnosticsView = location === '/diagnostics';
+  const auth = useGetAuthContext();
+  const leavePolicies = useQuery({
+    queryKey: ['settings-leave-policies'],
+    queryFn: () => apiGet<Array<{
+      id: string;
+      code: string;
+      name: string;
+      entitlementDays: number;
+      entitlementWeeks?: number;
+      entitlementMonths?: number;
+      needsLegalReview?: boolean;
+      active: boolean;
+    }>>('/api/leave-policies'),
+    enabled: Boolean(auth.data?.canManageSettings || auth.data?.canManagePeople),
+  });
+  const policies = leavePolicies.data ?? [];
+  const legalReviewCount = policies.filter((policy) => policy.needsLegalReview).length;
+
+  return <div>
+    <PageHeading
+      eyebrow="Workspace / Configuration"
+      title="Settings"
+      description="Manage day-to-day PeopleOS configuration and find the controls appropriate to your role. Runtime probes live on the separate Diagnostics page."
+      action={<Link href="/diagnostics" className="btn btn-secondary" data-testid="link-settings-diagnostics"><Activity size={14} /> Open diagnostics</Link>}
+    />
+    {!auth.data?.canManageSettings && !auth.data?.canManagePeople ? (
+      <div className="surface p-5">
+        <EmptyState title="Settings access is restricted" message="Your role can use employee self-service, but workspace configuration is limited to authorized HR administrators." />
+      </div>
+    ) : <>
+      <section className="surface p-5 md:p-6" data-testid="section-settings-organization">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[.14em] text-stone-400">Workspace profile</p>
+            <h2 className="mt-1 font-display text-lg font-semibold text-stone-900">{auth.data?.organizationName ?? 'Organization workspace'}</h2>
+            <p className="mt-1 text-xs text-stone-500">Organization identity and timezone are supplied by the server configuration. Profile editing is not exposed in this build.</p>
+          </div>
+          <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-bold text-stone-600">{auth.data?.isDemo ? 'Demo workspace' : 'Live workspace'}</span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-stone-200 p-3"><p className="text-[10px] uppercase font-bold tracking-wide text-stone-400">Your role</p><p className="mt-1 text-sm font-semibold text-stone-800">{formatRoleLabel(auth.data?.role ?? '')}</p></div>
+          <div className="rounded-lg border border-stone-200 p-3"><p className="text-[10px] uppercase font-bold tracking-wide text-stone-400">Timezone</p><p className="mt-1 text-sm font-semibold text-stone-800">Africa/Nairobi (EAT)</p></div>
+          <div className="rounded-lg border border-stone-200 p-3"><p className="text-[10px] uppercase font-bold tracking-wide text-stone-400">Data mode</p><p className="mt-1 text-sm font-semibold text-stone-800">{auth.data?.isDemo ? 'Synthetic demo records' : 'Connected workspace records'}</p></div>
+        </div>
+      </section>
+
+      <section className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="surface p-5" data-testid="section-settings-leave">
+          <div className="flex items-center justify-between gap-3">
+            <div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-stone-400">People operations</p><h2 className="mt-1 font-display text-lg font-semibold text-stone-900">Leave policies &amp; calendars</h2></div>
+            <CalendarDays size={20} className="text-[#C71D1D]" />
+          </div>
+          {leavePolicies.isLoading ? <div className="skeleton mt-4 h-16" /> : leavePolicies.isError ? (
+            <p className="mt-3 text-xs text-red-700">Leave policy configuration could not be loaded. Check the backend connection.</p>
+          ) : (
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <div><p className="font-display text-2xl font-semibold text-stone-900">{policies.filter((policy) => policy.active).length}</p><p className="text-xs text-stone-500">active leave policies</p><p className="mt-1 text-[11px] text-stone-500">{legalReviewCount} policy record(s) flagged for legal review</p></div>
+              <Link href="/leave" className="btn btn-secondary min-h-9 px-3 text-xs" data-testid="link-settings-leave">Open leave management <ArrowRight size={14} /></Link>
+            </div>
+          )}
+          <p className="mt-4 text-[11px] leading-5 text-stone-500">Statutory defaults are starting configuration only. HR must confirm the effective policy pack with Kenyan employment counsel before production use.</p>
+        </div>
+
+        <div className="surface p-5" data-testid="section-settings-access">
+          <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-stone-400">Security</p><h2 className="mt-1 font-display text-lg font-semibold text-stone-900">Access &amp; diagnostics</h2></div><ShieldCheck size={20} className="text-[#C71D1D]" /></div>
+          <p className="mt-3 text-xs leading-5 text-stone-500">Sign-in provider, session readiness, database health, API configuration and integration probes are read-only diagnostics. Credentials are managed through approved server environment settings, never in the browser.</p>
+          <Link href="/diagnostics" className="btn btn-secondary mt-4 min-h-9 px-3 text-xs" data-testid="link-settings-security">Review system health <ArrowRight size={14} /></Link>
+        </div>
+
+        <div className="surface p-5" data-testid="section-settings-notifications">
+          <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-stone-400">Notifications</p><h2 className="mt-1 font-display text-lg font-semibold text-stone-900">Delivery channels</h2></div><Bell size={20} className="text-[#C71D1D]" /></div>
+          <p className="mt-3 text-xs leading-5 text-stone-500">Approval queues are available in the workspace. Email delivery preferences and provider-backed notification configuration are not yet exposed as editable settings.</p>
+          <Link href="/approvals" className="btn btn-secondary mt-4 min-h-9 px-3 text-xs" data-testid="link-settings-approvals">Open approvals inbox <ArrowRight size={14} /></Link>
+        </div>
+
+        <div className="surface p-5" data-testid="section-settings-privacy">
+          <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-stone-400">Data governance</p><h2 className="mt-1 font-display text-lg font-semibold text-stone-900">Privacy &amp; audit trail</h2></div><FileText size={20} className="text-[#C71D1D]" /></div>
+          <p className="mt-3 text-xs leading-5 text-stone-500">Leave reasons and medical certificates require restricted access. Audit history is available to authorized roles; retention and data-subject workflows require final policy configuration.</p>
+          <Link href="/audit" className="btn btn-secondary mt-4 min-h-9 px-3 text-xs" data-testid="link-settings-audit">Open audit trail <ArrowRight size={14} /></Link>
+        </div>
+      </section>
+    </>}
+  </div>;
+}
+
+function DiagnosticsPage() {
   const auth = useGetAuthContext();
   const provider = useGetAgentProviderStatus();
   const canInspectDiagnostics = Boolean(auth.data?.canManageSettings || auth.data?.canViewAudit);
@@ -1116,9 +1200,9 @@ function SettingsPage() {
 
   return <div>
     <PageHeading
-      eyebrow={isDiagnosticsView ? 'Operations / System health' : 'Workspace / Configuration'}
-      title={isDiagnosticsView ? 'System Diagnostics' : 'Settings & Diagnostics'}
-      description="Role access, runtime readiness, subsystem telemetry, integration registry, and security controls for Rekker PeopleOS."
+      eyebrow="Operations / System health"
+      title="System Diagnostics"
+      description="Live dependency probes, runtime readiness, integration connectivity, and role enforcement. Settings are managed on the separate Settings page."
       action={canInspectDiagnostics ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
     />
     {!canInspectDiagnostics ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect workspace configuration and system diagnostics." /></div> : <>
