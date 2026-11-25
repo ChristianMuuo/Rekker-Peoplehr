@@ -179,7 +179,7 @@ function ensureDemoLeaveLedger(organizationId: string): void {
   }
 }
 
-// Per-organization leave policies start empty by design (never prefilled with statutory amounts).
+// Demo policies are seeded with a reviewable Kenya default pack on first access.
 export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] = [];
 const approverRoles = [
   PEOPLEOS_ROLES.hrAdmin,
@@ -231,7 +231,7 @@ function policyStatutoryFields(
     minimumServiceMonths: numeric("minimumServiceMonths", defaults?.minimumServiceMonths ?? 0),
     certificateRequired: boolean("certificateRequired", defaults?.certificateRequired ?? false),
     paidPercentage: numeric("paidPercentage", defaults?.paidPercentage ?? 100),
-    effectiveFrom: typeof raw.effectiveFrom === "string" ? raw.effectiveFrom : "2026-01-01",
+    effectiveFrom: typeof raw.effectiveFrom === "string" ? raw.effectiveFrom : `${new Date().getUTCFullYear()}-01-01`,
     effectiveTo: typeof raw.effectiveTo === "string" ? raw.effectiveTo : null,
     sourceUrl: typeof raw.sourceUrl === "string" ? raw.sourceUrl : defaults?.sourceUrl ?? "",
     verifiedOn: typeof raw.verifiedOn === "string" ? raw.verifiedOn : new Date().toISOString().slice(0, 10),
@@ -562,7 +562,20 @@ router.get("/leave-policies", async (req, res): Promise<void> => {
             code: policy.code,
             name: policy.name,
             entitlementDays: policy.entitlementDays,
+            entitlementWeeks: policy.entitlementWeeks,
+            entitlementMonths: policy.entitlementMonths,
+            sickFullPayDays: policy.sickFullPayDays,
+            sickHalfPayDays: policy.sickHalfPayDays,
             accrualMethod: policy.accrualMethod,
+            minimumServiceMonths: policy.minimumServiceMonths,
+            certificateRequired: policy.certificateRequired,
+            paidPercentage: policy.paidPercentage,
+            jurisdiction: policy.jurisdiction,
+            effectiveFrom: policy.effectiveFrom,
+            effectiveTo: policy.effectiveTo,
+            sourceUrl: policy.sourceUrl,
+            verifiedOn: policy.verifiedOn,
+            needsLegalReview: policy.needsLegalReview,
             active: policy.active,
           })),
       ),
