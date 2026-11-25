@@ -302,6 +302,67 @@ paths:
                   $ref: "#/components/schemas/LeaveBalance"
         "403":
           description: Employee is outside the user's permitted scope
+  /leave-requests/{requestId}/recommendation:
+    post:
+      operationId: recommendLeaveRequest
+      tags: [leave]
+      summary: Record manager recommendation on a leave request
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaveRecommendationInput"
+      responses:
+        "200":
+          description: Recommendation saved with explanation and audit record
+        "403":
+          description: User cannot recommend this request
+        "409":
+          description: Request is not awaiting recommendation
+  /leave-requests/{requestId}/cancel:
+    post:
+      operationId: cancelLeaveRequest
+      tags: [leave]
+      summary: Cancel an approved request and post a reversing ledger entry
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Request cancelled and leave ledger reversed
+        "403":
+          description: User cannot cancel this request
+        "409":
+          description: Request is not currently approved
+  /leave-ledger:
+    get:
+      operationId: listLeaveLedger
+      tags: [leave]
+      summary: List signed leave ledger entries visible to the signed-in user
+      parameters:
+        - name: employeeId
+          in: query
+          schema: { type: string }
+        - name: leaveType
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Append-only leave ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaveLedgerEntry"
   /leave-requests/{requestId}/decision:
     post:
       operationId: decideLeaveRequest
@@ -555,7 +616,7 @@ components:
         isDemo: { type: boolean }
     LeaveRequestStatus:
       type: string
-      enum: [pending, approved, rejected, cancelled]
+      enum: [pending, recommended, approved, rejected, cancelled]
     PeopleOsOverview:
       type: object
       required: [dataMode, stats, departments, monthlyHeadcount, priorities]
@@ -707,8 +768,14 @@ components:
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         days: { type: number }
+        halfDay: { type: boolean }
         reason: { type: string }
         status: { $ref: "#/components/schemas/LeaveRequestStatus" }
+        recommendationLabel: { type: [ "string", "null" ] }
+        recommendationSuggestion: { type: [ "string", "null" ] }
+        recommendationReasons:
+          type: array
+          items: { type: string }
         approverId: { type: ["string", "null"] }
         decisionComment: { type: ["string", "null"] }
         submittedAt: { type: string, format: date-time }
@@ -723,6 +790,8 @@ components:
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         reason: { type: string, minLength: 3, maxLength: 1000 }
+        halfDay: { type: boolean, default: false }
+        certificateReference: { type: [ "string", "null" ], maxLength: 300 }
     LeaveAccrualMethod:
       type: string
       enum: [annual, monthly]
@@ -733,22 +802,51 @@ components:
         id: { type: string }
         code: { type: string }
         name: { type: string }
-        entitlementDays: { type: integer, minimum: 0 }
+        entitlementDays: { type: number, minimum: 0 }
+        entitlementWeeks: { type: number, minimum: 0 }
+        entitlementMonths: { type: number, minimum: 0 }
+        sickFullPayDays: { type: integer, minimum: 0 }
+        sickHalfPayDays: { type: integer, minimum: 0 }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
+        minimumServiceMonths: { type: integer, minimum: 0 }
+        certificateRequired: { type: boolean }
+        paidPercentage: { type: integer, minimum: 0, maximum: 100 }
+        jurisdiction: { type: string, enum: [KE] }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: [ "string", "null" ], format: date }
+        sourceUrl: { type: string }
+        verifiedOn: { type: string, format: date }
+        needsLegalReview: { type: boolean }
         active: { type: boolean }
     LeavePolicyInput:
       type: object
       required: [name, entitlementDays, accrualMethod]
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
-        entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        entitlementDays: { type: number, minimum: 0, maximum: 366 }
+        entitlementWeeks: { type: number, minimum: 0 }
+        entitlementMonths: { type: number, minimum: 0 }
+        sickFullPayDays: { type: integer, minimum: 0 }
+        sickHalfPayDays: { type: integer, minimum: 0 }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
+        minimumServiceMonths: { type: integer, minimum: 0 }
+        certificateRequired: { type: boolean }
+        paidPercentage: { type: integer, minimum: 0, maximum: 100 }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: [ "string", "null" ], format: date }
+        sourceUrl: { type: string }
+        verifiedOn: { type: string, format: date }
+        needsLegalReview: { type: boolean }
     LeavePolicyUpdate:
       type: object
       required: [name, entitlementDays, accrualMethod, active]
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
-        entitlementDays: { type: integer, minimum: 0, maximum: 366 }
+        entitlementDays: { type: number, minimum: 0, maximum: 366 }
+        entitlementWeeks: { type: number, minimum: 0 }
+        entitlementMonths: { type: number, minimum: 0 }
+        sickFullPayDays: { type: integer, minimum: 0 }
+        sickHalfPayDays: { type: integer, minimum: 0 }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
     LeaveBalance:
@@ -760,13 +858,37 @@ components:
         leaveType: { type: string }
         leaveTypeName: { type: string }
         year: { type: integer }
-        entitlementDays: { type: integer }
-        accruedDays: { type: integer }
-        usedDays: { type: integer }
-        pendingDays: { type: integer }
-        remainingDays: { type: integer }
+        entitlementDays: { type: number }
+        entitlementWeeks: { type: number }
+        accruedDays: { type: number }
+        usedDays: { type: number }
+        pendingDays: { type: number }
+        remainingDays: { type: number }
         accrualMethod: { $ref: "#/components/schemas/LeaveAccrualMethod" }
         active: { type: boolean }
+        statutoryUnit: { type: string, enum: [days, weeks, months] }
+        statutoryEntitlementLabel: { type: string }
+        ledgerEntryCount: { type: integer }
+    LeaveRecommendationInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [recommend, not_recommend] }
+        comment: { type: [ "string", "null" ], maxLength: 1000 }
+    LeaveLedgerEntry:
+      type: object
+      required: [id, employeeId, leaveType, entryType, quantityQuarterDays, quantityDays, effectiveDate, note, createdAt]
+      properties:
+        id: { type: string }
+        employeeId: { type: string }
+        leaveType: { type: string }
+        requestId: { type: [ "string", "null" ] }
+        entryType: { type: string, enum: [accrual, deduction, adjustment, reversal, carry_over, expiry, opening] }
+        quantityQuarterDays: { type: integer }
+        quantityDays: { type: number }
+        effectiveDate: { type: string, format: date }
+        note: { type: string }
+        createdAt: { type: string, format: date-time }
     LeaveDecisionInput:
       type: object
       required: [decision]
