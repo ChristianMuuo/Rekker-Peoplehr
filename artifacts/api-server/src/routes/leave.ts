@@ -27,6 +27,7 @@ import {
   leaveRequestsTable,
   leaveLedgerTable,
   leaveApprovalStepsTable,
+  leavePolicyVersionsTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
 import {
@@ -611,7 +612,20 @@ router.get("/leave-policies", async (req, res): Promise<void> => {
         code: policy.code,
         name: policy.name,
         entitlementDays: policy.entitlementDays,
+        entitlementWeeks: policy.entitlementWeeks,
+        entitlementMonths: policy.entitlementMonths,
+        sickFullPayDays: policy.sickFullPayDays,
+        sickHalfPayDays: policy.sickHalfPayDays,
         accrualMethod: policy.accrualMethod,
+        minimumServiceMonths: policy.minimumServiceMonths,
+        certificateRequired: policy.certificateRequired,
+        paidPercentage: policy.paidPercentage,
+        jurisdiction: policy.jurisdiction,
+        effectiveFrom: policy.effectiveFrom,
+        effectiveTo: policy.effectiveTo,
+        sourceUrl: policy.sourceUrl,
+        verifiedOn: policy.verifiedOn,
+        needsLegalReview: policy.needsLegalReview,
         active: policy.active,
       })),
     ),
@@ -744,6 +758,15 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       })
       .returning();
     if (!created) return null;
+    await tx.insert(leavePolicyVersionsTable).values({
+      organizationId: membership.organizationId,
+      policyId: created.id,
+      versionNumber: 1,
+      snapshotJson: JSON.stringify(created),
+      effectiveFrom: created.effectiveFrom,
+      effectiveTo: created.effectiveTo,
+      changedByUserId: membership.userId,
+    });
     await recordAuditEvent({
       organizationId: membership.organizationId,
       actorUserId: membership.userId,
@@ -879,6 +902,24 @@ router.patch(
         )
         .returning();
       if (!policy) return null;
+      const [latestVersion] = await tx
+        .select({ versionNumber: leavePolicyVersionsTable.versionNumber })
+        .from(leavePolicyVersionsTable)
+        .where(and(
+          eq(leavePolicyVersionsTable.organizationId, membership.organizationId),
+          eq(leavePolicyVersionsTable.policyId, policy.id),
+        ))
+        .orderBy(desc(leavePolicyVersionsTable.versionNumber))
+        .limit(1);
+      await tx.insert(leavePolicyVersionsTable).values({
+        organizationId: membership.organizationId,
+        policyId: policy.id,
+        versionNumber: (latestVersion?.versionNumber ?? 0) + 1,
+        snapshotJson: JSON.stringify(policy),
+        effectiveFrom: policy.effectiveFrom,
+        effectiveTo: policy.effectiveTo,
+        changedByUserId: membership.userId,
+      });
       await recordAuditEvent({
         organizationId: membership.organizationId,
         actorUserId: membership.userId,
