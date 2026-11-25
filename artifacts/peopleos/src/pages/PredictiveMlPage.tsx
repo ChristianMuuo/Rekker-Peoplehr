@@ -63,23 +63,23 @@ export function PredictiveMlPage() {
     lastScoredResult?.analyticsMode ||
     activeResult?.analyticsMode ||
     mlOverview.data?.analyticsMode ||
-    'ACTUAL_DATA';
+    'UNVERIFIED';
 
   const dataProvenance =
     lastScoredResult?.dataProvenance ||
     activeResult?.dataProvenance ||
-    'live_tenant_data';
+    'unverified';
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">Predictive Machine Learning Engine</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">ML capability preview</p>
           <h1 className="font-display text-3xl font-semibold tracking-[-.035em] text-stone-900">
             Workforce ML Intelligence & Governance
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
-            Python Scikit-learn & XGBoost models with calibrated uncertainty intervals, explainable feature attributions, and audited data provenance.
+            Inspect the ML service and its returned metadata. A trained model, production data provenance, evaluation metrics and fairness evidence are not assumed when they are absent.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -98,6 +98,7 @@ export function PredictiveMlPage() {
         </div>
       </div>
 
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900" data-testid="banner-ml-preview"><strong>Preview status.</strong> Model cards, training data, evaluation metrics and tenant data provenance must be returned by the service before any performance or production-readiness claim is displayed. Missing metrics are shown as not evaluated.</div>
       {/* Model Governance & Transparency Banner */}
       <div className="flex items-start gap-3 rounded-2xl border border-stone-200 bg-white p-4 text-xs shadow-xs">
         <ShieldCheck size={18} className="mt-0.5 shrink-0 text-red-700" />
@@ -116,7 +117,7 @@ export function PredictiveMlPage() {
               </span>
             </p>
             <span className="font-mono text-[11px] text-stone-400">
-              Python 3.14 · Scikit-learn & XGBoost · v1.2.0
+              {activeResult?.modelName ?? activeResult?.modelVersion ?? 'Model metadata not verified'}
             </span>
           </div>
           <p className="mt-1 text-stone-600">
@@ -129,12 +130,12 @@ export function PredictiveMlPage() {
       {/* Model Selector Tabs */}
       <div className="flex flex-wrap gap-2">
         {[
-          ['attrition', 'XGBoost Attrition Risk'],
-          ['workforce_forecast', 'Ridge Demand Forecast'],
-          ['sentiment', 'NLP Burnout & Sentiment'],
-          ['skills_gap', 'Competency Skills-Gap'],
-          ['payroll_anomalies', 'IsolationForest Payroll Anomalies'],
-          ['attendance_anomalies', 'Attendance Outlier Detection'],
+          ['attrition', 'Attrition scoring (model unverified)'],
+          ['workforce_forecast', 'Workforce forecast (model unverified)'],
+          ['sentiment', 'Sentiment analysis (method unverified)'],
+          ['skills_gap', 'Skills-gap analysis'],
+          ['payroll_anomalies', 'Payroll anomaly analysis'],
+          ['attendance_anomalies', 'Attendance anomaly analysis'],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -156,10 +157,10 @@ export function PredictiveMlPage() {
                 <div>
                   <h3 className="font-display text-base font-bold text-stone-900">Attrition Risk Distribution</h3>
                   <p className="text-xs text-stone-500">
-                    CV ROC-AUC: <span className="font-bold text-emerald-700">{activeResult?.evaluationMetrics?.cvRocAuc ?? '0.8400'}</span> · F1: {activeResult?.evaluationMetrics?.cvF1Score ?? '0.7800'}
+                    CV ROC-AUC: <span className="font-bold text-stone-700">{typeof activeResult?.evaluationMetrics?.cvRocAuc === 'number' ? activeResult.evaluationMetrics.cvRocAuc.toFixed(4) : 'Not evaluated'}</span> · F1: {typeof activeResult?.evaluationMetrics?.cvF1Score === 'number' ? activeResult.evaluationMetrics.cvF1Score.toFixed(4) : 'Not evaluated'}
                   </p>
                 </div>
-                <span className="rounded bg-stone-100 px-2 py-0.5 font-mono text-[10px]">XGBClassifier</span>
+                <span className="rounded bg-stone-100 px-2 py-0.5 font-mono text-[10px]">{activeResult?.modelName ?? 'Model not verified'}</span>
               </div>
               {(activeResult?.predictions?.length ?? 0) > 0 ? (
                 <div className="h-64">
@@ -176,7 +177,7 @@ export function PredictiveMlPage() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center text-xs text-stone-400">
                   <Activity size={28} className="mb-2 text-stone-300" />
-                  <p>Click &ldquo;Run attrition Inference&rdquo; to execute Python XGBoost model on tenant data.</p>
+                  <p>Run inference to check service availability. Results are displayed only when the API returns them with verifiable model and data metadata.</p>
                 </div>
               )}
             </div>
