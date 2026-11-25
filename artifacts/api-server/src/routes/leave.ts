@@ -173,6 +173,9 @@ const approverRoles = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrManager,
   PEOPLEOS_ROLES.systemAdmin,
+];
+const recommenderRoles = [
+  ...approverRoles,
   PEOPLEOS_ROLES.departmentManager,
 ];
 const adminRoles: readonly string[] = [
@@ -199,6 +202,9 @@ export interface DemoLeaveItem {
   recommendationStatus?: "not_assessed" | "recommended" | "not_recommended";
   recommendationComment?: string | null;
   halfDay?: boolean;
+  createdByUserId?: string | null;
+  recommendationByUserId?: string | null;
+  recommendationAt?: Date | null;
 }
 
 function demoDateOffset(offsetDays: number, hour = 9): Date {
@@ -467,6 +473,7 @@ async function serializeRequests(
     isDemo: request.isDemo,
     recommendationStatus: (request.recommendationStatus ?? "not_assessed") as "not_assessed" | "recommended" | "not_recommended",
     recommendationComment: request.recommendationComment,
+    halfDay: request.halfDay ?? false,
   }));
 }
 
@@ -1219,6 +1226,10 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
   const input = body.data;
   const startDate = dateOnly(input.startDate);
   const endDate = dateOnly(input.endDate);
+  if (startDate < new Date().toISOString().slice(0, 10)) {
+    res.status(400).json({ error: "Leave requests cannot start in the past." });
+    return;
+  }
   if (endDate < startDate) {
     res.status(400).json({ error: "End date must be on or after the start date." });
     return;
@@ -1263,6 +1274,14 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       });
       return;
     }
+    if (policy.code === "sick" && completedServiceMonths(demoEmp.startDate, new Date()) < 2) {
+      res.status(422).json({
+        error: "Sick leave under Employment Act, 2007 section 30 is available after two consecutive months of service.",
+        code: "SICK_LEAVE_MINIMUM_SERVICE_NOT_MET",
+        sourceUrl: KENYA_EMPLOYMENT_ACT_SOURCE,
+      });
+      return;
+    }
     const overlap = DEMO_LEAVE_STORE.some(
       (r) =>
         r.employeeId === demoEmp.id &&
@@ -1291,20 +1310,24 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
         startDate.slice(0, 4) === String(year)
           ? new Date(Math.max(requestedStart.getTime(), now.getTime()))
           : new Date(`${leaveYearStart}T00:00:00.000Z`);
-      const accrued = accruedDaysForYear(policy, year, asOf);
+      const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
+      const accrued = eventBased ? policy.entitlementDays : accruedDaysForYear(policy, year, asOf, demoEmp.startDate);
       const reservedDays = existingRequests.reduce(
         (total, request) =>
           total +
-          businessDaysForYear(
-            dateOnly(request.startDate),
-            dateOnly(request.endDate),
-            year,
+          Math.max(
+            0,
+            businessDaysForYear(
+              dateOnly(request.startDate),
+              dateOnly(request.endDate),
+              year,
+            ) - (request.halfDay && dateOnly(request.startDate).slice(0, 4) === String(year) ? 0.5 : 0),
           ),
         0,
       );
-      if (reservedDays + requestDaysForYear > accrued) {
+      if (reservedDays + requestDaysForYear > accrued || requestDaysForYear > policy.entitlementDays) {
         res.status(409).json({
-          error: `This request exceeds the available ${policy.name} balance for ${year}. ${accrued - reservedDays} day(s) are available.`,
+          error: `This request exceeds the available ${policy.name} balance for ${year}. ${Math.round((accrued - reservedDays) * 100) / 100} day(s) are available.`,
         });
         return;
       }
@@ -1325,6 +1348,11 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
       decidedAt: null,
       isDemo: true,
       halfDay: input.halfDay ?? false,
+      createdByUserId: membership.userId,
+      recommendationStatus: "not_assessed",
+      recommendationComment: null,
+      recommendationByUserId: null,
+      recommendationAt: null,
       recommendationStatus: "not_assessed",
       recommendationComment: null,
     };
@@ -1343,10 +1371,6 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
     return;
   }
 
-  if (startDate < new Date().toISOString().slice(0, 10)) {
-    res.status(400).json({ error: "Leave requests cannot start in the past." });
-    return;
-  }
   const [employee] = await db
     .select()
     .from(employeesTable)
@@ -1579,7 +1603,7 @@ router.post("/leave-requests", async (req, res): Promise<void> => {
 });
 
 router.get("/approvals", async (req, res): Promise<void> => {
-  const membership = await requireRoles(req, res, approverRoles);
+  const membership = await requireRoles(req, res, recommenderRoles);
   if (!membership) return;
   if (!process.env.DATABASE_URL) {
     const pending = DEMO_LEAVE_STORE.filter((r) => r.status === "pending");
