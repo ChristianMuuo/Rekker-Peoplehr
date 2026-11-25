@@ -291,17 +291,117 @@ function businessDaysByYear(start: string, end: string): Map<number, number> {
   return days;
 }
 
+function addMonthsClamped(date: Date, months: number): Date {
+  const targetMonth = date.getUTCMonth() + months;
+  const result = new Date(Date.UTC(date.getUTCFullYear(), targetMonth, 1));
+  const lastDay = new Date(Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0)).getUTCDate();
+  result.setUTCDate(Math.min(date.getUTCDate(), lastDay));
+  return result;
+}
+
+function completedServiceMonths(startDate: string, asOf: Date): number {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  if (start.getTime() > asOf.getTime()) return 0;
+  let months =
+    (asOf.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+    asOf.getUTCMonth() - start.getUTCMonth();
+  if (addMonthsClamped(start, months).getTime() > asOf.getTime()) months -= 1;
+  return Math.max(0, months);
+}
+
 function accruedDaysForYear(
-  policy: { entitlementDays: number; accrualMethod: string },
+  policy: { code?: string; entitlementDays: number; accrualMethod: string },
   year: number,
   asOf: Date,
+  employeeStartDate = `${year}-01-01`,
 ): number {
-  if (year < asOf.getUTCFullYear()) return policy.entitlementDays;
-  if (year > asOf.getUTCFullYear()) return 0;
+  const hireDate = new Date(`${employeeStartDate}T00:00:00.000Z`);
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const endOfYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+  const effectiveAsOf = asOf.getUTCFullYear() > year ? endOfYear : asOf;
+  if (effectiveAsOf.getUTCFullYear() < year || hireDate > effectiveAsOf) return 0;
+
+  const code = (policy.code ?? "").toLowerCase();
+  if (["maternity", "paternity", "pre-adoptive"].includes(code)) return 0;
+
+  const serviceMonths = completedServiceMonths(employeeStartDate, effectiveAsOf);
+  if (code === "sick" && serviceMonths < 2) return 0;
+
   if (policy.accrualMethod === "monthly") {
-    return Math.floor((policy.entitlementDays * (asOf.getUTCMonth() + 1)) / 12);
+    let earnedMonths = 0;
+    for (let month = 1; month <= serviceMonths; month += 1) {
+      const anniversary = addMonthsClamped(hireDate, month);
+      if (anniversary >= yearStart && anniversary <= effectiveAsOf) earnedMonths += 1;
+    }
+    return Math.round((earnedMonths * policy.entitlementDays / 12) * 100) / 100;
   }
-  return policy.entitlementDays;
+
+  // Annual policies post their grant at the first eligible anniversary or
+  // leave-year boundary. The grant is represented once per employee/policy/year.
+  if (code === "sick") return policy.entitlementDays;
+  const anniversary = addMonthsClamped(hireDate, 12);
+  return anniversary <= effectiveAsOf && (
+    anniversary.getUTCFullYear() === year ||
+    (hireDate < yearStart && effectiveAsOf >= yearStart)
+  ) ? policy.entitlementDays : 0;
+}
+
+async function ensureAccrualLedgerEntries(
+  employee: { id: string; startDate: string; isDemo?: boolean },
+  policy: typeof leavePoliciesTable.$inferSelect,
+  asOf: Date,
+): Promise<void> {
+  const code = policy.code.toLowerCase();
+  if (["maternity", "paternity", "pre-adoptive"].includes(code)) return;
+  const serviceMonths = completedServiceMonths(employee.startDate, asOf);
+  if (code === "sick" && serviceMonths < 2) return;
+
+  if (policy.accrualMethod === "monthly") {
+    for (let month = 1; month <= serviceMonths; month += 1) {
+      const anniversary = addMonthsClamped(
+        new Date(`${employee.startDate}T00:00:00.000Z`),
+        month,
+      );
+      if (anniversary > asOf) continue;
+      const quantityDays = Math.round((policy.entitlementDays / 12) * 100) / 100;
+      const sourceKey = `accrual:${employee.id}:${policy.code}:${anniversary.toISOString().slice(0, 10)}`;
+      await db.insert(leaveLedgerTable).values({
+        organizationId: policy.organizationId,
+        employeeId: employee.id,
+        leaveType: policy.code,
+        entryType: "accrual",
+        quantityDays,
+        sourceKey,
+        description: `Monthly leave accrual for completed service month ending ${anniversary.toISOString().slice(0, 10)}`,
+        createdByUserId: "system:leave-accrual",
+        occurredAt: anniversary,
+        isDemo: employee.isDemo ?? false,
+      }).onConflictDoNothing();
+    }
+    return;
+  }
+
+  const firstEligibleDate = code === "sick"
+    ? addMonthsClamped(new Date(`${employee.startDate}T00:00:00.000Z`), 2)
+    : addMonthsClamped(new Date(`${employee.startDate}T00:00:00.000Z`), 12);
+  const eligibleDate = firstEligibleDate.getTime() > Date.UTC(asOf.getUTCFullYear(), 0, 1)
+    ? firstEligibleDate
+    : new Date(Date.UTC(asOf.getUTCFullYear(), 0, 1));
+  if (eligibleDate > asOf) return;
+  const grantYear = eligibleDate.getUTCFullYear();
+  const sourceKey = `annual-grant:${employee.id}:${policy.code}:${grantYear}`;
+  await db.insert(leaveLedgerTable).values({
+    organizationId: policy.organizationId,
+    employeeId: employee.id,
+    leaveType: policy.code,
+    entryType: "accrual",
+    quantityDays: policy.entitlementDays,
+    sourceKey,
+    description: `Annual leave entitlement grant for ${grantYear}`,
+    createdByUserId: "system:leave-accrual",
+    occurredAt: eligibleDate,
+    isDemo: employee.isDemo ?? false,
+  }).onConflictDoNothing();
 }
 
 function dateOnly(value: Date | string): string {
