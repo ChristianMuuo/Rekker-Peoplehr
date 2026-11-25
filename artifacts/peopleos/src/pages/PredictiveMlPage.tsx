@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { apiGet, apiPost } from '../lib/api';
 import { useGetAuthContext } from '@workspace/api-client-react';
+import { FEATURE_REGISTRY, featureStatusLabel } from '../data/featureRegistry';
 
 type MlTaskKey =
   | 'attrition'
@@ -74,7 +75,7 @@ export function PredictiveMlPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">ML capability preview</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[.17em] text-[#bd2725]">{FEATURE_REGISTRY['/ml'].label} · {featureStatusLabel(FEATURE_REGISTRY['/ml'].status)}</p>
           <h1 className="font-display text-3xl font-semibold tracking-[-.035em] text-stone-900">
             Workforce ML Intelligence & Governance
           </h1>
