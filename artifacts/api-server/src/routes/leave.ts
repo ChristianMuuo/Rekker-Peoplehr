@@ -474,6 +474,7 @@ router.get("/leave-requests", async (req, res): Promise<void> => {
 router.get("/leave-policies", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
+  await ensureKenyaDefaultPolicies(membership.organizationId);
   if (!process.env.DATABASE_URL) {
     let items = DEMO_LEAVE_POLICIES.filter(
       (p) => p.organizationId === membership.organizationId,
@@ -490,6 +491,9 @@ router.get("/leave-policies", async (req, res): Promise<void> => {
             code: policy.code,
             name: policy.name,
             entitlementDays: policy.entitlementDays,
+            entitlementQuantity: policy.entitlementQuantity ?? policy.entitlementDays,
+            entitlementUnit: policy.entitlementUnit ?? "days",
+            needsLegalReview: policy.needsLegalReview ?? true,
             accrualMethod: policy.accrualMethod,
             active: policy.active,
           })),
@@ -515,6 +519,9 @@ router.get("/leave-policies", async (req, res): Promise<void> => {
         code: policy.code,
         name: policy.name,
         entitlementDays: policy.entitlementDays,
+        entitlementQuantity: policy.entitlementQuantity,
+        entitlementUnit: policy.entitlementUnit,
+        needsLegalReview: policy.needsLegalReview,
         accrualMethod: policy.accrualMethod,
         active: policy.active,
       })),
@@ -531,6 +538,23 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
     return;
   }
   const name = body.data.name.trim();
+  const entitlementUnit = body.data.entitlementUnit ?? "days";
+  const entitlementQuantity = body.data.entitlementQuantity ?? body.data.entitlementDays;
+  const entitlementDays = entitlementToCalendarDays(entitlementQuantity, entitlementUnit);
+  const floor = validateKenyaStatutoryFloor({
+    name,
+    entitlementQuantity,
+    entitlementUnit,
+    entitlementDays,
+  });
+  if (!floor.valid) {
+    res.status(422).json({
+      error: floor.message,
+      code: floor.code,
+      sourceUrl: floor.sourceUrl,
+    });
+    return;
+  }
   const code = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -559,7 +583,11 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       organizationId: membership.organizationId,
       code,
       name,
-      entitlementDays: body.data.entitlementDays,
+      entitlementDays,
+      entitlementQuantity,
+      entitlementUnit,
+      needsLegalReview: true,
+      sourceUrl: floor.sourceUrl,
       accrualMethod: body.data.accrualMethod,
       active: true,
     };
@@ -580,6 +608,9 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
         code: created.code,
         name: created.name,
         entitlementDays: created.entitlementDays,
+        entitlementQuantity: created.entitlementQuantity,
+        entitlementUnit: created.entitlementUnit,
+        needsLegalReview: created.needsLegalReview,
         accrualMethod: created.accrualMethod,
         active: created.active,
       }),
@@ -607,7 +638,13 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
         organizationId: membership.organizationId,
         code,
         name,
-        entitlementDays: body.data.entitlementDays,
+        entitlementDays,
+        entitlementQuantity,
+        entitlementUnit,
+        jurisdiction: "KE",
+        effectiveFrom: new Date().toISOString().slice(0, 10),
+        sourceUrl: floor.sourceUrl,
+        needsLegalReview: true,
         accrualMethod: body.data.accrualMethod,
         active: true,
         createdByUserId: membership.userId,
@@ -636,6 +673,9 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       code: policy.code,
       name: policy.name,
       entitlementDays: policy.entitlementDays,
+      entitlementQuantity: policy.entitlementQuantity,
+      entitlementUnit: policy.entitlementUnit,
+      needsLegalReview: policy.needsLegalReview,
       accrualMethod: policy.accrualMethod,
       active: policy.active,
     }),
@@ -662,6 +702,23 @@ router.patch(
       res.status(400).json({ error: "Leave type name cannot be blank." });
       return;
     }
+    const entitlementUnit = body.data.entitlementUnit ?? "days";
+    const entitlementQuantity = body.data.entitlementQuantity ?? body.data.entitlementDays;
+    const entitlementDays = entitlementToCalendarDays(entitlementQuantity, entitlementUnit);
+    const floor = validateKenyaStatutoryFloor({
+      name,
+      entitlementQuantity,
+      entitlementUnit,
+      entitlementDays,
+    });
+    if (!floor.valid) {
+      res.status(422).json({
+        error: floor.message,
+        code: floor.code,
+        sourceUrl: floor.sourceUrl,
+      });
+      return;
+    }
     const organization = await getPeopleOsOrganization(membership.organizationId);
     if (!organization) {
       res.status(503).json({ error: "PeopleOS organization is not initialized." });
@@ -678,7 +735,11 @@ router.patch(
         return;
       }
       target.name = name;
-      target.entitlementDays = body.data.entitlementDays;
+      target.entitlementDays = entitlementDays;
+      target.entitlementQuantity = entitlementQuantity;
+      target.entitlementUnit = entitlementUnit;
+      target.needsLegalReview = true;
+      target.sourceUrl = floor.sourceUrl;
       target.accrualMethod = body.data.accrualMethod;
       target.active = body.data.active;
       await recordAuditEvent({
@@ -697,6 +758,9 @@ router.patch(
           code: target.code,
           name: target.name,
           entitlementDays: target.entitlementDays,
+          entitlementQuantity: target.entitlementQuantity,
+          entitlementUnit: target.entitlementUnit,
+          needsLegalReview: target.needsLegalReview,
           accrualMethod: target.accrualMethod,
           active: target.active,
         }),
@@ -708,8 +772,11 @@ router.patch(
         .update(leavePoliciesTable)
         .set({
           name,
-          entitlementDays: body.data.entitlementDays,
-          accrualMethod: body.data.accrualMethod,
+          entitlementDays,
+          entitlementQuantity,
+          entitlementUnit,
+          sourceUrl: floor.sourceUrl,
+          needsLegalReview: true,
           active: body.data.active,
         })
         .where(
@@ -742,6 +809,9 @@ router.patch(
         code: updated.code,
         name: updated.name,
         entitlementDays: updated.entitlementDays,
+        entitlementQuantity: updated.entitlementQuantity,
+        entitlementUnit: updated.entitlementUnit,
+        needsLegalReview: updated.needsLegalReview,
         accrualMethod: updated.accrualMethod,
         active: updated.active,
       }),
