@@ -363,7 +363,9 @@ export const ListLeaveRequestsResponseItem = zod.object({
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),
   "decidedAt": zod.coerce.date().nullish(),
-  "isDemo": zod.boolean()
+  "isDemo": zod.boolean(),
+  "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
+  "recommendationComment": zod.string().nullish()
 })
 export const ListLeaveRequestsResponse = zod.array(ListLeaveRequestsResponseItem)
 
@@ -383,7 +385,8 @@ export const CreateLeaveRequestBody = zod.object({
   "leaveType": zod.string().min(1).max(createLeaveRequestBodyLeaveTypeMax),
   "startDate": zod.coerce.date(),
   "endDate": zod.coerce.date(),
-  "reason": zod.string().min(createLeaveRequestBodyReasonMin).max(createLeaveRequestBodyReasonMax)
+  "reason": zod.string().min(createLeaveRequestBodyReasonMin).max(createLeaveRequestBodyReasonMax),
+  "halfDay": zod.boolean().optional()
 })
 
 export const CreateLeaveRequestResponse = zod.object({
@@ -400,7 +403,9 @@ export const CreateLeaveRequestResponse = zod.object({
   "decisionComment": zod.string().nullish(),
   "submittedAt": zod.coerce.date(),
   "decidedAt": zod.coerce.date().nullish(),
-  "isDemo": zod.boolean()
+  "isDemo": zod.boolean(),
+  "recommendationStatus": zod.enum(['not_assessed', 'recommended', 'not_recommended']).optional(),
+  "recommendationComment": zod.string().nullish()
 })
 
 
@@ -417,7 +422,10 @@ export const ListLeavePoliciesResponseItem = zod.object({
   "name": zod.string(),
   "entitlementDays": zod.number().int().min(listLeavePoliciesResponseEntitlementDaysMin),
   "accrualMethod": zod.enum(['annual', 'monthly']),
-  "active": zod.boolean()
+  "active": zod.boolean(),
+  "entitlementQuantity": zod.number().int().min(0).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional(),
+  "needsLegalReview": zod.boolean().optional()
 })
 export const ListLeavePoliciesResponse = zod.array(ListLeavePoliciesResponseItem)
 
@@ -435,7 +443,9 @@ export const createLeavePolicyBodyEntitlementDaysMax = 366;
 export const CreateLeavePolicyBody = zod.object({
   "name": zod.string().min(1).max(createLeavePolicyBodyNameMax),
   "entitlementDays": zod.number().int().min(createLeavePolicyBodyEntitlementDaysMin).max(createLeavePolicyBodyEntitlementDaysMax),
-  "accrualMethod": zod.enum(['annual', 'monthly'])
+  "accrualMethod": zod.enum(['annual', 'monthly']),
+  "entitlementQuantity": zod.number().int().min(0).max(366).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional()
 })
 
 export const createLeavePolicyResponseEntitlementDaysMin = 0;
@@ -483,7 +493,10 @@ export const UpdateLeavePolicyResponse = zod.object({
   "name": zod.string(),
   "entitlementDays": zod.number().int().min(updateLeavePolicyResponseEntitlementDaysMin),
   "accrualMethod": zod.enum(['annual', 'monthly']),
-  "active": zod.boolean()
+  "active": zod.boolean(),
+  "entitlementQuantity": zod.number().int().min(0).optional(),
+  "entitlementUnit": zod.enum(['days', 'weeks', 'months']).optional(),
+  "needsLegalReview": zod.boolean().optional()
 })
 
 
