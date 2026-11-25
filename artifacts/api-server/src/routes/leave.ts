@@ -1001,7 +1001,10 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
               ),
             0,
           );
-        const accruedDays = accruedDaysForYear(policy, year, new Date(), employee.startDate);
+        const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
+        const accruedDays = eventBased
+          ? policy.entitlementDays
+          : accruedDaysForYear(policy, year, new Date(), employee.startDate);
         return {
           employeeId: employee.id,
           employeeName: `${employee.firstName} ${employee.lastName}`,
@@ -1012,7 +1015,7 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
           accruedDays,
           usedDays,
           pendingDays,
-          remainingDays: accruedDays - usedDays - pendingDays,
+          remainingDays: Math.round((accruedDays - usedDays - pendingDays) * 100) / 100,
           accrualMethod: policy.accrualMethod,
           active: policy.active,
         };
@@ -1188,9 +1191,14 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
       const usageEntries = relevantLedger.filter(
         (entry) => entry.entryType === "deduction" || entry.entryType === "reversal",
       );
-      const accruedDays = sumLeaveLedgerDays(accrualEntries);
+      const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
+      const accruedDays = eventBased
+        ? policy.entitlementDays
+        : sumLeaveLedgerDays(accrualEntries);
       const usedDays = Math.max(0, -sumLeaveLedgerDays(usageEntries));
-      const ledgerBalance = sumLeaveLedgerDays(relevantLedger);
+      const ledgerBalance = eventBased
+        ? policy.entitlementDays - usedDays
+        : sumLeaveLedgerDays(relevantLedger);
       return {
         employeeId: employee.id,
         employeeName: employeesById.get(employee.id) ?? "Employee",
