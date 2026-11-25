@@ -267,6 +267,23 @@ export function SignUp({ routing, path, signInUrl }: { routing?: string; path?: 
   return <SignIn routing={routing} path={path} signUpUrl={signInUrl} />;
 }
 
+function AuthConfigurationError() {
+  return (
+    <main className="flex min-h-[100dvh] items-center justify-center bg-stone-50 p-6 text-stone-900">
+      <section className="w-full max-w-lg rounded-2xl border border-stone-200 bg-white p-7 shadow-sm">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red-700">
+          <Lock size={20} />
+        </div>
+        <h1 className="mt-4 font-display text-xl font-bold">Secure sign-in is not configured</h1>
+        <p className="mt-2 text-sm leading-6 text-stone-600">
+          This deployed workspace requires Clerk authentication. Demo role switching is disabled in production.
+          Ask the PeopleOS administrator to configure the Clerk publishable key and set VITE_PEOPLEOS_AUTH_MODE=clerk.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 export function UnifiedAuthProvider({
   children,
   clerkPubKey,
@@ -282,6 +299,14 @@ export function UnifiedAuthProvider({
   routerPush: (to: string) => void;
   routerReplace: (to: string) => void;
 }) {
+  if (import.meta.env.PROD && (
+    explicitAuthMode !== "clerk" ||
+    !hasValidClerkKey ||
+    !clerkPubKey
+  )) {
+    return <AuthConfigurationError />;
+  }
+
   if (hasValidClerkKey && clerkPubKey) {
     return (
       <RealClerkProvider
