@@ -31,44 +31,78 @@ export class AuditPersistenceError extends Error {
   }
 }
 
+function demoAuditTime(daysAgo: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - daysAgo);
+  date.setUTCHours(9, 0, 0, 0);
+  return date.toISOString();
+}
+
+function previousDemoPayrollPeriod(now = new Date()): { period: string; label: string } {
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  return {
+    period: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`,
+    label: date.toLocaleDateString("en-KE", { month: "long", year: "numeric", timeZone: "Africa/Nairobi" }),
+  };
+}
+
+const demoPayrollPeriod = previousDemoPayrollPeriod();
+
 export const DEMO_AUDIT_STORE: AuditEntry[] = [
   {
     id: "audit-001",
     organizationId: "rekker-demo",
-    occurredAt: "2026-03-05T14:20:00.000Z",
-    actor: "Demo Admin 07 (hr_admin)",
+    occurredAt: demoAuditTime(1),
+    actor: "Demo HR Administrator",
     actorUserId: "user_demo_admin_01",
     action: "LEAVE_APPROVE",
     targetType: "leave_request",
-    targetId: "leave-001",
-    summary: "Approved annual leave request in sandbox preview.",
+    targetId: "leave-demo-approved",
+    summary: "Approved annual leave request in synthetic sandbox data.",
     isDemo: true,
   },
   {
     id: "audit-002",
     organizationId: "rekker-demo",
-    occurredAt: "2026-03-01T09:00:00.000Z",
-    actor: "Demo Finance 09 (finance_manager)",
+    occurredAt: demoAuditTime(3),
+    actor: "Demo Finance Manager",
     actorUserId: "user_demo_payroll_01",
     action: "PAYROLL_GENERATION",
     targetType: "payroll_period",
-    targetId: "period-2026-02",
-    summary: "Finalized statutory KRA & NSSF payroll report for February 2026.",
+    targetId: `period-${demoPayrollPeriod.period}`,
+    summary: `Generated a fictional payroll preview for ${demoPayrollPeriod.label}.`,
     isDemo: true,
   },
   {
     id: "audit-003",
     organizationId: "rekker-demo",
-    occurredAt: "2026-02-28T16:45:00.000Z",
-    actor: "Demo Recruiter 08 (recruiter)",
+    occurredAt: demoAuditTime(6),
+    actor: "Demo Recruiter",
     actorUserId: "user_demo_recruiter_01",
     action: "CANDIDATE_SCREEN",
     targetType: "candidate",
-    targetId: "cand-001",
-    summary: "Completed phone interview scorecard for Formulation & Filling Engineer candidate.",
+    targetId: "cand-demo-001",
+    summary: "Reviewed a fictional candidate profile in the sandbox.",
     isDemo: true,
   },
 ];
+
+let priorDemoHash: string | null = null;
+for (const entry of [...DEMO_AUDIT_STORE].reverse()) {
+  entry.prevHash = priorDemoHash;
+  entry.hash = crypto.createHash("sha256").update(JSON.stringify({
+    organizationId: entry.organizationId,
+    actorUserId: entry.actorUserId ?? null,
+    actor: entry.actor,
+    action: entry.action,
+    targetType: entry.targetType,
+    targetId: entry.targetId,
+    summary: entry.summary,
+    occurredAt: entry.occurredAt,
+    prevHash: priorDemoHash,
+  })).digest("hex");
+  priorDemoHash = entry.hash;
+}
 
 let forcedAuditFailureForTest = false;
 export function __setAuditSinkFailureForTest(fail: boolean): void {
