@@ -8,7 +8,18 @@ import {
 } from "./schema";
 
 const organizationId = "rekker-demo";
-const demoTime = (day: number) => new Date(`2026-10-${day}T09:00:00.000Z`);
+const demoDate = (offsetDays: number): string => {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+};
+const demoTime = (daysAgo: number) => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - daysAgo);
+  date.setUTCHours(9, 0, 0, 0);
+  return date;
+};
 
 const departments = [
   {
@@ -69,7 +80,7 @@ const employees = [
     location: "Nairobi demo site",
     employmentType: "permanent",
     status: "active",
-    startDate: "2023-02-01",
+    startDate: demoDate(-1400),
     probationEndDate: null,
     contractEndDate: null,
     isDemo: true,
@@ -89,7 +100,7 @@ const employees = [
     location: "Nairobi demo site",
     employmentType: "permanent",
     status: "active",
-    startDate: "2024-06-10",
+    startDate: demoDate(-450),
     probationEndDate: null,
     contractEndDate: null,
     isDemo: true,
@@ -109,7 +120,7 @@ const employees = [
     location: "Nairobi demo hub",
     employmentType: "permanent",
     status: "active",
-    startDate: "2022-07-14",
+    startDate: demoDate(-1600),
     probationEndDate: null,
     contractEndDate: null,
     isDemo: true,
@@ -129,9 +140,9 @@ const employees = [
     location: "Nairobi demo hub",
     employmentType: "fixed_term",
     status: "probation",
-    startDate: "2026-08-15",
-    probationEndDate: "2026-11-13",
-    contractEndDate: "2027-08-14",
+    startDate: demoDate(-90),
+    probationEndDate: demoDate(30),
+    contractEndDate: demoDate(365),
     isDemo: true,
   },
   {
@@ -149,7 +160,7 @@ const employees = [
     location: "Nairobi demo office",
     employmentType: "permanent",
     status: "active",
-    startDate: "2021-11-03",
+    startDate: demoDate(-1800),
     probationEndDate: null,
     contractEndDate: null,
     isDemo: true,
@@ -169,7 +180,7 @@ const employees = [
     location: "Nairobi demo office",
     employmentType: "permanent",
     status: "active",
-    startDate: "2024-09-17",
+    startDate: demoDate(-750),
     probationEndDate: null,
     contractEndDate: null,
     isDemo: true,
@@ -189,7 +200,7 @@ const employees = [
     location: "Nairobi demo office",
     employmentType: "permanent",
     status: "active",
-    startDate: "2020-04-20",
+    startDate: demoDate(-2500),
     probationEndDate: null,
     contractEndDate: null,
     isDemo: true,
@@ -209,9 +220,9 @@ const employees = [
     location: "Nairobi demo office",
     employmentType: "fixed_term",
     status: "probation",
-    startDate: "2026-09-01",
-    probationEndDate: "2026-11-30",
-    contractEndDate: "2026-11-25",
+    startDate: demoDate(-55),
+    probationEndDate: demoDate(35),
+    contractEndDate: demoDate(180),
     isDemo: true,
   },
 ];
@@ -222,15 +233,15 @@ const leaveRequests = [
     organizationId,
     employeeId: employees[1]!.id,
     leaveType: "annual",
-    startDate: "2026-11-02",
-    endDate: "2026-11-04",
+    startDate: demoDate(5),
+    endDate: demoDate(7),
     days: 3,
     reason: "Fictional request for demonstrating the approval workflow.",
     status: "pending",
     createdByUserId: "demo-seed",
     approverUserId: null,
     decisionComment: null,
-    submittedAt: demoTime(24),
+    submittedAt: demoTime(1),
     decidedAt: null,
     isDemo: true,
   },
@@ -239,15 +250,15 @@ const leaveRequests = [
     organizationId,
     employeeId: employees[3]!.id,
     leaveType: "annual",
-    startDate: "2026-11-16",
-    endDate: "2026-11-17",
+    startDate: demoDate(14),
+    endDate: demoDate(15),
     days: 2,
     reason: "Fictional request for demonstrating the approval workflow.",
     status: "pending",
     createdByUserId: "demo-seed",
     approverUserId: null,
     decisionComment: null,
-    submittedAt: demoTime(25),
+    submittedAt: demoTime(2),
     decidedAt: null,
     isDemo: true,
   },
@@ -256,16 +267,16 @@ const leaveRequests = [
     organizationId,
     employeeId: employees[5]!.id,
     leaveType: "annual",
-    startDate: "2026-10-28",
-    endDate: "2026-10-30",
+    startDate: demoDate(-10),
+    endDate: demoDate(-8),
     days: 3,
     reason: "Fictional approved request for coverage-view demonstration.",
     status: "approved",
     createdByUserId: "demo-seed",
     approverUserId: "demo-seed",
     decisionComment: "Approved in synthetic demo data.",
-    submittedAt: demoTime(17),
-    decidedAt: demoTime(20),
+    submittedAt: demoTime(16),
+    decidedAt: demoTime(14),
     isDemo: true,
   },
 ];
@@ -280,7 +291,7 @@ const auditEvents = [
     targetType: "leave_request",
     targetId: leaveRequests[0]!.id,
     summary: "A fictional annual leave request entered the approval queue.",
-    occurredAt: demoTime(24),
+    occurredAt: demoTime(1),
     isDemo: true,
   },
   {
@@ -292,7 +303,7 @@ const auditEvents = [
     targetType: "employee",
     targetId: employees[7]!.id,
     summary: "A fictional employee profile was reviewed.",
-    occurredAt: demoTime(23),
+    occurredAt: demoTime(2),
     isDemo: true,
   },
 ];
