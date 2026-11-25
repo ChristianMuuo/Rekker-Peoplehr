@@ -3,6 +3,9 @@ import { auditEventsTable, db } from "@workspace/db";
 import { desc, eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
+type AuditTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type AuditSink = typeof db | AuditTransaction;
+
 export interface AuditEntry {
   id: string;
   organizationId: string;
@@ -100,7 +103,7 @@ export async function recordAuditEvent(params: {
   correlationId?: string;
   critical?: boolean;
   isDemo?: boolean;
-  tx?: Parameters<Parameters<typeof db.transaction>[0]>[0];
+  tx?: AuditSink;
 }): Promise<void> {
   const safeSummary = sanitizeAuditSummary(params.summary);
   const fullSummary = params.correlationId
