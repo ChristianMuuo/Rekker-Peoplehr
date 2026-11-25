@@ -185,15 +185,16 @@ describe("Enterprise HRMS Controls: Payroll, Security, Leave, M-Pesa & 10-Agent 
     assert.ok(allApprovals.some((a) => a.id === proposal.id && a.status === "approved"));
   });
 
-  test("HTTP API enforces empty default leave policies, RBAC boundaries, and human signoff before M-Pesa disbursement", async () => {
+  test("HTTP API seeds Kenyan statutory leave policies, enforces statutory floors and RBAC, and gates M-Pesa disbursement", async () => {
     await withServer(async (baseUrl) => {
-      // 1. Leave policies start empty by default (no prefilled statutory leave days)
+      // 1. First-run onboarding installs the Kenya statutory default leave pack.
       const policiesRes = await fetch(`${baseUrl}/api/leave-policies`, {
         headers: { "x-peopleos-org-id": "org-fresh-check", "x-peopleos-role": "hr_admin" },
       });
       assert.strictEqual(policiesRes.status, 200);
-      const policies = await policiesRes.json();
-      assert.deepStrictEqual(policies, []);
+      const policies = await policiesRes.json() as Array<{ code: string; entitlementDays: number; entitlementWeeks?: number }>;
+      assert.ok(policies.some((policy) => policy.code === "annual" && policy.entitlementDays === 21));
+      assert.ok(policies.some((policy) => policy.code === "paternity" && policy.entitlementWeeks === 2));
 
       // 2. Employee cannot create leave policies or inspect audit trail
       const deniedPolicyRes = await fetch(`${baseUrl}/api/leave-policies`, {
@@ -212,8 +213,8 @@ describe("Enterprise HRMS Controls: Payroll, Security, Leave, M-Pesa & 10-Agent 
       });
       assert.strictEqual(deniedAuditRes.status, 403);
 
-      // 3. HR Admin creates org policy, and balances reflect configured policy
-      const createPolicyRes = await fetch(`${baseUrl}/api/leave-policies`, {
+      // 3. HR cannot configure annual leave below the statutory 21-working-day floor.
+      const belowFloorRes = await fetch(`${baseUrl}/api/leave-policies`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -222,7 +223,9 @@ describe("Enterprise HRMS Controls: Payroll, Security, Leave, M-Pesa & 10-Agent 
         },
         body: JSON.stringify({ name: "Annual Rest", entitlementDays: 14, accrualMethod: "annual" }),
       });
-      assert.strictEqual(createPolicyRes.status, 201);
+      assert.strictEqual(belowFloorRes.status, 422);
+      const floorError = await belowFloorRes.json() as { error?: string };
+      assert.ok(floorError.error?.includes("21 working days"));
 
       const balancesRes = await fetch(`${baseUrl}/api/leave-balances`, {
         headers: { "x-peopleos-org-id": "org-fresh-check", "x-peopleos-role": "hr_admin" },
@@ -230,7 +233,7 @@ describe("Enterprise HRMS Controls: Payroll, Security, Leave, M-Pesa & 10-Agent 
       assert.strictEqual(balancesRes.status, 200);
       const balances = (await balancesRes.json()) as any[];
       assert.ok(balances.length > 0);
-      assert.strictEqual(balances[0].entitlementDays, 14);
+      assert.ok(balances.some((balance) => balance.leaveType === "annual" && balance.entitlementDays === 21));
 
       // 4. M-Pesa disbursement blocks unapproved payroll runs (run_2026_03 starts as "reviewed")
       const unapprovedDisburseRes = await fetch(
