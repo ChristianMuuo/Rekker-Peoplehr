@@ -172,6 +172,7 @@ async function ensureKenyaDefaultPolicies(organizationId: string): Promise<void>
 const approverRoles = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrManager,
+  PEOPLEOS_ROLES.hrDirector,
   PEOPLEOS_ROLES.systemAdmin,
 ];
 const recommenderRoles = [
@@ -181,6 +182,7 @@ const recommenderRoles = [
 const adminRoles: readonly string[] = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrManager,
+  PEOPLEOS_ROLES.hrDirector,
   PEOPLEOS_ROLES.systemAdmin,
 ];
 
