@@ -134,6 +134,8 @@ function ensureDemoKenyaDefaultPolicies(organizationId: string): void {
       accrualMethod: policy.accrualMethod,
       active: true,
     });
+    const createdPolicy = DEMO_LEAVE_POLICIES[DEMO_LEAVE_POLICIES.length - 1];
+    if (createdPolicy) appendDemoPolicyVersion(createdPolicy, "system-demo-seed");
   }
 }
 
@@ -731,6 +733,7 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
       active: true,
     };
     DEMO_LEAVE_POLICIES.push(created);
+    appendDemoPolicyVersion(created, membership.userId);
     await recordAuditEvent({
       organizationId: membership.organizationId,
       actorUserId: membership.userId,
@@ -823,6 +826,48 @@ router.post("/leave-policies", async (req, res): Promise<void> => {
   );
 });
 
+router.get("/leave-policies/:policyId/versions", async (req, res): Promise<void> => {
+  const params = UpdateLeavePolicyParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const membership = await requireRoles(req, res, adminRoles);
+  if (!membership) return;
+  if (!process.env.DATABASE_URL) {
+    ensureDemoKenyaDefaultPolicies(membership.organizationId);
+    const versions = DEMO_LEAVE_POLICY_VERSIONS
+      .filter((version) => version.organizationId === membership.organizationId && version.policyId === params.data.policyId)
+      .sort((a, b) => b.versionNumber - a.versionNumber)
+      .map((version) => ({
+        id: version.id,
+        policyId: version.policyId,
+        versionNumber: version.versionNumber,
+        snapshot: version.snapshot,
+        createdAt: version.createdAt.toISOString(),
+        changedByUserId: version.changedByUserId,
+      }));
+    res.json(versions);
+    return;
+  }
+  const versions = await db
+    .select()
+    .from(leavePolicyVersionsTable)
+    .where(and(
+      eq(leavePolicyVersionsTable.organizationId, membership.organizationId),
+      eq(leavePolicyVersionsTable.policyId, params.data.policyId),
+    ))
+    .orderBy(desc(leavePolicyVersionsTable.versionNumber));
+  res.json(versions.map((version) => ({
+    id: version.id,
+    policyId: version.policyId,
+    versionNumber: version.versionNumber,
+    snapshot: JSON.parse(version.snapshotJson),
+    createdAt: version.createdAt.toISOString(),
+    changedByUserId: version.changedByUserId,
+  })));
+});
+
 router.patch(
   "/leave-policies/:policyId",
   async (req, res): Promise<void> => {
@@ -872,6 +917,7 @@ router.patch(
       target.accrualMethod = body.data.accrualMethod;
       Object.assign(target, statutory);
       target.active = body.data.active;
+      appendDemoPolicyVersion(target, membership.userId);
       await recordAuditEvent({
         organizationId: membership.organizationId,
         actorUserId: membership.userId,
