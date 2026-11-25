@@ -205,6 +205,8 @@ export const leaveRequestsTable = pgTable(
     status: text("status").notNull().default("pending"),
     recommendationStatus: text("recommendation_status").notNull().default("not_assessed"),
     recommendationComment: text("recommendation_comment"),
+    recommendationByUserId: text("recommendation_by_user_id"),
+    recommendationAt: timestamp("recommendation_at", { withTimezone: true }),
     recommendationJson: text("recommendation_json"),
     createdByUserId: text("created_by_user_id"),
     approverUserId: text("approver_user_id"),
