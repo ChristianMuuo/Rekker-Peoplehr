@@ -16,6 +16,7 @@ export async function ensureKenyaDefaultLeavePolicies(
     .limit(1);
   if (current.length) return;
 
+  const effectiveFrom = `${new Date().getUTCFullYear()}-01-01`;
   await db.insert(leavePoliciesTable).values(
     KENYA_LEAVE_POLICY_DEFAULTS.map((policy) => ({
       organizationId,
@@ -31,7 +32,7 @@ export async function ensureKenyaDefaultLeavePolicies(
       certificateRequired: policy.certificateRequired,
       paidPercentage: policy.paidPercentage,
       jurisdiction: policy.jurisdiction,
-      effectiveFrom: "2026-01-01",
+      effectiveFrom,
       sourceUrl: policy.sourceUrl,
       verifiedOn: policy.verifiedOn,
       needsLegalReview: policy.needsLegalReview,
