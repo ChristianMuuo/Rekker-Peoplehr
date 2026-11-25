@@ -217,29 +217,35 @@ export function countScheduledWorkingDays(
   endIso: string,
   workdays: readonly number[] = [1, 2, 3, 4, 5],
   holidays: readonly string[] = [],
+  halfWorkdays: readonly number[] = [],
 ): number {
   const cursor = parseIsoDate(startIso);
   const end = parseIsoDate(endIso);
   if (end < cursor) throw new Error("End date must be on or after start date.");
   const schedule = new Set(workdays);
+  const halfSchedule = new Set(halfWorkdays);
   const holidaySet = new Set(holidays);
   let count = 0;
   while (cursor <= end) {
     const iso = cursor.toISOString().slice(0, 10);
-    if (schedule.has(cursor.getUTCDay()) && !holidaySet.has(iso)) count += 1;
+    const weekday = cursor.getUTCDay();
+    if (schedule.has(weekday) && !holidaySet.has(iso)) {
+      count += halfSchedule.has(weekday) ? 0.5 : 1;
+    }
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return count;
 }
 
 export function requestQuarterDays(workingDays: number, halfDay = false): number {
-  if (!Number.isInteger(workingDays) || workingDays < 1) {
+  if (!Number.isFinite(workingDays) || workingDays <= 0) {
     throw new Error("A leave request must include at least one scheduled working day.");
   }
-  if (halfDay && workingDays !== 1) {
+  if (halfDay && workingDays > 1) {
     throw new Error("A half-day request must cover exactly one scheduled working day.");
   }
-  return halfDay ? 2 : workingDays * 4;
+  const requestedDays = halfDay ? workingDays / 2 : workingDays;
+  return Math.round(requestedDays * 4);
 }
 
 export function daysFromQuarterDays(quarterDays: number): number {
