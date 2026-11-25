@@ -320,7 +320,7 @@ function AppFrame() {
           </div>
           <div className="mb-3 rounded-xl bg-[#f7f4f0] p-3">
             <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#338956]" /><span className="text-xs font-bold text-stone-800">{auth.isDemo ? 'Demo workspace' : 'Live workspace'}</span></div>
-            <p className="mt-1 text-[11px] leading-4 text-stone-500">{auth.organizationName} · {auth.role.replaceAll('_', ' ')}</p>
+            <p className="mt-1 text-[11px] leading-4 text-stone-500">{auth.organizationName} · {formatRoleLabel(auth.role)}</p>
           </div>
           <button onClick={() => signOut({ redirectUrl: basePath || '/' })} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold text-stone-600 hover:bg-stone-100" data-testid="button-sign-out"><LogOut size={16} /> Sign out</button>
         </div>
@@ -428,6 +428,33 @@ function EmptyState({ title, message, action }: { title: string; message: string
 function ModeBadge({ demo }: { demo: boolean }) {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold ${demo ? 'bg-[#fbf0da] text-[#785716]' : 'bg-[#e7f1e9] text-[#2e7144]'}`} data-testid={`badge-data-mode-${demo ? 'demo' : 'live'}`}>{demo ? 'Demo record' : 'Live record'}</span>;
 }
+const ROLE_LABELS: Record<string, string> = {
+  employee: "Employee",
+  department_manager: "Department Manager",
+  hr_admin: "HR Administrator",
+  hr_director: "HR Director",
+  hr_manager: "HR Manager",
+  hr_officer: "HR Officer",
+  hr_case_officer_full: "HR Case Officer",
+  payroll_officer: "Payroll Officer",
+  finance_manager: "Finance Manager",
+  production_supervisor: "Production Supervisor",
+  warehouse_supervisor: "Warehouse Supervisor",
+  sales_manager: "Sales Manager",
+  recruiter: "Recruiter",
+  read_only_executive: "Executive (Read only)",
+  auditor: "Auditor",
+  system_admin: "System Administrator",
+};
+
+function formatRoleLabel(role: string): string {
+  const normalized = role.trim().toLowerCase();
+  if (!normalized) return "—";
+  return ROLE_LABELS[normalized] ?? normalized
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 function StatusPill({ status }: { status: string }) {
   const styles: Record<string, string> = { active: 'bg-[#e9f3ec] text-[#397650]', probation: 'bg-[#fff2db] text-[#8b6417]', on_leave: 'bg-[#eaf1f7] text-[#42657e]', suspended: 'bg-[#fbe9e7] text-[#a7352c]', former: 'bg-stone-100 text-stone-500', pending: 'bg-[#fff2db] text-[#8b6417]', approved: 'bg-[#e9f3ec] text-[#397650]', rejected: 'bg-[#fbe9e7] text-[#a7352c]', cancelled: 'bg-stone-100 text-stone-500' };
   return <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${styles[status] ?? 'bg-stone-100 text-stone-600'}`} data-testid={`status-pill-${status}`}>{status.replaceAll('_', ' ')}</span>;
@@ -1299,7 +1326,7 @@ function DiagnosticsPage() {
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#a91919]"><ShieldCheck size={18} /></div><div><h2 className="font-display text-lg font-semibold text-stone-900">Your access profile</h2><p className="text-xs text-stone-500">Permissions are supplied by the PeopleOS authorization service.</p></div></div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            ['Organization role', auth.data?.role.replaceAll('_',' ') ?? '—', true],
+            ['Organization role', formatRoleLabel(auth.data?.role ?? ''), true],
             ['Manage people', auth.data?.canManagePeople, auth.data?.canManagePeople],
             ['Approve leave', auth.data?.canApproveLeave, auth.data?.canApproveLeave],
             ['View audit', auth.data?.canViewAudit, auth.data?.canViewAudit],
