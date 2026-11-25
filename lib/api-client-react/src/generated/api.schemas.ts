@@ -497,6 +497,10 @@ export interface AuditEvent {
   targetType: string;
   targetId: string;
   summary: string;
+  /** @nullable */
+  prevHash?: string | null;
+  /** @nullable */
+  hash?: string | null;
   isDemo: boolean;
 }
 
