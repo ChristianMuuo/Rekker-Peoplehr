@@ -1,4 +1,4 @@
-// REKKER PeopleOS 10-Agent + Supervisor AI Intelligence Architecture
+// Rekker PeopleOS assistant-role concept catalogue. Definitions here are UI concepts, not a claim that every agent is deployed.
 
 import { peopleOsStore, calculateKenyaPayroll } from './mockStore';
 
@@ -28,10 +28,10 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   supervisor: {
     id: 'supervisor',
     name: 'Rekker AI Supervisor',
-    tagline: 'StateGraph Intent Router & RBAC Guard',
+    tagline: 'Proposed workflow coordinator',
     avatarColor: 'bg-red-700 text-white',
     description:
-      'Coordinates all 10 specialist HR intelligence agents, enforces role-based data boundaries, and gates high-impact actions for human signoff.',
+      'Concept description: a proposed coordinator for HR assistant workflows. Live execution, tool access and approvals must be verified independently.',
     sampleQueries: [
       'Give me an executive workforce intelligence briefing',
       'Calculate Kenya statutory deductions on KES 220,000',
@@ -55,7 +55,7 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
     tagline: 'Explainable Candidate Matching & Interviews',
     avatarColor: 'bg-emerald-700 text-white',
     description:
-      'Ranks applicants strictly by job criteria using TF-IDF (protected traits excluded, never auto-rejects) and drafts JDs.',
+      'Concept: compare applicants against job criteria and draft role descriptions. No live ranking model is claimed by this catalogue.',
     sampleQueries: [
       'Rank and compare candidates for Lead Formulation & Filling Line Engineer',
       'Draft behavioral interview questions for plant process engineers',
@@ -108,9 +108,9 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   retention: {
     id: 'retention',
     name: 'Employee Retention Agent',
-    tagline: 'XGBoost Attrition & Burnout Early Warning',
+    tagline: 'Retention insights concept (model unverified)',
     avatarColor: 'bg-orange-700 text-white',
-    description: 'Predicts attrition risk drivers with XGBoost + NLP sentiment analysis on workforce signals.',
+    description: 'Concept: explore retention signals. No trained attrition model, validated performance metric or automated employee-risk decision is claimed here.',
     sampleQueries: [
       'Run attrition risk predictions and top retention drivers',
       'Scan employee feedback sentiment for burnout risk signals',
@@ -130,9 +130,9 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   compliance: {
     id: 'compliance',
     name: 'Compliance Monitoring Agent',
-    tagline: 'Kenya Employment Act & ODPC Privacy RAG',
+    tagline: 'Kenyan HR compliance Q&A concept (retrieval unverified)',
     avatarColor: 'bg-purple-700 text-white',
-    description: 'Retrieves verified policy citations on Kenyan labor governance, ODPC privacy, and contract compliance.',
+    description: 'Concept: policy Q&A. Retrieval, source indexing and citation grounding must be verified before treating outputs as authoritative.',
     sampleQueries: [
       'What are maternity and paternity leave entitlements under Kenya Employment Act?',
       'How does Kenya Data Protection Act 2019 protect medical and salary records?',
@@ -143,7 +143,7 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
     name: 'Executive Intelligence Agent',
     tagline: 'Workforce Demand Forecasting & Briefings',
     avatarColor: 'bg-stone-800 text-white',
-    description: 'Combines Ridge headcount demand forecasts, budget gap utilization, and cross-agent executive briefings.',
+    description: 'Concept: combine workforce planning information. A deployed forecasting model is not claimed by this catalogue.',
     sampleQueries: [
       'Generate a board-ready executive workforce demand forecast',
       'Summarize headcount against budget and high-priority HR risks',
