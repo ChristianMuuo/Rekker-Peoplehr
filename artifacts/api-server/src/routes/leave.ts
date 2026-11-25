@@ -252,6 +252,14 @@ export interface DemoLeaveItem {
   submittedAt: Date;
   decidedAt: Date | null;
   isDemo: boolean;
+  halfDay?: boolean;
+  certificateReference?: string | null;
+  recommendation?: {
+    label: "Rule-based advisory";
+    suggestion: "approve" | "review" | "decline";
+    reasons: string[];
+    rulesFired: string[];
+  } | null;
 }
 
 export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
@@ -263,6 +271,7 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     startDate: new Date(addDaysIso(-34)),
     endDate: new Date(addDaysIso(-25)),
     days: 8,
+    halfDay: false,
     reason: "Annual rest and personal time",
     status: "approved",
     approverId: "user_demo_hr_admin",
@@ -279,6 +288,7 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     startDate: new Date(addDaysIso(14)),
     endDate: new Date(addDaysIso(19)),
     days: 4,
+    halfDay: false,
     reason: "Family commitment",
     status: "pending",
     approverId: null,
@@ -295,6 +305,7 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     startDate: new Date(addDaysIso(28)),
     endDate: new Date(addDaysIso(41)),
     days: 10,
+    halfDay: false,
     reason: "Paternity leave: statutory entitlement 2 weeks (10 working days on this 5-day schedule).",
     status: "pending",
     approverId: null,
@@ -401,9 +412,19 @@ async function serializeRequests(
     leaveType: leaveTypeNames.get(request.leaveType) ?? request.leaveType,
     startDate: request.startDate,
     endDate: request.endDate,
-    days: request.days,
+    days: request.halfDay ? 0.5 : request.days,
+    halfDay: Boolean(request.halfDay),
     reason: request.reason,
     status: request.status,
+    recommendationLabel: (() => {
+      try { return request.recommendationJson ? JSON.parse(request.recommendationJson).label ?? null : null; } catch { return null; }
+    })(),
+    recommendationSuggestion: (() => {
+      try { return request.recommendationJson ? JSON.parse(request.recommendationJson).suggestion ?? null : null; } catch { return null; }
+    })(),
+    recommendationReasons: (() => {
+      try { const value = request.recommendationJson ? JSON.parse(request.recommendationJson).reasons : []; return Array.isArray(value) ? value : []; } catch { return []; }
+    })(),
     approverId: request.approverUserId,
     decisionComment: request.decisionComment,
     submittedAt: request.submittedAt.toISOString(),
