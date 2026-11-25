@@ -281,6 +281,14 @@ export const auditEventsTable = pgTable(
     targetType: text("target_type").notNull(),
     targetId: text("target_id").notNull(),
     summary: text("summary").notNull(),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+    reason: text("reason"),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    requestId: text("request_id"),
+    prevHash: text("prev_hash"),
+    hash: text("hash"),
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
