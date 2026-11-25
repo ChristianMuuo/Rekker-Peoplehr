@@ -32,6 +32,13 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
     "x-peopleos-user-id": "user_demo_admin_01",
   };
 
+  const demoDate = (offsetDays: number): string => {
+    const date = new Date();
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() + offsetDays);
+    return date.toISOString().slice(0, 10);
+  };
+
   const employeeHeaders = {
     "content-type": "application/json",
     "x-peopleos-role": "employee",
@@ -186,7 +193,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
     await withServer(async (baseUrl) => {
       // Query replacements for date when Wanjiku Kimani is on leave
       const replacementsRes = await fetch(
-        `${baseUrl}/api/workforce-erp/production/replacements?date=2026-03-05`,
+        `${baseUrl}/api/workforce-erp/production/replacements?date=${demoDate(-30)}`,
         { headers: supervisorHeaders },
       );
       assert.strictEqual(replacementsRes.status, 200);
@@ -222,7 +229,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
           replacementEmployeeId: "10000000-0000-4000-8000-000000000002",
           targetUnitType: "warehouse",
           targetZone: "Nairobi Dispatch Warehouse",
-          shiftDate: "2026-03-05",
+          shiftDate: demoDate(-30),
           shiftName: "Day (08:00-17:00)",
         }),
       });
@@ -247,8 +254,8 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
           equipmentType: "VNA Turret Truck",
           issuingOrg: "Toyota Forklift Training Academy",
           certificateNumber: certNo,
-          issueDate: "2026-01-10",
-          expiryDate: "2029-01-10",
+          issueDate: demoDate(-300),
+          expiryDate: demoDate(365),
         }),
       });
       assert.strictEqual(regRes.status, 201);
@@ -391,7 +398,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
 
   test("7. Availability Heatmap & Executive Summary: exact coverage % formula and shortage classification", async () => {
     await withServer(async (baseUrl) => {
-      const overviewRes = await fetch(`${baseUrl}/api/workforce-erp/overview?date=2026-03-06`, {
+      const overviewRes = await fetch(`${baseUrl}/api/workforce-erp/overview?date=${demoDate(1)}`, {
         headers: supervisorHeaders,
       });
       assert.strictEqual(overviewRes.status, 200);
@@ -505,7 +512,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
           employeeId: "10000000-0000-4000-8000-000000000002",
           unitType: "production",
           workZone: "Formulation Line A",
-          shiftDate: "2026-03-12",
+          shiftDate: demoDate(5),
           shiftName: "Morning (06:00-14:00)",
           roleSkill: "Line Operator",
         }),
