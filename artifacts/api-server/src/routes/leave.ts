@@ -742,19 +742,29 @@ router.patch(
       res.status(503).json({ error: "PeopleOS organization is not initialized." });
       return;
     }
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+
     if (!process.env.DATABASE_URL) {
+      ensureDemoKenyaDefaultPolicies(membership.organizationId);
       const target = DEMO_LEAVE_POLICIES.find(
-        (p) =>
-          p.id === params.data.policyId &&
-          p.organizationId === membership.organizationId,
+        (policy) =>
+          policy.id === params.data.policyId &&
+          policy.organizationId === membership.organizationId,
       );
       if (!target) {
         res.status(404).json({ error: "Leave policy not found." });
         return;
       }
+      const statutory = policyStatutoryFields(raw, target);
+      const floorError = statutoryFloorError(target.code, body.data.entitlementDays, statutory);
+      if (floorError) {
+        res.status(422).json({ error: floorError, sourceUrl: target.sourceUrl, needsLegalReview: true });
+        return;
+      }
       target.name = name;
       target.entitlementDays = body.data.entitlementDays;
       target.accrualMethod = body.data.accrualMethod;
+      Object.assign(target, statutory);
       target.active = body.data.active;
       await recordAuditEvent({
         organizationId: membership.organizationId,
@@ -778,7 +788,23 @@ router.patch(
       );
       return;
     }
+
     const updated = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(leavePoliciesTable)
+        .where(
+          and(
+            eq(leavePoliciesTable.id, params.data.policyId),
+            eq(leavePoliciesTable.organizationId, membership.organizationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!current) return null;
+      const statutory = policyStatutoryFields(raw, current);
+      const floorError = statutoryFloorError(current.code, body.data.entitlementDays, statutory);
+      if (floorError) return { kind: "floor_error" as const, message: floorError, sourceUrl: current.sourceUrl };
       const [policy] = await tx
         .update(leavePoliciesTable)
         .set({
@@ -786,6 +812,7 @@ router.patch(
           entitlementDays: body.data.entitlementDays,
           accrualMethod: body.data.accrualMethod,
           active: body.data.active,
+          ...statutory,
         })
         .where(
           and(
@@ -795,7 +822,7 @@ router.patch(
         )
         .returning();
       if (!policy) return null;
-      await tx.insert(auditEventsTable).values({
+      await recordAuditEvent({
         organizationId: membership.organizationId,
         actorUserId: membership.userId,
         actor: membership.role,
@@ -804,21 +831,28 @@ router.patch(
         targetId: policy.id,
         summary: `The ${policy.name} leave policy was updated.`,
         isDemo: organization.isDemo,
+        tx,
+        critical: true,
       });
-      return policy;
+      return { kind: "updated" as const, policy };
     });
     if (!updated) {
       res.status(404).json({ error: "Leave policy not found." });
       return;
     }
+    if ("kind" in updated && updated.kind === "floor_error") {
+      res.status(422).json({ error: updated.message, sourceUrl: updated.sourceUrl, needsLegalReview: true });
+      return;
+    }
+    const policy = "kind" in updated ? updated.policy : updated;
     res.json(
       UpdateLeavePolicyResponse.parse({
-        id: updated.id,
-        code: updated.code,
-        name: updated.name,
-        entitlementDays: updated.entitlementDays,
-        accrualMethod: updated.accrualMethod,
-        active: updated.active,
+        id: policy.id,
+        code: policy.code,
+        name: policy.name,
+        entitlementDays: policy.entitlementDays,
+        accrualMethod: policy.accrualMethod,
+        active: policy.active,
       }),
     );
   },
