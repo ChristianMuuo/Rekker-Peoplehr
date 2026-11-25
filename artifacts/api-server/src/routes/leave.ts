@@ -36,6 +36,7 @@ import {
   entitlementToCalendarDays,
   recommendLeave,
   validateKenyaStatutoryFloor,
+  sumLeaveLedgerDays,
 } from "../services/leaveEngine";
 import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "./peopleos";
 import {
@@ -383,8 +384,9 @@ function eventEntitlementCalendarDays(
   return policy.entitlementDays;
 }
 
-function completedServiceMonths(startDate: string, asOf: Date): number {
-  const start = new Date(`${startDate}T00:00:00.000Z`);
+function completedServiceMonths(startDate: string | Date, asOf: Date): number {
+  const normalizedStartDate = dateOnly(startDate);
+  const start = new Date(`${normalizedStartDate}T00:00:00.000Z`);
   if (start.getTime() > asOf.getTime()) return 0;
   let months =
     (asOf.getUTCFullYear() - start.getUTCFullYear()) * 12 +
@@ -397,9 +399,10 @@ function accruedDaysForYear(
   policy: { code?: string; entitlementDays: number; accrualMethod: string },
   year: number,
   asOf: Date,
-  employeeStartDate = `${year}-01-01`,
+  employeeStartDate: string | Date = `${year}-01-01`,
 ): number {
-  const hireDate = new Date(`${employeeStartDate}T00:00:00.000Z`);
+  const normalizedEmployeeStartDate = dateOnly(employeeStartDate);
+  const hireDate = new Date(`${normalizedEmployeeStartDate}T00:00:00.000Z`);
   const yearStart = new Date(Date.UTC(year, 0, 1));
   const endOfYear = new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
   const effectiveAsOf = asOf.getUTCFullYear() > year ? endOfYear : asOf;
@@ -408,7 +411,7 @@ function accruedDaysForYear(
   const code = (policy.code ?? "").toLowerCase();
   if (["maternity", "paternity", "pre-adoptive"].includes(code)) return 0;
 
-  const serviceMonths = completedServiceMonths(employeeStartDate, effectiveAsOf);
+  const serviceMonths = completedServiceMonths(normalizedEmployeeStartDate, effectiveAsOf);
   if (code === "sick" && serviceMonths < 2) return 0;
 
   if (policy.accrualMethod === "monthly") {
@@ -431,7 +434,7 @@ function accruedDaysForYear(
 }
 
 async function ensureAccrualLedgerEntries(
-  employee: { id: string; startDate: string; isDemo?: boolean },
+  employee: { id: string; startDate: string | Date; isDemo?: boolean },
   policy: typeof leavePoliciesTable.$inferSelect,
   asOf: Date,
 ): Promise<void> {
@@ -443,7 +446,7 @@ async function ensureAccrualLedgerEntries(
   if (policy.accrualMethod === "monthly") {
     for (let month = 1; month <= serviceMonths; month += 1) {
       const anniversary = addMonthsClamped(
-        new Date(`${employee.startDate}T00:00:00.000Z`),
+        new Date(`${dateOnly(employee.startDate)}T00:00:00.000Z`),
         month,
       );
       if (anniversary > asOf) continue;
@@ -467,8 +470,8 @@ async function ensureAccrualLedgerEntries(
   }
 
   const firstEligibleDate = code === "sick"
-    ? addMonthsClamped(new Date(`${employee.startDate}T00:00:00.000Z`), 2)
-    : addMonthsClamped(new Date(`${employee.startDate}T00:00:00.000Z`), 12);
+    ? addMonthsClamped(new Date(`${dateOnly(employee.startDate)}T00:00:00.000Z`), 2)
+    : addMonthsClamped(new Date(`${dateOnly(employee.startDate)}T00:00:00.000Z`), 12);
   const eligibleDate = firstEligibleDate.getTime() > Date.UTC(asOf.getUTCFullYear(), 0, 1)
     ? firstEligibleDate
     : new Date(Date.UTC(asOf.getUTCFullYear(), 0, 1));
