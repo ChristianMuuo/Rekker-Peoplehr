@@ -22,8 +22,8 @@ function auditFilters(req: import("express").Request) {
   const action = queryText(req.query.action);
   const from = queryText(req.query.from);
   const to = queryText(req.query.to);
-  const validFrom = from && /^\\d{4}-\\d{2}-\\d{2}$/.test(from) ? new Date(`${from}T00:00:00.000Z`) : undefined;
-  const validTo = to && /^\\d{4}-\\d{2}-\\d{2}$/.test(to) ? new Date(`${to}T23:59:59.999Z`) : undefined;
+  const validFrom = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? new Date(`${from}T00:00:00.000Z`) : undefined;
+  const validTo = to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? new Date(`${to}T23:59:59.999Z`) : undefined;
   return { actor, action, validFrom, validTo };
 }
 
@@ -51,7 +51,7 @@ function sendAuditCsv(
     ...rows.map((row) =>
       columns.map((column) => toCsvCell(row[column as keyof typeof row])).join(","),
     ),
-  ].join("\\r\\n");
+  ].join("\r\n");
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="peopleos-audit-${new Date().toISOString().slice(0, 10)}.csv"`);
   res.setHeader("Cache-Control", "no-store");
