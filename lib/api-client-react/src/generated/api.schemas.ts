@@ -696,10 +696,51 @@ leaveType?: string;
 export type ListAuditEventsParams = {
 /**
  * @minimum 1
- * @maximum 100
+ * @maximum 500
  */
 limit?: number;
+/**
+ * @maxLength 120
+ */
+actor?: string;
+/**
+ * @maxLength 120
+ */
+action?: string;
+/**
+ * @maxLength 120
+ */
+targetType?: string;
+/**
+ * @maxLength 120
+ */
+targetId?: string;
+from?: string;
+to?: string;
 };
+
+export type ExportAuditEventsCsvParams = {
+/**
+ * @maxLength 120
+ */
+actor?: string;
+/**
+ * @maxLength 120
+ */
+action?: string;
+/**
+ * @maxLength 120
+ */
+targetType?: string;
+/**
+ * @maxLength 120
+ */
+targetId?: string;
+from?: string;
+to?: string;
+};
+
+export type VerifyAuditEventIntegrity200 = { [key: string]: unknown };
 
 export type GetPeopleOsOrgChartParams = {
 view?: GetPeopleOsOrgChartView;

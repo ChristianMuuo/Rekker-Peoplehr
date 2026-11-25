@@ -754,15 +754,29 @@ export const ListApprovalsResponse = zod.array(ListApprovalsResponseItem)
 
 
 /**
- * @summary List auditable HR activity
+ * @summary List filtered, organisation-scoped auditable HR activity
  */
 export const listAuditEventsQueryLimitDefault = 30;
-export const listAuditEventsQueryLimitMax = 100;
+export const listAuditEventsQueryLimitMax = 500;
+
+export const listAuditEventsQueryActorMax = 120;
+
+export const listAuditEventsQueryActionMax = 120;
+
+export const listAuditEventsQueryTargetTypeMax = 120;
+
+export const listAuditEventsQueryTargetIdMax = 120;
 
 
 
 export const ListAuditEventsQueryParams = zod.object({
-  "limit": zod.coerce.number().int().min(1).max(listAuditEventsQueryLimitMax).default(listAuditEventsQueryLimitDefault)
+  "limit": zod.coerce.number().int().min(1).max(listAuditEventsQueryLimitMax).default(listAuditEventsQueryLimitDefault),
+  "actor": zod.coerce.string().max(listAuditEventsQueryActorMax).optional(),
+  "action": zod.coerce.string().max(listAuditEventsQueryActionMax).optional(),
+  "targetType": zod.coerce.string().max(listAuditEventsQueryTargetTypeMax).optional(),
+  "targetId": zod.coerce.string().max(listAuditEventsQueryTargetIdMax).optional(),
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
 })
 
 export const ListAuditEventsResponseItem = zod.object({
@@ -776,6 +790,37 @@ export const ListAuditEventsResponseItem = zod.object({
   "isDemo": zod.boolean()
 })
 export const ListAuditEventsResponse = zod.array(ListAuditEventsResponseItem)
+
+
+/**
+ * @summary Export filtered audit events as CSV
+ */
+export const exportAuditEventsCsvQueryActorMax = 120;
+
+export const exportAuditEventsCsvQueryActionMax = 120;
+
+export const exportAuditEventsCsvQueryTargetTypeMax = 120;
+
+export const exportAuditEventsCsvQueryTargetIdMax = 120;
+
+
+
+export const ExportAuditEventsCsvQueryParams = zod.object({
+  "actor": zod.coerce.string().max(exportAuditEventsCsvQueryActorMax).optional(),
+  "action": zod.coerce.string().max(exportAuditEventsCsvQueryActionMax).optional(),
+  "targetType": zod.coerce.string().max(exportAuditEventsCsvQueryTargetTypeMax).optional(),
+  "targetId": zod.coerce.string().max(exportAuditEventsCsvQueryTargetIdMax).optional(),
+  "from": zod.date().optional(),
+  "to": zod.date().optional()
+})
+
+export const ExportAuditEventsCsvResponse = zod.unknown()
+
+
+/**
+ * @summary Verify the append-only audit hash chain
+ */
+export const VerifyAuditEventIntegrityResponse = zod.record(zod.string(), zod.unknown())
 
 
 /**

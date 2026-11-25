@@ -29,6 +29,7 @@ import type {
   EmployeeInput,
   EmployeePage,
   EmployeeUpdate,
+  ExportAuditEventsCsvParams,
   GetPeopleOsOrgChartParams,
   HealthStatus,
   LeaveBalance,
@@ -45,7 +46,8 @@ import type {
   ListLeaveBalancesParams,
   ListLeaveLedgerParams,
   ListLeaveRequestsParams,
-  PeopleOsOverview
+  PeopleOsOverview,
+  VerifyAuditEventIntegrity200
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1661,7 +1663,7 @@ export const getListAuditEventsUrl = (params?: ListAuditEventsParams,) => {
 }
 
 /**
- * @summary List auditable HR activity
+ * @summary List filtered, organisation-scoped auditable HR activity
  */
 export const listAuditEvents = async (params?: ListAuditEventsParams, options?: Parameters<typeof customFetch>[1]): Promise<AuditEvent[]> => {
 
@@ -1708,7 +1710,7 @@ export type ListAuditEventsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List auditable HR activity
+ * @summary List filtered, organisation-scoped auditable HR activity
  */
 
 export function useListAuditEvents<TData = Awaited<ReturnType<typeof listAuditEvents>>, TError = ErrorType<unknown>>(
@@ -1717,6 +1719,167 @@ export function useListAuditEvents<TData = Awaited<ReturnType<typeof listAuditEv
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListAuditEventsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportAuditEventsCsvUrl = (params?: ExportAuditEventsCsvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/audit-events/export.csv?${stringifiedParams}` : `/api/audit-events/export.csv`
+}
+
+/**
+ * @summary Export filtered audit events as CSV
+ */
+export const exportAuditEventsCsv = async (params?: ExportAuditEventsCsvParams, options?: Parameters<typeof customFetch>[1]): Promise<string> => {
+
+  return customFetch<string>(getExportAuditEventsCsvUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAuditEventsCsvQueryKey = (params?: ExportAuditEventsCsvParams,) => {
+    return [
+    `/api/audit-events/export.csv`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportAuditEventsCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportAuditEventsCsv>>, TError = ErrorType<unknown>>(params?: ExportAuditEventsCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditEventsCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAuditEventsCsvQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAuditEventsCsv>>> = ({ signal }) => exportAuditEventsCsv(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAuditEventsCsv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportAuditEventsCsvQueryResult = NonNullable<Awaited<ReturnType<typeof exportAuditEventsCsv>>>
+export type ExportAuditEventsCsvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Export filtered audit events as CSV
+ */
+
+export function useExportAuditEventsCsv<TData = Awaited<ReturnType<typeof exportAuditEventsCsv>>, TError = ErrorType<unknown>>(
+ params?: ExportAuditEventsCsvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportAuditEventsCsv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportAuditEventsCsvQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getVerifyAuditEventIntegrityUrl = () => {
+
+
+
+
+  return `/api/audit-events/integrity`
+}
+
+/**
+ * @summary Verify the append-only audit hash chain
+ */
+export const verifyAuditEventIntegrity = async ( options?: Parameters<typeof customFetch>[1]): Promise<VerifyAuditEventIntegrity200> => {
+
+  return customFetch<VerifyAuditEventIntegrity200>(getVerifyAuditEventIntegrityUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getVerifyAuditEventIntegrityQueryKey = () => {
+    return [
+    `/api/audit-events/integrity`
+    ] as const;
+    }
+
+
+export const getVerifyAuditEventIntegrityQueryOptions = <TData = Awaited<ReturnType<typeof verifyAuditEventIntegrity>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifyAuditEventIntegrity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getVerifyAuditEventIntegrityQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof verifyAuditEventIntegrity>>> = ({ signal }) => verifyAuditEventIntegrity({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof verifyAuditEventIntegrity>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type VerifyAuditEventIntegrityQueryResult = NonNullable<Awaited<ReturnType<typeof verifyAuditEventIntegrity>>>
+export type VerifyAuditEventIntegrityQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Verify the append-only audit hash chain
+ */
+
+export function useVerifyAuditEventIntegrity<TData = Awaited<ReturnType<typeof verifyAuditEventIntegrity>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof verifyAuditEventIntegrity>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getVerifyAuditEventIntegrityQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

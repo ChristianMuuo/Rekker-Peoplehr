@@ -9,7 +9,25 @@
 export type ListAuditEventsParams = {
 /**
  * @minimum 1
- * @maximum 100
+ * @maximum 500
  */
 limit?: number;
+/**
+ * @maxLength 120
+ */
+actor?: string;
+/**
+ * @maxLength 120
+ */
+action?: string;
+/**
+ * @maxLength 120
+ */
+targetType?: string;
+/**
+ * @maxLength 120
+ */
+targetId?: string;
+from?: Date;
+to?: Date;
 };
