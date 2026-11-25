@@ -1,5 +1,8 @@
 name: PeopleOS Phase 1 Enterprise CI
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -34,6 +37,26 @@ jobs:
 
       - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Regenerate contract-first API clients and validators
+        run: pnpm --filter @workspace/api-spec run codegen
+
+      - name: Commit generated API clients on branch pushes
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet -- lib/api-client-react/src/generated lib/api-zod/src/generated; then
+            echo "Generated API clients are up to date."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add lib/api-client-react/src/generated lib/api-zod/src/generated
+            git commit -m "chore(api): regenerate clients from OpenAPI contract"
+            git push origin "${GITHUB_REF_NAME}"
+          fi
+
+      - name: Verify generated clients are committed on pull requests
+        if: github.event_name == 'pull_request'
+        run: git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated
 
       - name: Run full TypeScript strict checks
         run: pnpm run typecheck
