@@ -616,6 +616,8 @@ export const ListAuditEventsResponseItem = zod.object({
   "targetType": zod.string(),
   "targetId": zod.string(),
   "summary": zod.string(),
+  "prevHash": zod.string().nullish(),
+  "hash": zod.string().nullish(),
   "isDemo": zod.boolean()
 })
 export const ListAuditEventsResponse = zod.array(ListAuditEventsResponseItem)
