@@ -268,6 +268,105 @@ export const leaveLedgerTable = pgTable(
   ],
 );
 
+export const leaveApprovalsTable = pgTable(
+  "peopleos_leave_approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    leaveRequestId: uuid("leave_request_id")
+      .notNull()
+      .references(() => leaveRequestsTable.id, { onDelete: "restrict" }),
+    stepIndex: integer("step_index").notNull(),
+    stepType: text("step_type").notNull(),
+    assignedRole: text("assigned_role").notNull(),
+    reviewerUserId: text("reviewer_user_id"),
+    decision: text("decision").notNull().default("pending"),
+    comment: text("comment"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_approvals_request_step_uq").on(
+      table.organizationId,
+      table.leaveRequestId,
+      table.stepIndex,
+    ),
+    index("peopleos_leave_approvals_org_reviewer_idx").on(
+      table.organizationId,
+      table.reviewerUserId,
+      table.decision,
+    ),
+  ],
+);
+
+export const leavePolicyVersionsTable = pgTable(
+  "peopleos_leave_policy_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    policyId: uuid("policy_id")
+      .notNull()
+      .references(() => leavePoliciesTable.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    effectiveFrom: date("effective_from", { mode: "string" }).notNull(),
+    effectiveTo: date("effective_to", { mode: "string" }),
+    changedByUserId: text("changed_by_user_id"),
+    changedAt: timestamp("changed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_leave_policy_versions_policy_ver_uq").on(
+      table.organizationId,
+      table.policyId,
+      table.version,
+    ),
+    index("peopleos_leave_policy_versions_effective_idx").on(
+      table.organizationId,
+      table.policyId,
+      table.effectiveFrom,
+      table.effectiveTo,
+    ),
+  ],
+);
+
+export const publicHolidaysTable = pgTable(
+  "peopleos_public_holidays",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    holidayDate: date("holiday_date", { mode: "string" }).notNull(),
+    name: text("name").notNull(),
+    jurisdiction: text("jurisdiction").notNull().default("KE"),
+    sourceUrl: text("source_url"),
+    isGazetted: boolean("is_gazetted").notNull().default(false),
+    note: text("note"),
+    createdByUserId: text("created_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("peopleos_public_holidays_org_date_uq").on(
+      table.organizationId,
+      table.holidayDate,
+    ),
+    index("peopleos_public_holidays_org_date_idx").on(
+      table.organizationId,
+      table.holidayDate,
+    ),
+  ],
+);
+
 export const auditEventsTable = pgTable(
   "peopleos_audit_events",
   {
