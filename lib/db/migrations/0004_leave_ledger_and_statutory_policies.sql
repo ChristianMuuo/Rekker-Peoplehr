@@ -18,6 +18,7 @@ ALTER TABLE "peopleos_leave_policies"
 
 ALTER TABLE "peopleos_leave_requests"
   ADD COLUMN IF NOT EXISTS "half_day" boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "certificate_reference" text,
   ADD COLUMN IF NOT EXISTS "recommended_by_user_id" text,
   ADD COLUMN IF NOT EXISTS "recommended_at" timestamptz,
   ADD COLUMN IF NOT EXISTS "recommendation_json" text;
