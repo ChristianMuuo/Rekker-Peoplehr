@@ -56,6 +56,12 @@ import {
 
 const router: IRouter = Router();
 
+function queryParamText(value: unknown, maxLength = 120): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().slice(0, maxLength);
+  return normalized || undefined;
+}
+
 export interface DemoLeavePolicyItem {
   id: string;
   organizationId: string;
@@ -1146,10 +1152,10 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
 router.get("/leave-preview", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
-  const employeeId = queryText(req.query.employeeId, 80);
-  const leaveType = queryText(req.query.leaveType, 64);
-  const startDate = queryText(req.query.startDate, 10);
-  const endDate = queryText(req.query.endDate, 10);
+  const employeeId = queryParamText(req.query.employeeId, 80);
+  const leaveType = queryParamText(req.query.leaveType, 64);
+  const startDate = queryParamText(req.query.startDate, 10);
+  const endDate = queryParamText(req.query.endDate, 10);
   const halfDay = req.query.halfDay === "true";
   const validDate = (value: string | undefined) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)));
   if (!employeeId || !leaveType || !validDate(startDate) || !validDate(endDate)) {
@@ -1179,7 +1185,14 @@ router.get("/leave-preview", async (req, res): Promise<void> => {
     ensureDemoKenyaDefaultPolicies(membership.organizationId);
     ensureDemoLeaveLedger(membership.organizationId);
     const record = DEMO_EMPLOYEES_LIST.find((item) => item.id === employeeId);
-    if (record) employee = { ...record, id: record.id };
+    if (record) employee = {
+      id: record.id,
+      firstName: record.firstName,
+      lastName: record.lastName,
+      startDate: dateOnly(record.startDate),
+      managerId: record.managerId,
+      departmentId: record.departmentId,
+    };
     const found = DEMO_LEAVE_POLICIES.find((item) =>
       item.organizationId === membership.organizationId && item.code === leaveType && item.active);
     if (found) policy = found;
