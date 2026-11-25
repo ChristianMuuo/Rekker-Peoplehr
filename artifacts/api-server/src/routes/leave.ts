@@ -273,8 +273,8 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     leaveType: "paternity",
     startDate: demoDateOffset(30),
     endDate: demoDateOffset(43),
-    days: 10,
-    reason: "Paternity leave: statutory entitlement is 2 weeks (14 calendar days); work-schedule conversion is subject to legal review.",
+    days: 14,
+    reason: "Paternity leave: statutory entitlement is 2 weeks (14 calendar days). The system records the statutory calendar period; any working-day conversion requires legal review.",
     status: "pending",
     approverId: null,
     decisionComment: null,
@@ -1071,16 +1071,15 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
             request.leaveType === policy.code &&
             (request.status === "approved" || request.status === "pending"),
         );
+        const eventBased = isEventBasedLeave(policy.code);
         const usedDays = relevantRequests
           .filter((request) => request.status === "approved")
           .reduce(
             (total, request) =>
               total +
-              businessDaysForYear(
-                dateOnly(request.startDate),
-                dateOnly(request.endDate),
-                year,
-              ),
+              (eventBased
+                ? calendarDaysForYear(dateOnly(request.startDate), dateOnly(request.endDate), year)
+                : businessDaysForYear(dateOnly(request.startDate), dateOnly(request.endDate), year)),
             0,
           );
         const pendingDays = relevantRequests
@@ -1088,14 +1087,11 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
           .reduce(
             (total, request) =>
               total +
-              businessDaysForYear(
-                dateOnly(request.startDate),
-                dateOnly(request.endDate),
-                year,
-              ),
+              (eventBased
+                ? calendarDaysForYear(dateOnly(request.startDate), dateOnly(request.endDate), year)
+                : businessDaysForYear(dateOnly(request.startDate), dateOnly(request.endDate), year)),
             0,
           );
-        const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
         const accruedDays = eventBased
           ? policy.entitlementDays
           : accruedDaysForYear(policy, year, new Date(), employee.startDate);
@@ -1267,11 +1263,13 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
           request.leaveType === policy.code &&
           request.status === "pending",
       );
+      const eventBased = isEventBasedLeave(policy.code);
       const pendingDays = relevantRequests.reduce(
         (total, request) =>
           total +
-          businessDaysForYear(request.startDate, request.endDate, year) -
-          (request.halfDay ? 0.5 : 0),
+          (eventBased
+            ? calendarDaysForYear(request.startDate, request.endDate, year)
+            : businessDaysForYear(request.startDate, request.endDate, year) - (request.halfDay ? 0.5 : 0)),
         0,
       );
       const relevantLedger = ledgerEntries.filter(
@@ -1285,7 +1283,6 @@ router.get("/leave-balances", async (req, res): Promise<void> => {
       const usageEntries = relevantLedger.filter(
         (entry) => entry.entryType === "deduction" || entry.entryType === "reversal",
       );
-      const eventBased = ["maternity", "paternity", "pre-adoptive"].includes(policy.code);
       const accruedDays = eventBased
         ? policy.entitlementDays
         : sumLeaveLedgerDays(accrualEntries);
@@ -2307,10 +2304,14 @@ router.post(
       if (!updated) return { kind: "already_decided" as const };
 
       if (targetStatus === "approved") {
-        const yearlyDays = businessDaysByYear(request.startDate, request.endDate);
+        const eventBased = isEventBasedLeave(request.leaveType);
+        const yearlyDays = eventBased
+          ? new Map([[Number(request.startDate.slice(0, 4)), request.days]])
+          : businessDaysByYear(request.startDate, request.endDate);
         for (const [leaveYear, fullDays] of yearlyDays) {
-          const quantityDays =
-            fullDays - (request.halfDay && request.startDate.slice(0, 4) === String(leaveYear) ? 0.5 : 0);
+          const quantityDays = eventBased
+            ? fullDays
+            : fullDays - (request.halfDay && request.startDate.slice(0, 4) === String(leaveYear) ? 0.5 : 0);
           if (quantityDays <= 0) continue;
           await tx
             .insert(leaveLedgerTable)
@@ -2466,10 +2467,14 @@ router.post(
       }
 
       if (request.status === "approved") {
-        const yearlyDays = businessDaysByYear(request.startDate, request.endDate);
+        const eventBased = isEventBasedLeave(request.leaveType);
+        const yearlyDays = eventBased
+          ? new Map([[Number(request.startDate.slice(0, 4)), request.days]])
+          : businessDaysByYear(request.startDate, request.endDate);
         for (const [leaveYear, fullDays] of yearlyDays) {
-          const quantityDays =
-            fullDays - (request.halfDay && request.startDate.slice(0, 4) === String(leaveYear) ? 0.5 : 0);
+          const quantityDays = eventBased
+            ? fullDays
+            : fullDays - (request.halfDay && request.startDate.slice(0, 4) === String(leaveYear) ? 0.5 : 0);
           if (quantityDays <= 0) continue;
           await tx
             .insert(leaveLedgerTable)
