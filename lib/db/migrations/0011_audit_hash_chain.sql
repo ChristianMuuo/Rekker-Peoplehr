@@ -14,7 +14,7 @@ ALTER TABLE "peopleos_audit_events"
 
 -- Backfill a continuous hash chain for all pre-existing audit rows before
 -- installing the no-mutation trigger.
-DO $
+DO $$
 DECLARE
   audit_row record;
   previous_org text := NULL;
@@ -62,7 +62,7 @@ BEGIN
     previous_hash := computed_hash;
   END LOOP;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION peopleos_audit_chain_and_immutability()
 RETURNS trigger LANGUAGE plpgsql AS $$
