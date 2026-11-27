@@ -83,4 +83,5 @@ export async function checkDbHealth(timeoutMs: number = 2000): Promise<{
   }
 }
 
+export { PGlite } from "@electric-sql/pglite";
 export * from "./schema";

@@ -13,6 +13,7 @@ import {
   MODULE_PERMISSION_MATRIX,
   PEOPLEOS_ROLES,
 } from "../lib/authorization";
+import { resolveSessionFromToken } from "../lib/authService";
 import { logger } from "../lib/logger";
 
 export { MODULE_PERMISSION_MATRIX, PEOPLEOS_ROLES };
@@ -129,10 +130,32 @@ export function assertSameTenant(
   return membership.organizationId === resourceOrgId;
 }
 
+export async function resolveFirstPartyCookieSession(req: Request) {
+  const header = req.headers.cookie;
+  if (typeof header !== "string") return null;
+  const match = header
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("peopleos_sid="));
+  const rawToken = match ? decodeURIComponent(match.slice("peopleos_sid=".length)) : undefined;
+  return resolveSessionFromToken(rawToken);
+}
+
 export async function ensureMembership(
   req: Request,
   res: Response,
 ): Promise<MembershipRecord | null> {
+  const firstPartySession = await resolveFirstPartyCookieSession(req);
+  if (firstPartySession) {
+    return {
+      userId: firstPartySession.userId,
+      organizationId: firstPartySession.organizationId,
+      role: firstPartySession.role,
+      employeeId: firstPartySession.employeeId,
+      createdAt: new Date(),
+    };
+  }
+
   const demoPermitted = isDemoAuthPermitted();
 
   // Reject spoofed demo role/user headers whenever Clerk or Production auth is enforced

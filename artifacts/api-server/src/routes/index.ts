@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import authRouter from "./auth";
+import leaveAdminRouter from "./leaveAdmin";
 import phase2CoreHrRouter from "./phase2CoreHr";
 import peopleOsRouter from "./peopleos";
 import leaveRouter from "./leave";
@@ -22,6 +24,8 @@ import tradeRouter from "./trade";
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(authRouter);
+router.use(leaveAdminRouter);
 router.use(tradeRouter);
 router.use(hrCasesRouter);
 router.use(workforceErpRouter);

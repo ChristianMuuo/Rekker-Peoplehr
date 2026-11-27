@@ -1193,7 +1193,7 @@ function AuditPage() {
   if (!auth.data?.canViewAudit) return <div><PageHeading eyebrow="Governance" title="Audit trail" /><div className="surface"><EmptyState title="Restricted area" message="Audit events are available only to designated audit roles. Ask your system administrator if your role should include this access." /></div></div>;
   if (audit.isLoading) return <LoadingScreen label="Loading audit events" />;
   if (audit.isError) return <ErrorState title="Audit events could not load" onRetry={() => audit.refetch()} />;
-  return <div><PageHeading eyebrow="Governance / Record of changes" title="Audit trail" description="A chronological record of actions returned for your authorized audit view." />
+  return <div><PageHeading eyebrow="Governance / Record of changes" title="Audit trail" description="A chronological record of actions returned for your authorized audit view." action={<button type="button" onClick={() => void triggerCsvDownload('/api/audit-events/export.csv', 'rekker-audit-log.csv')} className="btn btn-outline text-xs" data-testid="button-export-audit-csv"><Download size={14} /> Export CSV</button>} />
     {!audit.data?.length ? <div className="surface"><EmptyState title="No audit events" message="No events were returned for this timeline." /></div> :
     <div className="surface divide-y divide-stone-100">{audit.data.map((event,i) => <div className="flex gap-4 p-4 md:p-5" key={event.id} data-testid={`row-audit-event-${event.id}`}>
       <div className="flex w-20 shrink-0 flex-col items-end pt-1 text-right"><span className="text-[10px] font-bold text-stone-700">{formatDate(event.occurredAt)}</span><span className="mt-1 text-[10px] text-stone-400">{new Date(event.occurredAt).toLocaleTimeString('en-KE',{hour:'2-digit',minute:'2-digit'})}</span></div>
@@ -1447,6 +1447,49 @@ function PhasePage({ title }: { title: string }) {
   </div>;
 }
 
+function DemoAccessPage() {
+  const [, setLocation] = useLocation();
+  const [passcode, setPasscode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleUnlock = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiPost('/api/demo-access', { passcode });
+      setLocation('/overview');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid demo passcode.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f6f3ee] px-4">
+      <form onSubmit={handleUnlock} className="w-full max-w-sm space-y-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-lg" data-testid="form-demo-access">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f5ebe7] text-[#C71D1D]"><ShieldCheck size={20} /></div>
+          <div>
+            <h1 className="font-display text-lg font-bold text-stone-900">Rekker PeopleOS Preview</h1>
+            <p className="text-xs text-stone-500">Enter the demo access passcode to continue.</p>
+          </div>
+        </div>
+        <label className="block">
+          <span className="label">Access Passcode</span>
+          <input type="password" required value={passcode} onChange={(e) => setPasscode(e.target.value)} className="field" placeholder="Enter passcode" data-testid="input-demo-passcode" />
+        </label>
+        {error && <p className="text-xs text-[#a91919]" data-testid="text-demo-passcode-error">{error}</p>}
+        <button type="submit" disabled={submitting} className="btn btn-primary w-full text-xs" data-testid="button-unlock-demo">
+          {submitting ? 'Verifying…' : 'Unlock Preview'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function RoutedBoundary({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   return <ErrorBoundary resetKey={location}>{children}</ErrorBoundary>;
@@ -1454,6 +1497,7 @@ function RoutedBoundary({ children }: { children: ReactNode }) {
 function RouterContents() {
   return <RoutedBoundary><Switch>
     <Route path="/" component={AppHomeRedirect} />
+    <Route path="/access" component={DemoAccessPage} />
     <Route path="/sign-in/*?" component={SignInPage} />
     <Route path="/sign-up/*?" component={SignUpPage} />
     <Route component={ProtectedRouter} />

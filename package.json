@@ -5,7 +5,7 @@
   "scripts": {
     "preinstall": "node -e \"const fs=require('fs');['package-lock.json','yarn.lock'].forEach(f=>{try{fs.unlinkSync(f)}catch(e){}});if(!/pnpm/.test(process.env.npm_config_user_agent||'')){console.error('Use pnpm instead');process.exit(1);}\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "lint": "eslint artifacts/api-server/src/lib/leaveAdvisor.ts artifacts/api-server/src/lib/demoDateOffset.ts artifacts/api-server/src/lib/roleDisplayMap.ts lib/db/src/clock.ts lib/db/src/schema/productionCore.ts",
+    "lint": "eslint artifacts/api-server/src/lib/leaveAdvisor.ts artifacts/api-server/src/lib/demoDateOffset.ts artifacts/api-server/src/lib/roleDisplayMap.ts artifacts/api-server/src/lib/authService.ts artifacts/api-server/src/lib/auditLogger.ts artifacts/api-server/src/routes/auth.ts artifacts/api-server/src/routes/leaveAdmin.ts lib/db/src/clock.ts lib/db/src/schema/productionCore.ts",
     "test": "pnpm -r --if-present run test",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
