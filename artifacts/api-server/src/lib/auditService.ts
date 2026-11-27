@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { auditEventsTable, db } from "@workspace/db";
+import { demoDateTime, demoYearMonth } from "./demoDateOffset";
 import { logger } from "./logger";
 
 export interface AuditEntry {
@@ -29,7 +30,7 @@ export const DEMO_AUDIT_STORE: AuditEntry[] = [
   {
     id: "audit-001",
     organizationId: "rekker-demo",
-    occurredAt: "2026-03-05T14:20:00.000Z",
+    occurredAt: demoDateTime(-5, "14:20:00"),
     actor: "Demo Admin 07 (hr_admin)",
     actorUserId: "user_demo_admin_01",
     action: "LEAVE_APPROVE",
@@ -41,19 +42,19 @@ export const DEMO_AUDIT_STORE: AuditEntry[] = [
   {
     id: "audit-002",
     organizationId: "rekker-demo",
-    occurredAt: "2026-03-01T09:00:00.000Z",
+    occurredAt: demoDateTime(-10, "09:00:00"),
     actor: "Demo Finance 09 (finance_manager)",
     actorUserId: "user_demo_payroll_01",
     action: "PAYROLL_GENERATION",
     targetType: "payroll_period",
-    targetId: "period-2026-02",
-    summary: "Finalized statutory KRA & NSSF payroll report for February 2026.",
+    targetId: `period-${demoYearMonth(-1)}`,
+    summary: `Finalized statutory KRA & NSSF payroll report for ${demoYearMonth(-1)}.`,
     isDemo: true,
   },
   {
     id: "audit-003",
     organizationId: "rekker-demo",
-    occurredAt: "2026-02-28T16:45:00.000Z",
+    occurredAt: demoDateTime(-14, "16:45:00"),
     actor: "Demo Recruiter 08 (recruiter)",
     actorUserId: "user_demo_recruiter_01",
     action: "CANDIDATE_SCREEN",

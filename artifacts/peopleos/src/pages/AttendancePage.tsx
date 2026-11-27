@@ -12,7 +12,7 @@ export function AttendancePage() {
   const [clockTime, setClockTime] = useState<string | null>(null);
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
 
-  const [corrDate, setCorrDate] = useState('2026-03-06');
+  const [corrDate, setCorrDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [corrIn, setCorrIn] = useState('08:30');
   const [corrOut, setCorrOut] = useState('17:00');
   const [corrReason, setCorrReason] = useState('');

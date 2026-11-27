@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { demoDate, demoDateTime } from "../lib/demoDateOffset";
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
@@ -27,6 +28,7 @@ import {
   leaveRequestsTable,
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
+import { adviseOnLeaveRequest, type LeaveRecommendation } from "../lib/leaveAdvisor";
 import { DEMO_DEPARTMENTS_LIST, DEMO_EMPLOYEES_LIST } from "./peopleos";
 import {
   countCalendarWorkingDays,
@@ -51,9 +53,71 @@ export interface DemoLeavePolicyItem {
   active: boolean;
 }
 
-// Per-organization leave policies start empty by design (never prefilled with statutory amounts).
-export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] = [];
-const approverRoles = [
+// Kenya statutory leave types pre-populated as defaults.
+// NEEDS_LEGAL_REVIEW: verify exact entitlements against Employment Act 2007 and any amendments.
+export const DEMO_LEAVE_POLICIES: DemoLeavePolicyItem[] = [
+  {
+    id: "policy-annual",
+    organizationId: "rekker-demo",
+    code: "annual",
+    name: "Annual Leave",
+    // Employment Act 2007 s.28: 21 working days after 12 months continuous service
+    entitlementDays: 21,
+    accrualMethod: "monthly",
+    active: true,
+  },
+  {
+    id: "policy-sick",
+    organizationId: "rekker-demo",
+    code: "sick",
+    name: "Sick Leave",
+    // Employment Act 2007 s.30: 7 days full pay + 7 days half pay per 12-month period
+    // NEEDS_LEGAL_REVIEW: half-pay period handling
+    entitlementDays: 14,
+    accrualMethod: "annual",
+    active: true,
+  },
+  {
+    id: "policy-maternity",
+    organizationId: "rekker-demo",
+    code: "maternity",
+    name: "Maternity Leave",
+    // Employment Act 2007 s.29: 3 months full pay
+    entitlementDays: 90,
+    accrualMethod: "annual",
+    active: true,
+  },
+  {
+    id: "policy-paternity",
+    organizationId: "rekker-demo",
+    code: "paternity",
+    name: "Paternity Leave",
+    // Employment Act 2007 s.29(8): 2 weeks full pay
+    // NEEDS_LEGAL_REVIEW: "2 weeks" = 14 calendar days (employee-protective interpretation)
+    entitlementDays: 14,
+    accrualMethod: "annual",
+    active: true,
+  },
+  {
+    id: "policy-compassionate",
+    organizationId: "rekker-demo",
+    code: "compassionate",
+    name: "Compassionate Leave",
+    entitlementDays: 3,
+    accrualMethod: "annual",
+    active: true,
+  },
+  {
+    id: "policy-unpaid",
+    organizationId: "rekker-demo",
+    code: "unpaid",
+    name: "Unpaid Leave",
+    entitlementDays: 30,
+    accrualMethod: "annual",
+    active: true,
+  },
+];
+const approverRoles: readonly string[] = [
   PEOPLEOS_ROLES.hrAdmin,
   PEOPLEOS_ROLES.hrManager,
   PEOPLEOS_ROLES.systemAdmin,
@@ -88,15 +152,15 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     employeeId: "10000000-0000-4000-8000-000000000004",
     employeeName: "Wanjiku Kimani",
     leaveType: "annual",
-    startDate: new Date("2026-03-02"),
-    endDate: new Date("2026-03-13"),
+    startDate: new Date(demoDate(-45)),
+    endDate: new Date(demoDate(-33)),
     days: 10,
     reason: "Annual rest and family leave",
     status: "approved",
     approverId: "10000000-0000-4000-8000-000000000007",
     decisionComment: "Approved. Fleet coverage confirmed.",
-    submittedAt: new Date("2026-02-15T08:30:00Z"),
-    decidedAt: new Date("2026-02-16T10:00:00Z"),
+    submittedAt: new Date(demoDateTime(-60, "08:30:00")),
+    decidedAt: new Date(demoDateTime(-59, "10:00:00")),
     isDemo: true,
   },
   {
@@ -104,14 +168,14 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     employeeId: "10000000-0000-4000-8000-000000000006",
     employeeName: "Brian Kiprotich",
     leaveType: "annual",
-    startDate: new Date("2026-03-20"),
-    endDate: new Date("2026-03-27"),
+    startDate: new Date(demoDate(5)),
+    endDate: new Date(demoDate(12)),
     days: 6,
     reason: "Professional certification exam study period",
     status: "pending",
     approverId: null,
     decisionComment: null,
-    submittedAt: new Date("2026-03-01T11:45:00Z"),
+    submittedAt: new Date(demoDateTime(-3, "11:45:00")),
     decidedAt: null,
     isDemo: true,
   },
@@ -119,15 +183,18 @@ export const DEMO_LEAVE_STORE: DemoLeaveItem[] = [
     id: "leave-003",
     employeeId: "10000000-0000-4000-8000-000000000002",
     employeeName: "Mwangi Kariuki",
-    leaveType: "parental",
-    startDate: new Date("2026-04-06"),
-    endDate: new Date("2026-04-17"),
-    days: 10,
-    reason: "Paternity leave under Employment Act 2007",
+    // Employment Act 2007 s.29(8): paternity leave is 2 weeks (14 calendar days)
+    // NEEDS_LEGAL_REVIEW: confirm whether "2 weeks" means 14 calendar days or 10 working days.
+    // We use the more employee-protective interpretation: 14 calendar days.
+    leaveType: "paternity",
+    startDate: new Date(demoDate(14)),
+    endDate: new Date(demoDate(27)),
+    days: 14,
+    reason: "Paternity leave under Employment Act 2007 s.29(8) — 2 weeks full pay",
     status: "pending",
     approverId: null,
     decisionComment: null,
-    submittedAt: new Date("2026-03-04T09:15:00Z"),
+    submittedAt: new Date(demoDateTime(-2, "09:15:00")),
     decidedAt: null,
     isDemo: true,
   },
@@ -1260,22 +1327,80 @@ router.post(
         res.status(403).json({ error: "You cannot approve a leave request you submitted." });
         return;
       }
-      target.status = body.data.decision === "approve" ? "approved" : "rejected";
+      const nextStatus = body.data.decision === "approve" ? "approved" : "rejected";
+      // Validate balance atomically before committing approval
+      if (nextStatus === "approved") {
+        const policy = DEMO_LEAVE_POLICIES.find(
+          (p) =>
+            p.organizationId === membership.organizationId &&
+            p.code === target.leaveType &&
+            p.active,
+        );
+        if (policy && policy.code !== "unpaid") {
+          const year = Number(dateOnly(target.startDate).slice(0, 4));
+          const asOf = new Date(
+            Math.max(new Date(`${dateOnly(target.startDate)}T00:00:00.000Z`).getTime(), Date.now()),
+          );
+          const accrued = accruedDaysForYear(policy, year, asOf);
+          const alreadyUsedOrPending = DEMO_LEAVE_STORE.filter(
+            (r) =>
+              r.id !== target.id &&
+              r.employeeId === target.employeeId &&
+              r.leaveType === policy.code &&
+              (r.status === "approved" || r.status === "pending"),
+          ).reduce(
+            (sum, r) =>
+              sum + businessDaysForYear(dateOnly(r.startDate), dateOnly(r.endDate), year),
+            0,
+          );
+          const requestedForYear = businessDaysForYear(
+            dateOnly(target.startDate),
+            dateOnly(target.endDate),
+            year,
+          );
+          if (alreadyUsedOrPending + requestedForYear > accrued) {
+            res.status(409).json({
+              error: `Cannot approve: insufficient ${policy.name} balance (${accrued - alreadyUsedOrPending} day(s) available, ${requestedForYear} requested).`,
+            });
+            return;
+          }
+        }
+      }
+
+      const prevState = {
+        status: target.status,
+        decisionComment: target.decisionComment,
+        decidedAt: target.decidedAt,
+        approverId: target.approverId,
+      };
+      target.status = nextStatus;
       target.decisionComment = body.data.comment ?? null;
       target.decidedAt = new Date();
       target.approverId = membership.userId;
-      await recordAuditEvent({
-        organizationId: membership.organizationId,
-        actorUserId: membership.userId,
-        actor: membership.role,
-        action: target.status === "approved" ? "leave_request_approved" : "leave_request_rejected",
-        targetType: "leave_request",
-        targetId: target.id,
-        summary: `Leave request for ${target.employeeName} was ${target.status}.`,
-        correlationId: req.correlationId,
-        critical: true,
-        isDemo: true,
-      });
+      try {
+        await recordAuditEvent({
+          organizationId: membership.organizationId,
+          actorUserId: membership.userId,
+          actor: membership.role,
+          action: nextStatus === "approved" ? "leave_request_approved" : "leave_request_rejected",
+          targetType: "leave_request",
+          targetId: target.id,
+          summary:
+            nextStatus === "approved"
+              ? `Approved ${target.days} day(s) of ${target.leaveType} leave for ${target.employeeName}; balance deducted.`
+              : `Declined ${target.leaveType} leave request for ${target.employeeName}; no balance deducted.`,
+          correlationId: req.correlationId,
+          critical: true,
+          isDemo: true,
+        });
+      } catch (err) {
+        // Roll back in-memory state cleanly if critical audit persistence fails
+        target.status = prevState.status;
+        target.decisionComment = prevState.decisionComment;
+        target.decidedAt = prevState.decidedAt;
+        target.approverId = prevState.approverId;
+        throw err;
+      }
       res.json(DecideLeaveRequestResponse.parse(target));
       return;
     }
@@ -1315,6 +1440,48 @@ router.post(
     }
     const status = body.data.decision === "approve" ? "approved" : "rejected";
     const updated = await db.transaction(async (tx) => {
+      if (status === "approved") {
+        const [policy] = await tx
+          .select()
+          .from(leavePoliciesTable)
+          .where(
+            and(
+              eq(leavePoliciesTable.organizationId, membership.organizationId),
+              eq(leavePoliciesTable.code, request.leaveType),
+              eq(leavePoliciesTable.active, true),
+            ),
+          )
+          .limit(1);
+        if (policy && policy.code !== "unpaid") {
+          const year = Number(dateOnly(request.startDate).slice(0, 4));
+          const asOf = new Date(
+            Math.max(new Date(`${dateOnly(request.startDate)}T00:00:00.000Z`).getTime(), Date.now()),
+          );
+          const accrued = accruedDaysForYear(policy, year, asOf);
+          const existing = await tx
+            .select({
+              id: leaveRequestsTable.id,
+              startDate: leaveRequestsTable.startDate,
+              endDate: leaveRequestsTable.endDate,
+            })
+            .from(leaveRequestsTable)
+            .where(
+              and(
+                eq(leaveRequestsTable.organizationId, membership.organizationId),
+                eq(leaveRequestsTable.employeeId, request.employeeId),
+                eq(leaveRequestsTable.leaveType, policy.code),
+                inArray(leaveRequestsTable.status, ["approved", "pending"]),
+              ),
+            );
+          const reservedExceptThis = existing
+            .filter((r) => r.id !== request.id)
+            .reduce((sum, r) => sum + businessDaysForYear(r.startDate, r.endDate, year), 0);
+          const requestedForYear = businessDaysForYear(request.startDate, request.endDate, year);
+          if (reservedExceptThis + requestedForYear > accrued) {
+            return "insufficient_balance" as const;
+          }
+        }
+      }
       const [result] = await tx
         .update(leaveRequestsTable)
         .set({
@@ -1339,11 +1506,18 @@ router.post(
         action: status === "approved" ? "leave_request_approved" : "leave_request_rejected",
         targetType: "leave_request",
         targetId: request.id,
-        summary: `A leave request was ${status}.`,
+        summary:
+          status === "approved"
+            ? `Approved ${request.days} day(s) of ${request.leaveType} leave; balance deducted.`
+            : `Declined ${request.leaveType} leave request; no balance deducted.`,
         isDemo: request.isDemo,
       });
       return result;
     });
+    if (updated === "insufficient_balance") {
+      res.status(409).json({ error: "Insufficient leave balance to approve this request." });
+      return;
+    }
     if (!updated) {
       res.status(409).json({ error: "This request has already been decided." });
       return;
@@ -1628,6 +1802,333 @@ router.get(["/leave/calendar", "/leave-calendar"], async (req, res): Promise<voi
   });
 });
 
+async function evaluateLeaveRecommendation(params: {
+  organizationId: string;
+  employeeId: string | null | undefined;
+  leaveTypeCode: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  excludeRequestId?: string;
+}): Promise<LeaveRecommendation> {
+  const year = Number(params.startDate.slice(0, 4)) || new Date().getUTCFullYear();
+  const asOf = new Date(
+    Math.max(new Date(`${params.startDate}T00:00:00.000Z`).getTime(), Date.now()),
+  );
+
+  if (!process.env.DATABASE_URL) {
+    const policy = DEMO_LEAVE_POLICIES.find(
+      (p) => p.organizationId === params.organizationId && p.code === params.leaveTypeCode,
+    );
+    const emp = params.employeeId
+      ? DEMO_EMPLOYEES_LIST.find((e) => e.id === params.employeeId)
+      : null;
+
+    const overlapping = DEMO_LEAVE_STORE.filter(
+      (r) =>
+        r.id !== params.excludeRequestId &&
+        (!params.employeeId || r.employeeId === params.employeeId) &&
+        (r.status === "approved" || r.status === "pending") &&
+        dateOnly(r.startDate) <= params.endDate &&
+        dateOnly(r.endDate) >= params.startDate,
+    );
+
+    const reservedDays = params.employeeId && policy
+      ? DEMO_LEAVE_STORE.filter(
+          (r) =>
+            r.id !== params.excludeRequestId &&
+            r.employeeId === params.employeeId &&
+            r.leaveType === policy.code &&
+            (r.status === "approved" || r.status === "pending"),
+        ).reduce(
+          (sum, r) => sum + businessDaysForYear(dateOnly(r.startDate), dateOnly(r.endDate), year),
+          0,
+        )
+      : 0;
+
+    const accruedDays = policy ? accruedDaysForYear(policy, year, asOf) : 0;
+    const deptEmps = emp
+      ? DEMO_EMPLOYEES_LIST.filter((e) => e.departmentId === emp.departmentId && e.status !== "former")
+      : [];
+    const deptIds = new Set(deptEmps.map((e) => e.id));
+    const deptAway = new Set(
+      DEMO_LEAVE_STORE.filter(
+        (r) =>
+          r.id !== params.excludeRequestId &&
+          r.employeeId !== params.employeeId &&
+          deptIds.has(r.employeeId) &&
+          (r.status === "approved" || r.status === "pending") &&
+          dateOnly(r.startDate) <= params.endDate &&
+          dateOnly(r.endDate) >= params.startDate,
+      ).map((r) => r.employeeId),
+    );
+
+    return adviseOnLeaveRequest({
+      leaveTypeCode: params.leaveTypeCode,
+      leaveTypeName: policy?.name ?? params.leaveTypeCode,
+      policyActive: Boolean(policy?.active),
+      requestedDays: params.days,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      availableDays: accruedDays - reservedDays,
+      hasOverlap: overlapping.length > 0,
+      departmentTotalCount: deptEmps.length || 1,
+      departmentAbsentCount: deptAway.size,
+    });
+  }
+
+  const [policy] = await db
+    .select()
+    .from(leavePoliciesTable)
+    .where(
+      and(
+        eq(leavePoliciesTable.organizationId, params.organizationId),
+        eq(leavePoliciesTable.code, params.leaveTypeCode),
+      ),
+    )
+    .limit(1);
+
+  const employees = await db
+    .select({ id: employeesTable.id, departmentId: employeesTable.departmentId, status: employeesTable.status })
+    .from(employeesTable)
+    .where(eq(employeesTable.organizationId, params.organizationId));
+
+  const emp = params.employeeId ? employees.find((e) => e.id === params.employeeId) : null;
+  const activeLeaveRows = await db
+    .select()
+    .from(leaveRequestsTable)
+    .where(
+      and(
+        eq(leaveRequestsTable.organizationId, params.organizationId),
+        inArray(leaveRequestsTable.status, ["approved", "pending"]),
+      ),
+    );
+
+  const overlapping = activeLeaveRows.filter(
+    (r) =>
+      r.id !== params.excludeRequestId &&
+      (!params.employeeId || r.employeeId === params.employeeId) &&
+      dateOnly(r.startDate) <= params.endDate &&
+      dateOnly(r.endDate) >= params.startDate,
+  );
+
+  const reservedDays = params.employeeId && policy
+    ? activeLeaveRows
+        .filter(
+          (r) =>
+            r.id !== params.excludeRequestId &&
+            r.employeeId === params.employeeId &&
+            r.leaveType === policy.code,
+        )
+        .reduce(
+          (sum, r) => sum + businessDaysForYear(dateOnly(r.startDate), dateOnly(r.endDate), year),
+          0,
+        )
+    : 0;
+
+  const accruedDays = policy ? accruedDaysForYear(policy, year, asOf) : 0;
+  const deptEmps = emp
+    ? employees.filter((e) => e.departmentId === emp.departmentId && e.status !== "former")
+    : [];
+  const deptIds = new Set(deptEmps.map((e) => e.id));
+  const deptAway = new Set(
+    activeLeaveRows
+      .filter(
+        (r) =>
+          r.id !== params.excludeRequestId &&
+          r.employeeId !== params.employeeId &&
+          deptIds.has(r.employeeId) &&
+          dateOnly(r.startDate) <= params.endDate &&
+          dateOnly(r.endDate) >= params.startDate,
+      )
+      .map((r) => r.employeeId),
+  );
+
+  return adviseOnLeaveRequest({
+    leaveTypeCode: params.leaveTypeCode,
+    leaveTypeName: policy?.name ?? params.leaveTypeCode,
+    policyActive: Boolean(policy?.active),
+    requestedDays: params.days,
+    startDate: params.startDate,
+    endDate: params.endDate,
+    availableDays: accruedDays - reservedDays,
+    hasOverlap: overlapping.length > 0,
+    departmentTotalCount: deptEmps.length || 1,
+    departmentAbsentCount: deptAway.size,
+  });
+}
+
+router.post("/leave-requests/:requestId/recommend", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const requestId = String(req.params.requestId ?? "");
+
+  if (!process.env.DATABASE_URL) {
+    const target = DEMO_LEAVE_STORE.find((r) => r.id === requestId);
+    if (!target) {
+      res.status(404).json({ error: "Leave request not found." });
+      return;
+    }
+    if (
+      membership.role === PEOPLEOS_ROLES.employee &&
+      membership.employeeId &&
+      target.employeeId !== membership.employeeId
+    ) {
+      res.status(403).json({ error: "You cannot view recommendations for this leave request." });
+      return;
+    }
+    const recommendation = await evaluateLeaveRecommendation({
+      organizationId: membership.organizationId,
+      employeeId: target.employeeId,
+      leaveTypeCode: target.leaveType,
+      startDate: dateOnly(target.startDate),
+      endDate: dateOnly(target.endDate),
+      days: target.days,
+      excludeRequestId: target.id,
+    });
+    res.json({ requestId: target.id, status: target.status, recommendation });
+    return;
+  }
+
+  const [request] = await db
+    .select()
+    .from(leaveRequestsTable)
+    .where(
+      and(
+        eq(leaveRequestsTable.id, requestId),
+        eq(leaveRequestsTable.organizationId, membership.organizationId),
+      ),
+    )
+    .limit(1);
+  if (!request) {
+    res.status(404).json({ error: "Leave request not found." });
+    return;
+  }
+  if (
+    membership.role === PEOPLEOS_ROLES.employee &&
+    membership.employeeId &&
+    request.employeeId !== membership.employeeId
+  ) {
+    res.status(403).json({ error: "You cannot view recommendations for this leave request." });
+    return;
+  }
+  const recommendation = await evaluateLeaveRecommendation({
+    organizationId: membership.organizationId,
+    employeeId: request.employeeId,
+    leaveTypeCode: request.leaveType,
+    startDate: dateOnly(request.startDate),
+    endDate: dateOnly(request.endDate),
+    days: request.days,
+    excludeRequestId: request.id,
+  });
+  res.json({ requestId: request.id, status: request.status, recommendation });
+});
+
+router.post("/leave-requests/:requestId/cancel", async (req, res): Promise<void> => {
+  const membership = await ensureMembership(req, res);
+  if (!membership) return;
+  const requestId = String(req.params.requestId ?? "");
+  const isApprover = approverRoles.includes(membership.role);
+
+  if (!process.env.DATABASE_URL) {
+    const target = DEMO_LEAVE_STORE.find((r) => r.id === requestId);
+    if (!target) {
+      res.status(404).json({ error: "Leave request not found." });
+      return;
+    }
+    const isOwner = Boolean(membership.employeeId && target.employeeId === membership.employeeId);
+    if (!isOwner && !isApprover) {
+      res.status(403).json({ error: "You do not have permission to cancel this leave request." });
+      return;
+    }
+    if (target.status !== "pending" && target.status !== "approved") {
+      res.status(409).json({ error: `Cannot cancel a leave request with status '${target.status}'.` });
+      return;
+    }
+    const prevStatus = target.status;
+    target.status = "cancelled";
+    target.decidedAt = new Date();
+    try {
+      await recordAuditEvent({
+        organizationId: membership.organizationId,
+        actorUserId: membership.userId,
+        actor: membership.role,
+        action: "leave_request_cancelled",
+        targetType: "leave_request",
+        targetId: target.id,
+        summary: `Cancelled ${prevStatus} ${target.leaveType} leave request (${target.days} days) for ${target.employeeName}; balance reservation reversed.`,
+        correlationId: req.correlationId,
+        critical: true,
+        isDemo: true,
+      });
+    } catch (err) {
+      target.status = prevStatus;
+      throw err;
+    }
+    res.json(DecideLeaveRequestResponse.parse(target));
+    return;
+  }
+
+  const [request] = await db
+    .select()
+    .from(leaveRequestsTable)
+    .where(
+      and(
+        eq(leaveRequestsTable.id, requestId),
+        eq(leaveRequestsTable.organizationId, membership.organizationId),
+      ),
+    )
+    .limit(1);
+  if (!request) {
+    res.status(404).json({ error: "Leave request not found." });
+    return;
+  }
+  const isOwner =
+    request.createdByUserId === membership.userId ||
+    Boolean(membership.employeeId && request.employeeId === membership.employeeId);
+  if (!isOwner && !isApprover) {
+    res.status(403).json({ error: "You do not have permission to cancel this leave request." });
+    return;
+  }
+  if (request.status !== "pending" && request.status !== "approved") {
+    res.status(409).json({ error: `Cannot cancel a leave request with status '${request.status}'.` });
+    return;
+  }
+  const updated = await db.transaction(async (tx) => {
+    const [result] = await tx
+      .update(leaveRequestsTable)
+      .set({
+        status: "cancelled",
+        decidedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(leaveRequestsTable.id, request.id),
+          eq(leaveRequestsTable.organizationId, membership.organizationId),
+        ),
+      )
+      .returning();
+    if (!result) return null;
+    await tx.insert(auditEventsTable).values({
+      organizationId: membership.organizationId,
+      actorUserId: membership.userId,
+      actor: membership.role,
+      action: "leave_request_cancelled",
+      targetType: "leave_request",
+      targetId: request.id,
+      summary: `Cancelled ${request.status} ${request.leaveType} leave request (${request.days} days); balance reversed.`,
+      isDemo: request.isDemo,
+    });
+    return result;
+  });
+  if (!updated) {
+    res.status(409).json({ error: "Leave request could not be cancelled." });
+    return;
+  }
+  const [response] = await serializeRequests(membership.organizationId, [updated]);
+  res.json(DecideLeaveRequestResponse.parse(response));
+});
+
 router.post("/leave/requests/preview", async (req, res): Promise<void> => {
   const membership = await ensureMembership(req, res);
   if (!membership) return;
@@ -1687,6 +2188,14 @@ router.post("/leave/requests/preview", async (req, res): Promise<void> => {
   const holidaysInRange = (effectiveCalendar.holidays ?? []).filter(
     (h) => h.date >= startDate && h.date <= endDate,
   );
+  const recommendation = await evaluateLeaveRecommendation({
+    organizationId: membership.organizationId,
+    employeeId: targetEmpId,
+    leaveTypeCode: leaveType,
+    startDate,
+    endDate,
+    days,
+  });
 
   res.json({
     workingDays: days,
@@ -1699,6 +2208,7 @@ router.post("/leave/requests/preview", async (req, res): Promise<void> => {
       endDate: dateOnly(r.endDate),
       status: r.status,
     })),
+    recommendation,
   });
 });
 

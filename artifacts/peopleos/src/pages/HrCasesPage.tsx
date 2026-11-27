@@ -4,6 +4,14 @@ import { AlertTriangle, Lock, Plus, ShieldAlert, X } from 'lucide-react';
 import { useGetAuthContext } from '@workspace/api-client-react';
 import { apiGet, apiPatch, apiPost } from '../lib/api';
 
+const ACCESS_SCOPE_LABELS: Record<string, string> = {
+  HR_CASE_OFFICER_FULL: 'HR Case Officer (Full Confidential Access)',
+  hr_officer_full: 'HR Case Officer (Full Confidential Access)',
+  EMPLOYEE_SELF_REDACTED: 'Employee Self-Service (Confidential Notes Sealed)',
+  employee_self: 'Employee Self-Service (Confidential Notes Sealed)',
+  RESTRICTED: 'Restricted Access',
+};
+
 export function HrCasesPage() {
   const auth = useGetAuthContext();
   const qc = useQueryClient();
@@ -20,7 +28,11 @@ export function HrCasesPage() {
   });
 
   const items: any[] = casesQuery.data?.items ?? [];
-  const scope = casesQuery.data?.accessScope ?? 'RESTRICTED';
+  const rawScope = casesQuery.data?.accessScope ?? 'RESTRICTED';
+  const scopeLabel =
+    casesQuery.data?.accessScopeLabel ??
+    ACCESS_SCOPE_LABELS[rawScope] ??
+    'Restricted Access';
   const isHrOfficer = Boolean(auth.data?.canManagePeople);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,7 +67,7 @@ export function HrCasesPage() {
 
       <div className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-4 text-xs">
         <Lock size={16} className="text-[#C71D1D]" />
-        <span>Active Privacy Boundary: <strong className="font-mono text-stone-900">{scope}</strong></span>
+        <span>Active Privacy Boundary: <strong className="text-stone-900">{scopeLabel}</strong></span>
       </div>
 
       {casesQuery.isError ? (

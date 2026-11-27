@@ -22,7 +22,7 @@ export function AgentHubPage() {
       id: 'init-1',
       sender: 'agent',
       agentRole: 'supervisor',
-      text: `Hello! I am the **Rekker AI Multi-Agent Supervisor** coordinating **10 specialist HR intelligence agents**:\n\n• **HR Copilot, Onboarding & Learning** — Workforce operations, 30-60-90 checklists & ML skills-gap analysis\n• **Recruitment & Performance** — Explainable TF-IDF candidate matching & OKR momentum\n• **Payroll & Attendance** — Configurable Kenyan PAYE/NSSF/SHIF/AHL & IsolationForest anomaly detection\n• **Retention, Compliance & Executive** — XGBoost attrition risk, NLP sentiment, Ridge demand forecasting & ODPC/Employment Act RAG\n\nSelect any agent on the left or ask me directly. High-impact actions are always held for human signoff.`,
+      text: `Hello! I am the **Rekker HR Operations Assistant** (Prototype / Concept Preview).\n\nI route questions across rule-based HR topic templates for:\n\n• **HR Operations & Leave** — Employee lookup, leave policy summaries & onboarding checklists\n• **Kenya Statutory Payroll Preview** — Deterministic PAYE/NSSF/SHIF/AHL estimator\n• **Compliance Notes** — Static summaries of Kenya Employment Act 2007 & ODPC 2019 (requires legal review)\n\nNote: Multi-agent StateGraph, live vector RAG, and ML forecasting require an active backend + LLM/ML deployment. High-impact HR decisions always require human signoff.`,
       timestamp: 'Online',
     },
   ]);
@@ -289,8 +289,8 @@ export function AgentHubPage() {
                   <Cpu size={15} />
                 </div>
                 <div>
-                  <h3 className="font-display text-xs font-bold text-stone-900">10 Specialist Agents + Supervisor</h3>
-                  <p className="text-[10px] text-stone-500">RBAC Scoped StateGraph</p>
+                  <h3 className="font-display text-xs font-bold text-stone-900">HR Topic Assistants (Preview)</h3>
+                  <p className="text-[10px] text-stone-500">Rule-Based Router · Advisory Only</p>
                 </div>
               </div>
             </div>
@@ -329,8 +329,8 @@ export function AgentHubPage() {
                 <h4 className="font-display text-xs font-bold text-stone-900">{activeAgent.name}</h4>
                 <p className="text-[10px] text-stone-500">{activeAgent.description}</p>
               </div>
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[9px] font-bold text-emerald-800 shrink-0">
-                STATEGRAPH ACTIVE
+              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[9px] font-bold text-amber-800 shrink-0">
+                PROTOTYPE · ADVISORY ONLY
               </span>
             </div>
 

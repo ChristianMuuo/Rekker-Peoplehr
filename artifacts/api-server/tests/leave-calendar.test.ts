@@ -4,6 +4,20 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import app from "../src/app";
 import { PEOPLEOS_ROLES } from "../src/middlewares/peopleosAccess";
+import { DEMO_LEAVE_STORE } from "../src/routes/leave";
+
+function monthOf(value: Date | string): string {
+  return (value instanceof Date ? value.toISOString() : value).slice(0, 7);
+}
+
+function monthStartEnd(month: string): { startDate: string; endDate: string } {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  return {
+    startDate: `${month}-01`,
+    endDate: `${month}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
 
 async function withServer(
   fn: (baseUrl: string) => Promise<void>,
@@ -30,9 +44,15 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
     "x-peopleos-employee-id": "10000000-0000-4000-8000-000000000002",
   };
 
+  const leave001 = DEMO_LEAVE_STORE.find((r) => r.id === "leave-001")!;
+  const leave003 = DEMO_LEAVE_STORE.find((r) => r.id === "leave-003")!;
+  const month001 = monthOf(leave001.startDate);
+  const bounds001 = monthStartEnd(month001);
+  const month003 = monthOf(leave003.startDate);
+
   await t.test("1. GET /api/leave/calendar returns monthly schedule, holidays & summary", async () => {
     await withServer(async (baseUrl) => {
-      const res = await fetch(`${baseUrl}/api/leave/calendar?month=2026-03`, {
+      const res = await fetch(`${baseUrl}/api/leave/calendar?month=${month001}`, {
         method: "GET",
         headers: hrHeaders,
       });
@@ -40,9 +60,9 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
       assert.equal(res.status, 200, `Expected 200, got ${res.status}`);
       const data: any = await res.json();
 
-      assert.equal(data.period.month, "2026-03");
-      assert.equal(data.period.startDate, "2026-03-01");
-      assert.equal(data.period.endDate, "2026-03-31");
+      assert.equal(data.period.month, month001);
+      assert.equal(data.period.startDate, bounds001.startDate);
+      assert.equal(data.period.endDate, bounds001.endDate);
       assert.equal(data.workCalendar.timezone, "Africa/Nairobi");
       assert.ok(Array.isArray(data.workCalendar.workdays), "Workdays must be an array");
       assert.ok(Array.isArray(data.entries), "Entries must be an array");
@@ -50,7 +70,7 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
       assert.equal(data.viewMode, "hr");
 
       const entry001 = data.entries.find((e: any) => e.id === "leave-001");
-      assert.ok(entry001, "leave-001 must be present in March 2026");
+      assert.ok(entry001, `leave-001 must be present in ${month001}`);
       assert.equal(entry001.employeeName, "Wanjiku Kimani");
       assert.equal(entry001.displayType, "Annual Leave");
       assert.equal(entry001.reason, "Annual rest and family leave");
@@ -59,7 +79,7 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
 
   await t.test("2. Role-Based Privacy Scoping (KDPA 2019): Peers see 'Away' and reasons are redacted", async () => {
     await withServer(async (baseUrl) => {
-      const res = await fetch(`${baseUrl}/api/leave/calendar?month=2026-03`, {
+      const res = await fetch(`${baseUrl}/api/leave/calendar?month=${month001}`, {
         method: "GET",
         headers: employeeHeaders,
       });
@@ -78,7 +98,7 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
 
   await t.test("3. Self-Service Visibility: Employee sees own leave type & reason in calendar", async () => {
     await withServer(async (baseUrl) => {
-      const res = await fetch(`${baseUrl}/api/leave/calendar?month=2026-04`, {
+      const res = await fetch(`${baseUrl}/api/leave/calendar?month=${month003}`, {
         method: "GET",
         headers: employeeHeaders,
       });
@@ -87,9 +107,9 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
       const data: any = await res.json();
 
       const ownEntry = data.entries.find((e: any) => e.id === "leave-003");
-      assert.ok(ownEntry, "Own leave-003 must exist in April 2026");
+      assert.ok(ownEntry, `Own leave-003 must exist in ${month003}`);
       assert.equal(ownEntry.isOwn, true, "Must be flagged as own leave");
-      assert.equal(ownEntry.displayType, "Parental Leave");
+      assert.equal(ownEntry.displayType, "Paternity Leave");
       assert.ok(ownEntry.reason?.includes("Paternity leave"), "Own reason must be preserved");
     });
   });
@@ -98,7 +118,7 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
     await withServer(async (baseUrl) => {
       // Query with non-matching department
       const resEmpty = await fetch(
-        `${baseUrl}/api/leave/calendar?month=2026-03&departmentId=99999999-0000-0000-0000-000000000099`,
+        `${baseUrl}/api/leave/calendar?month=${month001}&departmentId=99999999-0000-0000-0000-000000000099`,
         {
           method: "GET",
           headers: hrHeaders,
@@ -111,7 +131,7 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
 
       // Query with Logistics department (Wanjiku Kimani's department)
       const resLogistics = await fetch(
-        `${baseUrl}/api/leave/calendar?month=2026-03&departmentId=20000000-0000-4000-8000-000000000002`,
+        `${baseUrl}/api/leave/calendar?month=${month001}&departmentId=20000000-0000-4000-8000-000000000002`,
         {
           method: "GET",
           headers: hrHeaders,
@@ -127,6 +147,9 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
 
   await t.test("5. POST /api/leave/requests/preview computes working days and checks overlaps without writing", async () => {
     await withServer(async (baseUrl) => {
+      // Use a Monday-to-Friday week next month away from fixed holidays
+      const futureMonday = "2027-02-08";
+      const futureFriday = "2027-02-12";
       const res = await fetch(`${baseUrl}/api/leave/requests/preview`, {
         method: "POST",
         headers: {
@@ -135,8 +158,8 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
         },
         body: JSON.stringify({
           leaveType: "annual",
-          startDate: "2026-03-02",
-          endDate: "2026-03-06",
+          startDate: futureMonday,
+          endDate: futureFriday,
         }),
       });
 
@@ -144,6 +167,7 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
       const data: any = await res.json();
       assert.equal(data.workingDays, 5, "Monday to Friday must be 5 working days");
       assert.equal(data.hasOverlap, false);
+      assert.ok(data.recommendation, "Preview must return deterministic leave recommendation");
 
       // Negative test: invalid date range
       const badRes = await fetch(`${baseUrl}/api/leave/requests/preview`, {
@@ -154,8 +178,8 @@ test("Leave Calendar & Team Availability Hub (Spec 3)", async (t) => {
         },
         body: JSON.stringify({
           leaveType: "annual",
-          startDate: "2026-03-10",
-          endDate: "2026-03-05",
+          startDate: futureFriday,
+          endDate: futureMonday,
         }),
       });
 

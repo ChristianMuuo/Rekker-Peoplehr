@@ -22,6 +22,16 @@
 - Ran exact grep audit across all tracked files (`git grep`): 235 total matches for `XGBoost|RAG|10 agents|Phase 4|HR_CASE_OFFICER_FULL|policies not configured|March 2026|2026-03|10 days`.
 - Produced `docs/AUDIT.md` and 3 ADRs in `docs/adr/`.
 
+### 2026-11-25 — Implementation Progress on `feature/production-ready-leave`
+- Added `lib/db/src/clock.ts` (`AppClock` / Africa/Nairobi helpers), `lib/db/src/schema/productionCore.ts` (18 persistent tables for RBAC, users/sessions, work schedules, public holidays, leave types/policies/ledger/balances/approvals/attachments, hash-chained audit log, notifications, and settings), and `lib/db/migrations/0008_production_core.sql`.
+- Updated `lib/db/src/seed.ts` to use relative dates from `appClock.todayNairobi()` and pre-populate Kenya statutory leave defaults (`Annual = 21`, `Sick = 14`, `Maternity = 90`, `Paternity = 14 / 2 weeks` marked `NEEDS_LEGAL_REVIEW`).
+- Implemented deterministic `LeaveAdvisor` (`artifacts/api-server/src/lib/leaveAdvisor.ts`), `POST /api/leave-requests/:requestId/recommend`, `POST /api/leave-requests/:requestId/cancel`, recommendation preview in `POST /api/leave/requests/preview`, and atomic balance-validation + audit rollback handling in `POST /api/leave-requests/:requestId/decision`.
+- Populated `DEMO_LEAVE_POLICIES` for `rekker-demo` in both `leave.ts` and `fallback-store.ts` (preserving empty policy behavior for fresh orgs like `org-fresh-check`), and corrected paternity entitlement from 10 days to 14 days (2 weeks, `NEEDS_LEGAL_REVIEW`).
+- Replaced hardcoded `2026-03` / `March 2026` dates across `leave.ts`, `attendance.ts`, `expenses.ts`, `onboarding.ts`, `auditService.ts`, `mlFeatureAssembly.ts`, `fallback-store.ts`, `mockStore.ts`, `AttendancePage.tsx`, `RecruitmentPage.tsx`, and `LeaveCoverageAndCalendarPanel.tsx` using dynamic relative date helpers.
+- Separated `DiagnosticsPage` from `SettingsPage` on `/diagnostics` vs `/settings`, hid raw `HR_CASE_OFFICER_FULL` / `EMPLOYEE_SELF_REDACTED` enums behind human-readable labels in `HrCasesPage.tsx` (`roleDisplayMap.ts`), and added truthful prototype/preview labels in `AgentHubPage.tsx`, `aiAgents.ts`, and `PredictiveMlPage.tsx`.
+- Hardened public demo security (`X-Robots-Tag: noindex, nofollow, noarchive` in `vercel.json`, `Disallow: /` in `robots.txt`, optional `DEMO_PASSCODE` API gate + `/api/demo-access` in `app.ts`, `.env.example`, and `docs/COMPLIANCE.md`).
+- Added ESLint configuration (`eslint.config.mjs`, `pnpm run lint`) and unit + E2E workflow tests in `artifacts/api-server/tests/leave-engine.test.ts`.
+
 ---
 
 ## 2. Explicit Conflicts & Ambiguities Flagged for Client/User

@@ -1,6 +1,19 @@
 // REKKER PeopleOS Enterprise Data Store & Business Engine
 // Kenya-localized HR, Payroll, ATS, Attendance, Performance & Multi-Agent Intelligence
 
+function mockDate(deltaDays: number): string {
+  const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  d.setDate(d.getDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+function mockDateTime(deltaDays: number, timeUtc = '09:00:00'): string {
+  return `${mockDate(deltaDays)}T${timeUtc}Z`;
+}
+function mockCurrentPeriod(): string {
+  const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
 export interface Department {
   id: string;
   code: string;
@@ -557,13 +570,13 @@ const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
     employeeId: 'emp_04',
     employeeName: 'Wanjiku Kimani',
     leaveType: 'annual',
-    startDate: '2026-03-02',
-    endDate: '2026-03-13',
+    startDate: mockDate(-45),
+    endDate: mockDate(-33),
     days: 10,
     reason: 'Annual family break and rest',
     status: 'approved',
-    submittedAt: '2026-02-15T08:30:00Z',
-    decidedAt: '2026-02-16T10:00:00Z',
+    submittedAt: mockDateTime(-60, '08:30:00'),
+    decidedAt: mockDateTime(-59, '10:00:00'),
     approverComment: 'Approved. Fleet coverage arranged with team.',
   },
   {
@@ -571,12 +584,12 @@ const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
     employeeId: 'emp_06',
     employeeName: 'Brian Kiprotich',
     leaveType: 'annual',
-    startDate: '2026-03-20',
-    endDate: '2026-03-27',
+    startDate: mockDate(5),
+    endDate: mockDate(12),
     days: 6,
     reason: 'Personal development study leave',
     status: 'pending',
-    submittedAt: '2026-03-01T11:45:00Z',
+    submittedAt: mockDateTime(-3, '11:45:00'),
     decidedAt: null,
     approverComment: null,
   },
@@ -585,12 +598,12 @@ const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
     employeeId: 'emp_02',
     employeeName: 'Mwangi Kariuki',
     leaveType: 'paternity',
-    startDate: '2026-04-06',
-    endDate: '2026-04-17',
-    days: 10,
-    reason: 'Paternity leave following delivery',
+    startDate: mockDate(14),
+    endDate: mockDate(27),
+    days: 14,
+    reason: 'Paternity leave following delivery (Employment Act s.29(8) — 2 weeks)',
     status: 'pending',
-    submittedAt: '2026-03-04T09:15:00Z',
+    submittedAt: mockDateTime(-2, '09:15:00'),
     decidedAt: null,
     approverComment: null,
   },
@@ -599,13 +612,13 @@ const INITIAL_LEAVE_REQUESTS: LeaveRequest[] = [
     employeeId: 'emp_10',
     employeeName: 'Sarah Njeri',
     leaveType: 'sick',
-    startDate: '2026-02-10',
-    endDate: '2026-02-12',
+    startDate: mockDate(-20),
+    endDate: mockDate(-18),
     days: 3,
     reason: 'Medical recovery with doctor note',
     status: 'approved',
-    submittedAt: '2026-02-10T07:00:00Z',
-    decidedAt: '2026-02-10T09:30:00Z',
+    submittedAt: mockDateTime(-20, '07:00:00'),
+    decidedAt: mockDateTime(-20, '09:30:00'),
     approverComment: 'Get well soon. Medical certificate filed.',
   },
 ];
@@ -618,16 +631,16 @@ const INITIAL_AUDIT_EVENTS: AuditEvent[] = [
     targetType: 'leave_request',
     targetId: 'leave_req_01',
     summary: 'Approved 10 days annual leave for Wanjiku Kimani',
-    occurredAt: '2026-02-16T10:00:00Z',
+    occurredAt: mockDateTime(-10, '10:00:00'),
   },
   {
     id: 'audit_02',
     actor: 'Dennis Otieno (Finance)',
     action: 'PAYROLL_GENERATION',
     targetType: 'payroll_period',
-    targetId: 'payroll_2026_02',
-    summary: 'Calculated and generated February 2026 payroll run with statutory KRA/NSSF/SHA deductions',
-    occurredAt: '2026-02-25T16:20:00Z',
+    targetId: `payroll_${mockDate(-30).slice(0, 7).replace('-', '_')}`,
+    summary: 'Calculated and generated prior month payroll run with statutory KRA/NSSF/SHA deductions',
+    occurredAt: mockDateTime(-15, '16:20:00'),
   },
   {
     id: 'audit_03',
@@ -636,7 +649,7 @@ const INITIAL_AUDIT_EVENTS: AuditEvent[] = [
     targetType: 'candidate',
     targetId: 'cand_02',
     summary: 'Advanced candidate Evans Kiprono to Technical Interview stage for Logistics Requisition',
-    occurredAt: '2026-03-03T14:10:00Z',
+    occurredAt: mockDateTime(-5, '14:10:00'),
   },
   {
     id: 'audit_04',
@@ -645,7 +658,7 @@ const INITIAL_AUDIT_EVENTS: AuditEvent[] = [
     targetType: 'employee',
     targetId: 'emp_08',
     summary: 'Logged 60-day positive performance milestone for Faith Chebet',
-    occurredAt: '2026-03-05T09:30:00Z',
+    occurredAt: mockDateTime(-3, '09:30:00'),
   },
 ];
 
@@ -750,7 +763,7 @@ const INITIAL_CANDIDATES: Candidate[] = [
     experienceYears: 3,
     matchScore: 78,
     skillsSummary: 'Laboratory quality testing, batch viscosity monitoring, water filtration chemistry.',
-    appliedDate: '2026-03-02',
+    appliedDate: mockDate(-4),
   },
 ];
 
@@ -760,7 +773,7 @@ const INITIAL_ATTENDANCE: AttendanceRecord[] = [
     employeeId: 'emp_01',
     employeeName: 'Achieng Odhiambo',
     departmentId: 'dept_mfg_01',
-    date: '2026-03-06',
+    date: mockDate(0),
     shift: 'Morning (06:00 - 14:00)',
     clockIn: '05:52',
     clockOut: '14:15',
@@ -772,7 +785,7 @@ const INITIAL_ATTENDANCE: AttendanceRecord[] = [
     employeeId: 'emp_02',
     employeeName: 'Mwangi Kariuki',
     departmentId: 'dept_mfg_01',
-    date: '2026-03-06',
+    date: mockDate(0),
     shift: 'Morning (06:00 - 14:00)',
     clockIn: '05:58',
     clockOut: '14:30',
@@ -784,7 +797,7 @@ const INITIAL_ATTENDANCE: AttendanceRecord[] = [
     employeeId: 'emp_03',
     employeeName: 'Juma Omondi',
     departmentId: 'dept_dist_02',
-    date: '2026-03-06',
+    date: mockDate(0),
     shift: 'Day (08:30 - 17:00)',
     clockIn: '08:48',
     clockOut: null,
@@ -797,7 +810,7 @@ const INITIAL_ATTENDANCE: AttendanceRecord[] = [
     employeeId: 'emp_05',
     employeeName: 'Brenda Mutheu',
     departmentId: 'dept_brand_03',
-    date: '2026-03-06',
+    date: mockDate(0),
     shift: 'Day (08:30 - 17:00)',
     clockIn: '08:25',
     clockOut: null,
@@ -809,7 +822,7 @@ const INITIAL_ATTENDANCE: AttendanceRecord[] = [
     employeeId: 'emp_07',
     employeeName: 'David Kibet',
     departmentId: 'dept_people_04',
-    date: '2026-03-06',
+    date: mockDate(0),
     shift: 'Day (08:30 - 17:00)',
     clockIn: '08:15',
     clockOut: null,
@@ -1135,7 +1148,7 @@ class PeopleOsStore {
   getCourses() { return [...this.courses]; }
 
   // Payroll Generation (Kenya Versioned Engine)
-  getPayrollRecords(period: string = 'March 2026'): PayrollRecord[] {
+  getPayrollRecords(period: string = mockCurrentPeriod()): PayrollRecord[] {
     return this.employees.map(emp => {
       const calc = calculateKenyaPayroll(emp.baseSalary, emp.allowances, 0);
       return {

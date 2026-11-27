@@ -79,7 +79,7 @@ export function PredictiveMlPage() {
             Workforce ML Intelligence & Governance
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-500">
-            Python Scikit-learn & XGBoost models with calibrated uncertainty intervals, explainable feature attributions, and audited data provenance.
+            Python Scikit-learn / XGBoost analytics module. Runs live model inference when the Python ML service is connected; otherwise operates in disconnected preview mode.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -116,7 +116,7 @@ export function PredictiveMlPage() {
               </span>
             </p>
             <span className="font-mono text-[11px] text-stone-400">
-              Python 3.14 · Scikit-learn & XGBoost · v1.2.0
+              {mlOverview.data?.engine ?? 'Python ML Engine (Requires Backend Connection)'}
             </span>
           </div>
           <p className="mt-1 text-stone-600">

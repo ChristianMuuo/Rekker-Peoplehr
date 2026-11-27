@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { demoDateTime } from "../lib/demoDateOffset";
 import { and, desc, eq } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, hrCasesTable } from "@workspace/db";
@@ -56,8 +57,8 @@ function ensureHrCasesSeeded(orgId: string) {
         assignedInvestigatorUserId: "user_demo_admin_01",
         status: "investigating",
         resolutionSummary: null,
-        createdAt: "2026-03-01T09:30:00Z",
-        updatedAt: "2026-03-04T11:00:00Z",
+        createdAt: demoDateTime(-25, "09:30:00"),
+        updatedAt: demoDateTime(-22, "11:00:00"),
       },
     ]);
   }
@@ -104,6 +105,7 @@ router.get("/hr-cases", async (req: Request, res: Response) => {
         items: list,
         total: list.length,
         accessScope: "HR_CASE_OFFICER_FULL",
+        accessScopeLabel: "HR Case Officer (Full Confidential Access)",
       });
       return;
     }
@@ -116,6 +118,7 @@ router.get("/hr-cases", async (req: Request, res: Response) => {
       items: own,
       total: own.length,
       accessScope: "EMPLOYEE_SELF_REDACTED",
+      accessScopeLabel: "Employee Self-Service (Confidential Notes Sealed)",
     });
     return;
   }
@@ -157,6 +160,9 @@ router.get("/hr-cases", async (req: Request, res: Response) => {
     ),
     total: rows.length,
     accessScope: isOfficer ? "HR_CASE_OFFICER_FULL" : "EMPLOYEE_SELF_REDACTED",
+    accessScopeLabel: isOfficer
+      ? "HR Case Officer (Full Confidential Access)"
+      : "Employee Self-Service (Confidential Notes Sealed)",
   });
 });
 

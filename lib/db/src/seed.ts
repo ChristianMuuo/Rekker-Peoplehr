@@ -1,14 +1,19 @@
+import { appClock } from "./clock";
 import { db, pool } from "./index";
 import {
   auditEventsTable,
   departmentsTable,
   employeesTable,
+  leavePoliciesTable,
   leaveRequestsTable,
   organizationsTable,
 } from "./schema";
 
 const organizationId = "rekker-demo";
-const demoTime = (day: number) => new Date(`2026-10-${day}T09:00:00.000Z`);
+const today = appClock.todayNairobi();
+const relDate = (deltaDays: number) => appClock.addDaysIso(today, deltaDays);
+const demoTime = (deltaDays: number) =>
+  new Date(`${relDate(deltaDays)}T09:00:00.000Z`);
 
 const departments = [
   {
@@ -216,21 +221,65 @@ const employees = [
   },
 ];
 
+const leavePolicies = [
+  {
+    id: "50000000-0000-4000-8000-000000000001",
+    organizationId,
+    code: "annual",
+    name: "Annual Leave",
+    entitlementDays: 21,
+    accrualMethod: "monthly",
+    active: true,
+    createdByUserId: "demo-seed",
+  },
+  {
+    id: "50000000-0000-4000-8000-000000000002",
+    organizationId,
+    code: "sick",
+    name: "Sick Leave",
+    entitlementDays: 14,
+    accrualMethod: "annual",
+    active: true,
+    createdByUserId: "demo-seed",
+  },
+  {
+    id: "50000000-0000-4000-8000-000000000003",
+    organizationId,
+    code: "maternity",
+    name: "Maternity Leave",
+    entitlementDays: 90,
+    accrualMethod: "annual",
+    active: true,
+    createdByUserId: "demo-seed",
+  },
+  {
+    id: "50000000-0000-4000-8000-000000000004",
+    organizationId,
+    code: "paternity",
+    name: "Paternity Leave",
+    // Employment Act 2007 s.29(8): 2 weeks (14 calendar days); NEEDS_LEGAL_REVIEW
+    entitlementDays: 14,
+    accrualMethod: "annual",
+    active: true,
+    createdByUserId: "demo-seed",
+  },
+];
+
 const leaveRequests = [
   {
     id: "30000000-0000-4000-8000-000000000001",
     organizationId,
     employeeId: employees[1]!.id,
     leaveType: "annual",
-    startDate: "2026-11-02",
-    endDate: "2026-11-04",
+    startDate: relDate(5),
+    endDate: relDate(7),
     days: 3,
     reason: "Fictional request for demonstrating the approval workflow.",
     status: "pending",
     createdByUserId: "demo-seed",
     approverUserId: null,
     decisionComment: null,
-    submittedAt: demoTime(24),
+    submittedAt: demoTime(-2),
     decidedAt: null,
     isDemo: true,
   },
@@ -239,15 +288,15 @@ const leaveRequests = [
     organizationId,
     employeeId: employees[3]!.id,
     leaveType: "annual",
-    startDate: "2026-11-16",
-    endDate: "2026-11-17",
+    startDate: relDate(12),
+    endDate: relDate(13),
     days: 2,
     reason: "Fictional request for demonstrating the approval workflow.",
     status: "pending",
     createdByUserId: "demo-seed",
     approverUserId: null,
     decisionComment: null,
-    submittedAt: demoTime(25),
+    submittedAt: demoTime(-1),
     decidedAt: null,
     isDemo: true,
   },
@@ -256,16 +305,16 @@ const leaveRequests = [
     organizationId,
     employeeId: employees[5]!.id,
     leaveType: "annual",
-    startDate: "2026-10-28",
-    endDate: "2026-10-30",
+    startDate: relDate(-14),
+    endDate: relDate(-12),
     days: 3,
     reason: "Fictional approved request for coverage-view demonstration.",
     status: "approved",
     createdByUserId: "demo-seed",
     approverUserId: "demo-seed",
     decisionComment: "Approved in synthetic demo data.",
-    submittedAt: demoTime(17),
-    decidedAt: demoTime(20),
+    submittedAt: demoTime(-20),
+    decidedAt: demoTime(-18),
     isDemo: true,
   },
 ];
@@ -280,7 +329,7 @@ const auditEvents = [
     targetType: "leave_request",
     targetId: leaveRequests[0]!.id,
     summary: "A fictional annual leave request entered the approval queue.",
-    occurredAt: demoTime(24),
+    occurredAt: demoTime(-2),
     isDemo: true,
   },
   {
@@ -292,7 +341,7 @@ const auditEvents = [
     targetType: "employee",
     targetId: employees[7]!.id,
     summary: "A fictional employee profile was reviewed.",
-    occurredAt: demoTime(23),
+    occurredAt: demoTime(-3),
     isDemo: true,
   },
 ];
@@ -308,6 +357,10 @@ try {
     .onConflictDoNothing();
   await db.insert(departmentsTable).values(departments).onConflictDoNothing();
   await db.insert(employeesTable).values(employees).onConflictDoNothing();
+  await db
+    .insert(leavePoliciesTable)
+    .values(leavePolicies)
+    .onConflictDoNothing();
   await db
     .insert(leaveRequestsTable)
     .values(leaveRequests)

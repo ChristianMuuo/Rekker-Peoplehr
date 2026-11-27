@@ -1,6 +1,37 @@
 // Fallback store providing immediate enterprise resilience
 // for Rekker PeopleOS when remote PostgreSQL/Express is unavailable (e.g. offline dev, Vercel static deployments)
 
+const FB_NAIROBI_OFFSET_MS = 3 * 60 * 60 * 1000;
+function fbDate(deltaDays: number): string {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60_000;
+  const d = new Date(utc + FB_NAIROBI_OFFSET_MS);
+  d.setDate(d.getDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+function fbDateTime(deltaDays: number, timeUtc = '09:00:00'): string {
+  return `${fbDate(deltaDays)}T${timeUtc}Z`;
+}
+function fbYearMonth(deltaMonths: number): string {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60_000;
+  const d = new Date(utc + FB_NAIROBI_OFFSET_MS);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + deltaMonths);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function fbBusinessDays(start: string, end: string): number {
+  const cur = new Date(`${start}T00:00:00Z`);
+  const fin = new Date(`${end}T00:00:00Z`);
+  let days = 0;
+  while (cur <= fin) {
+    const w = cur.getUTCDay();
+    if (w !== 0 && w !== 6) days += 1;
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return Math.max(1, days);
+}
+
 export interface MockDepartment {
   id: string;
   name: string;
@@ -74,18 +105,18 @@ const DEFAULT_EMPS: MockEmployee[] = [
 ];
 
 const DEFAULT_LEAVES: MockLeaveRequest[] = [
-  { id: 'leave-001', employeeId: '10000000-0000-4000-8000-000000000004', employeeName: 'Wanjiku Kimani', leaveType: 'annual', startDate: '2026-03-02', endDate: '2026-03-13', days: 10, reason: 'Annual rest and family leave', status: 'approved', approverId: '10000000-0000-4000-8000-000000000007', decisionComment: 'Approved. Fleet coverage confirmed.', submittedAt: '2026-02-15T08:30:00Z', decidedAt: '2026-02-16T10:00:00Z', isDemo: true },
-  { id: 'leave-002', employeeId: '10000000-0000-4000-8000-000000000006', employeeName: 'Brian Kiprotich', leaveType: 'annual', startDate: '2026-03-20', endDate: '2026-03-27', days: 6, reason: 'Professional certification exam study period', status: 'pending', approverId: null, decisionComment: null, submittedAt: '2026-03-01T11:45:00Z', decidedAt: null, isDemo: true },
-  { id: 'leave-003', employeeId: '10000000-0000-4000-8000-000000000002', employeeName: 'Mwangi Kariuki', leaveType: 'paternity', startDate: '2026-04-06', endDate: '2026-04-17', days: 10, reason: 'Paternity leave under Employment Act 2007', status: 'pending', approverId: null, decisionComment: null, submittedAt: '2026-03-04T09:15:00Z', decidedAt: null, isDemo: true },
+  { id: 'leave-001', employeeId: '10000000-0000-4000-8000-000000000004', employeeName: 'Wanjiku Kimani', leaveType: 'annual', startDate: fbDate(-45), endDate: fbDate(-33), days: 10, reason: 'Annual rest and family leave', status: 'approved', approverId: '10000000-0000-4000-8000-000000000007', decisionComment: 'Approved. Fleet coverage confirmed.', submittedAt: fbDateTime(-60, '08:30:00'), decidedAt: fbDateTime(-59, '10:00:00'), isDemo: true },
+  { id: 'leave-002', employeeId: '10000000-0000-4000-8000-000000000006', employeeName: 'Brian Kiprotich', leaveType: 'annual', startDate: fbDate(5), endDate: fbDate(12), days: 6, reason: 'Professional certification exam study period', status: 'pending', approverId: null, decisionComment: null, submittedAt: fbDateTime(-3, '11:45:00'), decidedAt: null, isDemo: true },
+  { id: 'leave-003', employeeId: '10000000-0000-4000-8000-000000000002', employeeName: 'Mwangi Kariuki', leaveType: 'paternity', startDate: fbDate(14), endDate: fbDate(27), days: 14, reason: 'Paternity leave under Employment Act 2007 s.29(8) — 2 weeks full pay', status: 'pending', approverId: null, decisionComment: null, submittedAt: fbDateTime(-2, '09:15:00'), decidedAt: null, isDemo: true },
 ];
 
 const DEFAULT_AUDITS = [
-  { id: 'audit-001', occurredAt: '2026-03-05T14:20:00Z', actor: 'David Kibet (HR Admin)', action: 'LEAVE_APPROVE', targetType: 'leave_request', targetId: 'leave-001', summary: 'Approved annual leave for Wanjiku Kimani', isDemo: true },
-  { id: 'audit-002', occurredAt: '2026-03-01T09:00:00Z', actor: 'Dennis Otieno (Finance)', action: 'PAYROLL_GENERATION', targetType: 'payroll_period', targetId: 'period-2026-02', summary: 'Finalized statutory KRA & NSSF payroll report for February 2026', isDemo: true },
-  { id: 'audit-003', occurredAt: '2026-02-28T16:45:00Z', actor: 'Faith Chebet (Recruiter)', action: 'CANDIDATE_SCREEN', targetType: 'candidate', targetId: 'cand-001', summary: 'Completed phone interview scorecard for Formulation & Filling Engineer candidate', isDemo: true },
+  { id: 'audit-001', occurredAt: fbDateTime(-5, '14:20:00'), actor: 'David Kibet (HR Admin)', action: 'LEAVE_APPROVE', targetType: 'leave_request', targetId: 'leave-001', summary: 'Approved annual leave for Wanjiku Kimani', isDemo: true },
+  { id: 'audit-002', occurredAt: fbDateTime(-10, '09:00:00'), actor: 'Dennis Otieno (Finance)', action: 'PAYROLL_GENERATION', targetType: 'payroll_period', targetId: `period-${fbYearMonth(-1)}`, summary: `Finalized statutory KRA & NSSF payroll report for ${fbYearMonth(-1)}`, isDemo: true },
+  { id: 'audit-003', occurredAt: fbDateTime(-14, '16:45:00'), actor: 'Faith Chebet (Recruiter)', action: 'CANDIDATE_SCREEN', targetType: 'candidate', targetId: 'cand-001', summary: 'Completed phone interview scorecard for Formulation & Filling Engineer candidate', isDemo: true },
 ];
 
-// Leave policies start empty by default (organization HR configures entitlements; never prefill statutory amounts).
+// Kenya statutory defaults (Employment Act 2007; NEEDS_LEGAL_REVIEW)
 const DEFAULT_LEAVE_POLICIES: Array<{
   id: string;
   code: string;
@@ -93,7 +124,14 @@ const DEFAULT_LEAVE_POLICIES: Array<{
   entitlementDays: number;
   accrualMethod: 'annual' | 'monthly';
   active: boolean;
-}> = [];
+}> = [
+  { id: 'policy-annual', code: 'annual', name: 'Annual Leave', entitlementDays: 21, accrualMethod: 'monthly', active: true },
+  { id: 'policy-sick', code: 'sick', name: 'Sick Leave', entitlementDays: 14, accrualMethod: 'annual', active: true },
+  { id: 'policy-maternity', code: 'maternity', name: 'Maternity Leave', entitlementDays: 90, accrualMethod: 'annual', active: true },
+  { id: 'policy-paternity', code: 'paternity', name: 'Paternity Leave', entitlementDays: 14, accrualMethod: 'annual', active: true },
+  { id: 'policy-compassionate', code: 'compassionate', name: 'Compassionate Leave', entitlementDays: 3, accrualMethod: 'annual', active: true },
+  { id: 'policy-unpaid', code: 'unpaid', name: 'Unpaid Leave', entitlementDays: 30, accrualMethod: 'annual', active: true },
+];
 
 const DEFAULT_EXPENSES: Array<{
   id: string;
@@ -246,11 +284,11 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
 
   if (path === '/api/hr-cases') {
     if (method === 'POST') {
-      const rec = { id: `hrc-${Date.now()}`, caseNumber: `HRC-2026-0${FALLBACK_HR_CASES.length + 1}`, category: parsedBody.category || 'grievance', severity: parsedBody.severity || 'medium', title: parsedBody.title, description: parsedBody.description, confidentialNotes: parsedBody.confidentialNotes || '', status: 'open', createdAt: new Date().toISOString() };
+      const rec = { id: `hrc-${Date.now()}`, caseNumber: `HRC-${new Date().getUTCFullYear()}-0${FALLBACK_HR_CASES.length + 1}`, category: parsedBody.category || 'grievance', severity: parsedBody.severity || 'medium', title: parsedBody.title, description: parsedBody.description, confidentialNotes: parsedBody.confidentialNotes || '', status: 'open', createdAt: new Date().toISOString() };
       FALLBACK_HR_CASES.unshift(rec);
       return rec;
     }
-    return { items: FALLBACK_HR_CASES, total: FALLBACK_HR_CASES.length, accessScope: 'HR_CASE_OFFICER_FULL' };
+    return { items: FALLBACK_HR_CASES, total: FALLBACK_HR_CASES.length, accessScope: 'HR_CASE_OFFICER_FULL', accessScopeLabel: 'HR Case Officer (Full Confidential Access)' };
   }
   if (path.startsWith('/api/hr-cases/') && method === 'PATCH') {
     const caseId = path.replace('/api/hr-cases/', '');
@@ -547,10 +585,10 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
 
   if (path === '/api/agents/status' || path === '/api/agent-provider/status') {
     return {
-      configured: true,
-      provider: 'Rekker 10-Agent Multi-Agent Core',
-      model: 'StateGraph Supervisor (10 Specialists Active)',
-      message: 'Autonomous workforce intelligence, RAG policy search, and statutory compliance active.',
+      configured: false,
+      provider: 'Static Browser Prototype (Rule-Based Intent Router)',
+      model: 'prototype-rule-router',
+      message: 'Running in static preview mode without a live AI/RAG backend. Queries use local rule-based templates.',
     };
   }
 
@@ -795,6 +833,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
   if (path === '/api/leave-requests') {
     if (method === 'POST') {
       const emp = DEFAULT_EMPS.find(e => e.id === parsedBody.employeeId);
+      const calcDays = fbBusinessDays(parsedBody.startDate, parsedBody.endDate);
       const newLeave: MockLeaveRequest = {
         id: `leave-${Date.now()}`,
         employeeId: parsedBody.employeeId,
@@ -802,7 +841,7 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
         leaveType: parsedBody.leaveType,
         startDate: parsedBody.startDate,
         endDate: parsedBody.endDate,
-        days: 5,
+        days: calcDays,
         reason: parsedBody.reason,
         status: 'pending',
         approverId: null,
@@ -812,9 +851,64 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
         isDemo: true,
       };
       DEFAULT_LEAVES.unshift(newLeave);
+      DEFAULT_AUDITS.unshift({
+        id: `audit-${Date.now()}`,
+        occurredAt: new Date().toISOString(),
+        actor: 'Employee / HR (Demo)',
+        action: 'leave_request_submitted',
+        targetType: 'leave_request',
+        targetId: newLeave.id,
+        summary: `Submitted ${newLeave.days} day(s) of ${newLeave.leaveType} leave for ${newLeave.employeeName}.`,
+        isDemo: true,
+      });
       return newLeave;
     }
     return DEFAULT_LEAVES;
+  }
+
+  if (path.startsWith('/api/leave-requests/') && path.endsWith('/recommend')) {
+    const leaveId = path.split('/')[3];
+    const leave = DEFAULT_LEAVES.find(l => l.id === leaveId);
+    if (!leave) return { recommendation: { outcome: 'policy_violation', recommended: false, advisoryOnly: true, explanation: 'Leave request not found.', warnings: [], policyReferences: [], factors: [] } };
+    const pol = DEFAULT_LEAVE_POLICIES.find(p => p.code === leave.leaveType && p.active);
+    const accrued = pol ? (pol.accrualMethod === 'monthly' ? Math.floor((pol.entitlementDays * (new Date().getUTCMonth() + 1)) / 12) : pol.entitlementDays) : 0;
+    const usedOrPending = DEFAULT_LEAVES.filter(l => l.id !== leave.id && l.employeeId === leave.employeeId && l.leaveType === leave.leaveType && (l.status === 'approved' || l.status === 'pending')).reduce((s, l) => s + l.days, 0);
+    const available = accrued - usedOrPending;
+    const ok = Boolean(pol) && (leave.leaveType === 'unpaid' || available >= leave.days);
+    return {
+      requestId: leave.id,
+      status: leave.status,
+      recommendation: {
+        outcome: !pol ? 'policy_violation' : ok ? 'recommend' : 'insufficient_balance',
+        recommended: ok,
+        advisoryOnly: true,
+        explanation: ok ? `Recommended: ${available} accrued day(s) available for ${leave.days} requested day(s).` : `Insufficient ${pol?.name ?? leave.leaveType} balance (${Math.max(0, available)} available vs ${leave.days} requested).`,
+        warnings: [],
+        policyReferences: [],
+        factors: [{ check: 'Leave Balance', status: ok ? 'pass' : 'fail', detail: `${Math.max(0, available)} day(s) available` }],
+      },
+    };
+  }
+
+  if (path.startsWith('/api/leave-requests/') && path.endsWith('/cancel')) {
+    const leaveId = path.split('/')[3];
+    const leave = DEFAULT_LEAVES.find(l => l.id === leaveId);
+    if (leave) {
+      const prev = leave.status;
+      leave.status = 'cancelled';
+      leave.decidedAt = new Date().toISOString();
+      DEFAULT_AUDITS.unshift({
+        id: `audit-${Date.now()}`,
+        occurredAt: new Date().toISOString(),
+        actor: 'David Kibet (HR Admin)',
+        action: 'leave_request_cancelled',
+        targetType: 'leave_request',
+        targetId: leave.id,
+        summary: `Cancelled ${prev} ${leave.leaveType} leave (${leave.days} days) for ${leave.employeeName}; balance reversed.`,
+        isDemo: true,
+      });
+    }
+    return leave || DEFAULT_LEAVES[0];
   }
 
   if (path.startsWith('/api/leave-requests/') && path.endsWith('/decision')) {
@@ -824,6 +918,18 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
       leave.status = parsedBody.decision === 'approve' ? 'approved' : 'rejected';
       leave.decisionComment = parsedBody.comment || parsedBody.decisionComment || 'Decided by manager';
       leave.decidedAt = new Date().toISOString();
+      DEFAULT_AUDITS.unshift({
+        id: `audit-${Date.now()}`,
+        occurredAt: new Date().toISOString(),
+        actor: 'David Kibet (HR Admin)',
+        action: leave.status === 'approved' ? 'leave_request_approved' : 'leave_request_rejected',
+        targetType: 'leave_request',
+        targetId: leave.id,
+        summary: leave.status === 'approved'
+          ? `Approved ${leave.days} day(s) of ${leave.leaveType} leave for ${leave.employeeName}; balance deducted.`
+          : `Declined ${leave.leaveType} leave request for ${leave.employeeName}; no balance deducted.`,
+        isDemo: true,
+      });
     }
     return leave || DEFAULT_LEAVES[0];
   }

@@ -81,9 +81,10 @@ export function LeaveCoverageAndCalendarPanel({
 }) {
   const qc = useQueryClient();
 
-  // Current year & month state (default to March 2026 or current)
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [selectedMonth, setSelectedMonth] = useState(3); // 1-indexed (March = 3)
+  // Current year & month state (defaults dynamically to current month)
+  const initialDate = new Date();
+  const [selectedYear, setSelectedYear] = useState(initialDate.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(initialDate.getMonth() + 1); // 1-indexed
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [calendarView, setCalendarView] = useState<'grid' | 'timeline'>('grid');
 

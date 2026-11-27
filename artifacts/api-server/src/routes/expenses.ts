@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { demoDate, demoDateTime } from "../lib/demoDateOffset";
 import { and, desc, eq } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { db, expensesTable } from "@workspace/db";
@@ -48,14 +49,14 @@ export const DEMO_EXPENSES: DemoExpense[] = [
     title: "Nakuru Cold-Chain Distributor Audit Travel & Fuel",
     category: "Travel & Fleet",
     amountKes: 14800,
-    incurredDate: "2026-03-04",
+    incurredDate: demoDate(-4),
     receiptReference: "KRA-ETR-991827",
     notes: "Overnight route audit across Nakuru & Naivasha hubs.",
     status: "pending",
     approverUserId: null,
     decisionComment: null,
     decidedAt: null,
-    createdAt: "2026-03-04T15:10:00.000Z",
+    createdAt: demoDateTime(-4, "15:10:00"),
   },
   {
     id: "exp-002",
@@ -65,14 +66,14 @@ export const DEMO_EXPENSES: DemoExpense[] = [
     title: "Trade Activation POS Display Print Materials",
     category: "Commercial Marketing",
     amountKes: 28500,
-    incurredDate: "2026-02-27",
-    receiptReference: "INV-2026-441",
+    incurredDate: demoDate(-10),
+    receiptReference: `INV-${new Date().getUTCFullYear()}-441`,
     notes: "Nairobi Westlands retail distributor launch kits.",
     status: "approved",
     approverUserId: "user_demo_admin_01",
-    decisionComment: "Approved within Q1 brand activation budget.",
-    decidedAt: "2026-02-28T10:20:00.000Z",
-    createdAt: "2026-02-27T11:00:00.000Z",
+    decisionComment: "Approved within brand activation budget.",
+    decidedAt: demoDateTime(-9, "10:20:00"),
+    createdAt: demoDateTime(-10, "11:00:00"),
   },
   {
     id: "exp-003",
@@ -82,14 +83,14 @@ export const DEMO_EXPENSES: DemoExpense[] = [
     title: "Filling Line Calibration Reagents & Test Consumables",
     category: "Operations & Lab",
     amountKes: 18400,
-    incurredDate: "2026-03-05",
+    incurredDate: demoDate(-2),
     receiptReference: "KRA-ETR-774910",
     notes: "Emergency pH buffer calibration standards for Line B.",
     status: "pending",
     approverUserId: null,
     decisionComment: null,
     decidedAt: null,
-    createdAt: "2026-03-05T08:30:00.000Z",
+    createdAt: demoDateTime(-2, "08:30:00"),
   },
 ];
 

@@ -467,7 +467,7 @@ function AppFrame() {
             <Route path="/ai" component={AgentHubPage} />
             <Route path="/agent-hub" component={AgentHubPage} />
             <Route path="/settings" component={SettingsPage} />
-            <Route path="/diagnostics" component={SettingsPage} />
+            <Route path="/diagnostics" component={DiagnosticsPage} />
             <Route path="/recruitment" component={RecruitmentPage} />
             <Route path="/onboarding" component={OnboardingPage} />
             <Route path="/attendance" component={AttendancePage} />
@@ -948,6 +948,16 @@ function OrganizationPage() {
   </div>;
 }
 
+interface LeaveRecommendationResult {
+  outcome: string;
+  recommended: boolean;
+  advisoryOnly: boolean;
+  explanation: string;
+  warnings: string[];
+  policyReferences: string[];
+  factors: Array<{ check: string; status: 'pass' | 'warn' | 'fail'; detail: string }>;
+}
+
 function LeavePage() {
   const [showForm, setShowForm] = useState(false);
   const [showPolicyForm, setShowPolicyForm] = useState(false);
@@ -956,6 +966,10 @@ function LeavePage() {
   const [balanceEmployeeId, setBalanceEmployeeId] = useState('');
   const [balanceYear, setBalanceYear] = useState(new Date().getUTCFullYear());
   const [policyFormError, setPolicyFormError] = useState(false);
+  const [recommendationsByRequest, setRecommendationsByRequest] = useState<Record<string, LeaveRecommendationResult>>({});
+  const [recommendingId, setRecommendingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<{ workingDays: number; hasOverlap: boolean; recommendation?: LeaveRecommendationResult } | null>(null);
   const list = useListLeaveRequests({ status: filter ? filter as 'pending' | 'approved' | 'rejected' | 'cancelled' : undefined });
   const employees = useListEmployees({ page: 1, pageSize: 100 });
   const policies = useListLeavePolicies();
@@ -972,6 +986,41 @@ function LeavePage() {
     qc.invalidateQueries({ queryKey: getGetPeopleOsOverviewQueryKey() });
     qc.invalidateQueries({ queryKey: getListLeavePoliciesQueryKey() });
     qc.invalidateQueries({ queryKey: getListLeaveBalancesQueryKey() });
+    qc.invalidateQueries({ queryKey: getListAuditEventsQueryKey() });
+  };
+  const runRecommendation = async (requestId: string) => {
+    setRecommendingId(requestId);
+    try {
+      const resp = await apiPost<{ recommendation: LeaveRecommendationResult }>(`/api/leave-requests/${requestId}/recommend`, {});
+      if (resp?.recommendation) {
+        setRecommendationsByRequest(prev => ({ ...prev, [requestId]: resp.recommendation }));
+      }
+    } finally {
+      setRecommendingId(null);
+    }
+  };
+  const runCancelRequest = async (requestId: string) => {
+    setCancellingId(requestId);
+    try {
+      await apiPost(`/api/leave-requests/${requestId}/cancel`, {});
+      refresh();
+    } finally {
+      setCancellingId(null);
+    }
+  };
+  const previewLeaveForm = async (form: HTMLFormElement) => {
+    const fd = new FormData(form);
+    const employeeId = String(fd.get('employeeId') ?? '');
+    const leaveType = String(fd.get('leaveType') ?? '');
+    const startDate = String(fd.get('startDate') ?? '');
+    const endDate = String(fd.get('endDate') ?? '');
+    if (!leaveType || !startDate || !endDate || endDate < startDate) return;
+    try {
+      const data = await apiPost<{ workingDays: number; hasOverlap: boolean; recommendation?: LeaveRecommendationResult }>('/api/leave/requests/preview', { employeeId, leaveType, startDate, endDate });
+      setPreviewState(data);
+    } catch {
+      setPreviewState(null);
+    }
   };
   const activePolicies = policies.data?.filter(policy => policy.active) ?? [];
   const availableBalanceEmployees = [...new Map((balances.data ?? []).map(balance => [balance.employeeId, balance.employeeName])).entries()];
@@ -1033,7 +1082,7 @@ function LeavePage() {
       </div>
       {balances.isLoading ? <div className="skeleton h-24" data-testid="state-leave-balances-loading" /> :
         balances.isError ? <ErrorState title="Leave balances could not load" onRetry={() => balances.refetch()} /> :
-        !policies.data?.length ? <EmptyState title="Leave policies are not configured" message={canManagePolicies ? "Add organization leave types and their entitlement rules below. No statutory amounts are pre-filled." : "Your HR team has not configured leave types and entitlement rules yet."} /> :
+        !policies.data?.length ? <EmptyState title="Leave policies are not configured" message={canManagePolicies ? "Add organization leave types and their entitlement rules below." : "Your HR team has not configured leave types and entitlement rules yet."} /> :
         !visibleBalances.length ? <EmptyState title="No balances for this year" message="No leave policies or employee balances were returned for the selected year." /> :
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-xs" data-testid="table-leave-balances">
@@ -1051,7 +1100,7 @@ function LeavePage() {
         </div>}
     </section>
     {canManagePolicies && <section className="surface mb-4 p-4 md:p-5" data-testid="section-leave-policies">
-      <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Organization leave policies</h2><p className="mt-1 text-xs text-stone-500">Set entitlements and accrual for this organization. Entitlement amounts are not pre-populated.</p></div><button className="btn btn-secondary min-h-9 shrink-0 px-3" onClick={() => { setEditingPolicy(null); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid="button-add-leave-policy"><Plus size={14} /> Add leave type</button></div>
+      <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">Organization leave policies</h2><p className="mt-1 text-xs text-stone-500">Kenya Employment Act 2007 defaults are pre-populated for demo review (marked for legal counsel verification) and can be customized by HR.</p></div><button className="btn btn-secondary min-h-9 shrink-0 px-3" onClick={() => { setEditingPolicy(null); setPolicyFormError(false); setShowPolicyForm(true); }} data-testid="button-add-leave-policy"><Plus size={14} /> Add leave type</button></div>
       {policies.isLoading ? <div className="skeleton h-16" data-testid="state-leave-policies-loading" /> :
         policies.isError ? <ErrorState title="Leave policies could not load" onRetry={() => policies.refetch()} /> :
         !policies.data?.length ? <EmptyState title="No leave types yet" message="Add your organization's leave types and rules. You choose the entitlement and whether it accrues annually or monthly." /> :
@@ -1067,19 +1116,34 @@ function LeavePage() {
     <section className="surface p-4 md:p-5">
       <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><h2 className="font-display text-lg font-semibold text-stone-900">Leave requests</h2><p className="mt-1 text-xs text-stone-500">Records visible to your account</p></div><select className="field w-full sm:w-48" value={filter} onChange={e => setFilter(e.target.value)} aria-label="Filter leave status" data-testid="select-leave-status"><option value="">All statuses</option>{['pending','approved','rejected','cancelled'].map(s => <option key={s} value={s}>{s}</option>)}</select></div>
       {list.isLoading ? <div className="space-y-3" data-testid="state-leave-loading">{[1,2,3].map(x => <div className="skeleton h-16" key={x} />)}</div> : list.isError ? <ErrorState title="Leave requests could not load" onRetry={() => list.refetch()} /> : !list.data?.length ? <EmptyState title="No leave requests" message="Requests matching this filter will appear here." /> :
-      <div className="space-y-3">{list.data.map(req => <article key={req.id} className="rounded-xl border border-stone-200 p-4" data-testid={`card-leave-request-${req.id}`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-bold text-stone-800">{req.employeeName}</h3><StatusPill status={req.status} /><ModeBadge demo={req.isDemo} /></div><p className="mt-1 text-xs capitalize text-stone-500">{req.leaveType} leave · {req.days} days</p><p className="mt-2 text-sm text-stone-700">{formatDate(req.startDate)} — {formatDate(req.endDate)}</p><p className="mt-2 text-xs leading-5 text-stone-500">{req.reason}</p></div>
+      <div className="space-y-3">{list.data.map(req => {
+        const rec = recommendationsByRequest[req.id];
+        return <article key={req.id} className="rounded-xl border border-stone-200 p-4" data-testid={`card-leave-request-${req.id}`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start"><div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-bold text-stone-800">{req.employeeName}</h3><StatusPill status={req.status} /><ModeBadge demo={req.isDemo} /></div><p className="mt-1 text-xs capitalize text-stone-500">{req.leaveType} leave · {req.days} days</p><p className="mt-2 text-sm text-stone-700">{formatDate(req.startDate)} — {formatDate(req.endDate)}</p><p className="mt-2 text-xs leading-5 text-stone-500">{req.reason}</p>
+            {rec && <div className={`mt-3 rounded-lg border p-2.5 text-xs ${rec.recommended ? 'border-emerald-200 bg-emerald-50/70 text-emerald-900' : 'border-amber-200 bg-amber-50/70 text-amber-900'}`} data-testid={`box-leave-recommendation-${req.id}`}>
+              <p className="font-bold">{rec.recommended ? 'Recommended' : 'Advisory Flag'} ({rec.outcome.replaceAll('_', ' ')}) · Advisory only</p>
+              <p className="mt-1">{rec.explanation}</p>
+            </div>}
+          </div>
           <div className="flex items-center gap-2 text-[10px] text-stone-400"><Clock3 size={13} /> Submitted {formatDate(req.submittedAt)}</div>
-          {req.status === 'pending' && auth.data?.canApproveLeave && <div className="flex gap-2"><button className="btn btn-primary min-h-9 px-3" disabled={decide.isPending} onClick={() => decide.mutate({ requestId: req.id, data: { decision: 'approve' } }, { onSuccess: refresh })} data-testid={`button-approve-leave-${req.id}`}><Check size={14} /> Approve</button><button className="btn btn-secondary min-h-9 px-3" disabled={decide.isPending} onClick={() => { const comment = window.prompt('Optional reason for declining this request') ?? ''; decide.mutate({ requestId: req.id, data: { decision: 'reject', comment: comment || null } }, { onSuccess: refresh }); }} data-testid={`button-reject-leave-${req.id}`}>Decline</button></div>}
+          <div className="flex flex-wrap gap-2">
+            {req.status === 'pending' && <button className="btn btn-outline min-h-9 px-3 text-xs" disabled={recommendingId === req.id} onClick={() => void runRecommendation(req.id)} data-testid={`button-recommend-leave-${req.id}`}>{recommendingId === req.id ? 'Checking…' : 'Recommend check'}</button>}
+            {req.status === 'pending' && auth.data?.canApproveLeave && <><button className="btn btn-primary min-h-9 px-3" disabled={decide.isPending} onClick={() => decide.mutate({ requestId: req.id, data: { decision: 'approve' } }, { onSuccess: refresh })} data-testid={`button-approve-leave-${req.id}`}><Check size={14} /> Approve</button><button className="btn btn-secondary min-h-9 px-3" disabled={decide.isPending} onClick={() => { const comment = window.prompt('Optional reason for declining this request') ?? ''; decide.mutate({ requestId: req.id, data: { decision: 'reject', comment: comment || null } }, { onSuccess: refresh }); }} data-testid={`button-reject-leave-${req.id}`}>Decline</button></>}
+            {(req.status === 'pending' || req.status === 'approved') && <button className="btn btn-ghost min-h-9 px-3 text-xs" disabled={cancellingId === req.id} onClick={() => void runCancelRequest(req.id)} data-testid={`button-cancel-leave-req-${req.id}`}>{cancellingId === req.id ? 'Cancelling…' : 'Cancel'}</button>}
+          </div>
         </div>
-      </article>)}</div>}
+      </article>;})}</div>}
       {decide.isError && <p className="mt-3 text-xs text-[#a91919]" data-testid="text-leave-decision-error">Decision could not be saved. Refresh and confirm you still have approval access.</p>}
     </section>
-    {showForm && <Modal title="Request time away" onClose={() => setShowForm(false)} testId="dialog-create-leave">
-      <form className="space-y-4" data-testid="form-leave-request" onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); const data: LeaveRequestInput = { employeeId: String(fd.get('employeeId') ?? ''), leaveType: String(fd.get('leaveType')), startDate: String(fd.get('startDate')), endDate: String(fd.get('endDate')), reason: String(fd.get('reason')).trim() }; create.mutate({ data }, { onSuccess: () => { refresh(); setShowForm(false); } }); }}>
+    {showForm && <Modal title="Request time away" onClose={() => { setShowForm(false); setPreviewState(null); }} testId="dialog-create-leave">
+      <form className="space-y-4" data-testid="form-leave-request" onChange={e => void previewLeaveForm(e.currentTarget)} onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); const data: LeaveRequestInput = { employeeId: String(fd.get('employeeId') ?? ''), leaveType: String(fd.get('leaveType')), startDate: String(fd.get('startDate')), endDate: String(fd.get('endDate')), reason: String(fd.get('reason')).trim() }; create.mutate({ data }, { onSuccess: () => { refresh(); setShowForm(false); setPreviewState(null); } }); }}>
         <label><span className="label">Employee</span><select className="field" name="employeeId" required data-testid="select-leave-employee"><option value="">Select a permitted employee record</option>{employees.data?.items.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName} · {e.departmentName}</option>)}</select><span className="mt-1 block text-[10px] text-stone-400">Only employee records returned for your account are listed.</span></label>
         <label><span className="label">Leave type</span><select className="field" name="leaveType" required disabled={!activePolicies.length} data-testid="select-leave-type"><option value="">Select a configured leave type</option>{activePolicies.map(policy => <option key={policy.code} value={policy.code}>{policy.name} · {policy.entitlementDays} days/year</option>)}</select></label>
         <div className="grid gap-3 sm:grid-cols-2"><Field name="startDate" label="First day away" type="date" required /><Field name="endDate" label="Last day away" type="date" required /></div>
+        {previewState && <div className={`rounded-xl border p-3 text-xs ${previewState.recommendation?.recommended ? 'border-emerald-200 bg-emerald-50/70 text-emerald-900' : 'border-amber-200 bg-amber-50/70 text-amber-900'}`} data-testid="box-leave-preview">
+          <p className="font-semibold">Calculated working days: {previewState.workingDays}</p>
+          {previewState.recommendation && <p className="mt-1">{previewState.recommendation.explanation}</p>}
+        </div>}
         <label><span className="label">Reason</span><textarea className="field min-h-24 resize-y" name="reason" minLength={3} maxLength={1000} required placeholder="Add context for your manager" data-testid="input-leave-reason" /></label>
         {create.isError && <p className="text-xs text-[#a91919]" data-testid="text-leave-create-error">{create.error instanceof Error ? create.error.message : 'Request could not be submitted. Check the dates, available balance, and leave type.'}</p>}
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)} data-testid="button-cancel-leave">Cancel</button><button className="btn btn-primary" disabled={create.isPending || !activePolicies.length} data-testid="button-submit-leave">{create.isPending ? 'Submitting…' : 'Submit request'}</button></div>
@@ -1196,18 +1260,11 @@ interface ReadyzPayload {
   timestamp: string;
 }
 
-function SettingsPage() {
-  const [location] = useLocation();
-  const isDiagnosticsView = location === '/diagnostics';
+function DiagnosticsPage() {
   const auth = useGetAuthContext();
   const provider = useGetAgentProviderStatus();
   const canInspectDiagnostics = Boolean(auth.data?.canManageSettings || auth.data?.canViewAudit);
 
-  const securityQuery = useQuery({
-    queryKey: ['security-status'],
-    queryFn: () => apiGet<any>('/api/security/status'),
-    enabled: canInspectDiagnostics,
-  });
   const readyzQuery = useQuery({
     queryKey: ['system-readyz'],
     queryFn: () => apiGet<ReadyzPayload>('/api/readyz'),
@@ -1219,25 +1276,23 @@ function SettingsPage() {
     enabled: canInspectDiagnostics,
   });
 
-  if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading configuration and diagnostics" />;
-  const sec = securityQuery.data;
+  if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading system diagnostics" />;
   const diag = diagnosticsQuery.data;
   const readyz = readyzQuery.data;
 
   const refreshDiagnostics = () => {
     void readyzQuery.refetch();
     void diagnosticsQuery.refetch();
-    void securityQuery.refetch();
   };
 
   return <div>
     <PageHeading
-      eyebrow={isDiagnosticsView ? 'Operations / System health' : 'Workspace / Configuration'}
-      title={isDiagnosticsView ? 'System Diagnostics' : 'Settings & Diagnostics'}
-      description="Role access, runtime readiness, subsystem telemetry, integration registry, and security controls for Rekker PeopleOS."
+      eyebrow="Operations / System health"
+      title="System Diagnostics"
+      description="Live dependency probes, subsystem telemetry, and integration registry for Rekker PeopleOS."
       action={canInspectDiagnostics ? <button type="button" onClick={refreshDiagnostics} disabled={diagnosticsQuery.isFetching || readyzQuery.isFetching} className="btn btn-outline text-xs" data-testid="button-refresh-diagnostics"><RefreshCw size={14} className={diagnosticsQuery.isFetching ? 'animate-spin' : ''} /> Refresh probes</button> : undefined}
     />
-    {!canInspectDiagnostics ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect workspace configuration and system diagnostics." /></div> : <>
+    {!canInspectDiagnostics ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect system diagnostics." /></div> : <>
       <section className="surface p-5 md:p-7" data-testid="section-system-diagnostics">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -1252,13 +1307,11 @@ function SettingsPage() {
             {diag && <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] font-semibold text-stone-600">Runtime: {diag.application.nodeVersion} · Uptime {diag.application.uptimeSeconds}s</span>}
           </div>
         </div>
-
         {(diagnosticsQuery.isError || readyzQuery.isError) && (
           <div className="mt-4 rounded-xl border border-[#f2c8c8] bg-[#fdf2f2] p-4 text-xs text-[#9b1c1c]" data-testid="error-diagnostics-probe">
             Diagnostic probe request failed ({diagnosticsQuery.error instanceof Error ? diagnosticsQuery.error.message : 'Unable to reach diagnostics service'}). Failure is surfaced transparently without mock substitution.
           </div>
         )}
-
         {diag && (diag.configErrors.length > 0 || diag.configWarnings.length > 0) && (
           <div className="mt-4 space-y-2">
             {diag.configErrors.map((errMsg, idx) => (
@@ -1273,7 +1326,6 @@ function SettingsPage() {
             ))}
           </div>
         )}
-
         {diag ? (
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {diag.subsystems.map((sub) => (
@@ -1291,7 +1343,6 @@ function SettingsPage() {
         ) : (
           <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs text-stone-500">Loading subsystem telemetry...</div>
         )}
-
         {diag && (
           <div className="mt-6">
             <h3 className="text-xs font-bold uppercase tracking-[.12em] text-stone-500">Integration Registry</h3>
@@ -1326,6 +1377,32 @@ function SettingsPage() {
           </div>
         )}
       </section>
+    </>}
+  </div>;
+}
+
+function SettingsPage() {
+  const auth = useGetAuthContext();
+  const provider = useGetAgentProviderStatus();
+  const canInspectSettings = Boolean(auth.data?.canManageSettings || auth.data?.canViewAudit);
+
+  const securityQuery = useQuery({
+    queryKey: ['security-status'],
+    queryFn: () => apiGet<any>('/api/security/status'),
+    enabled: canInspectSettings,
+  });
+
+  if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading workspace settings" />;
+  const sec = securityQuery.data;
+
+  return <div>
+    <PageHeading
+      eyebrow="Workspace / Configuration"
+      title="Workspace Settings"
+      description="Role access profile, Kenya statutory security controls, and AI provider configuration for Rekker PeopleOS."
+      action={<div className="flex gap-2"><Link href="/leave" className="btn btn-outline text-xs">Leave Policies</Link><Link href="/diagnostics" className="btn btn-outline text-xs">System Diagnostics</Link></div>}
+    />
+    {!canInspectSettings ? <div className="surface"><EmptyState title="Administration access is restricted" message="Only authorized HR administrators, system administrators, or compliance auditors can inspect workspace configuration." /></div> : <>
 
       <section className="surface mt-4 p-5 md:p-7" data-testid="section-role-access">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f5ebe7] text-[#a91919]"><ShieldCheck size={18} /></div><div><h2 className="font-display text-lg font-semibold text-stone-900">Your access profile</h2><p className="text-xs text-stone-500">Permissions are supplied by the PeopleOS authorization service.</p></div></div>

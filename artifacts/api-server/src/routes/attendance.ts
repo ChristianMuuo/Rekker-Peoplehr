@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { demoDate, demoDateTime } from "../lib/demoDateOffset";
 import { and, desc, eq } from "drizzle-orm";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { attendanceRecordsTable, db } from "@workspace/db";
@@ -65,7 +66,7 @@ export let ATTENDANCE_RECORDS: AttendanceItem[] = [
     employeeId: "10000000-0000-4000-8000-000000000001",
     employeeName: "Achieng Odhiambo",
     departmentName: "Formulation & Filling",
-    date: "2026-03-06",
+    date: demoDate(0),
     shift: "Morning (06:00 - 14:00)",
     clockIn: "05:52",
     clockOut: "14:15",
@@ -78,7 +79,7 @@ export let ATTENDANCE_RECORDS: AttendanceItem[] = [
     employeeId: "10000000-0000-4000-8000-000000000002",
     employeeName: "Mwangi Kariuki",
     departmentName: "Formulation & Filling",
-    date: "2026-03-06",
+    date: demoDate(0),
     shift: "Morning (06:00 - 14:00)",
     clockIn: "05:58",
     clockOut: "16:30",
@@ -91,7 +92,7 @@ export let ATTENDANCE_RECORDS: AttendanceItem[] = [
     employeeId: "10000000-0000-4000-8000-000000000003",
     employeeName: "Juma Omondi",
     departmentName: "Logistics & Distribution",
-    date: "2026-03-06",
+    date: demoDate(0),
     shift: "Day (08:30 - 17:00)",
     clockIn: "08:48",
     clockOut: null,
@@ -107,12 +108,12 @@ const ATTENDANCE_CORRECTIONS: AttendanceCorrectionItem[] = [
     organizationId: "rekker-demo",
     employeeId: "10000000-0000-4000-8000-000000000003",
     employeeName: "Juma Omondi",
-    date: "2026-03-06",
+    date: demoDate(0),
     requestedClockIn: "08:30",
     requestedClockOut: "17:05",
     reason: "Gate biometric scanner had power delay at Nairobi Central Hub.",
     status: "pending",
-    submittedAt: "2026-03-06T09:10:00Z",
+    submittedAt: demoDateTime(0, "09:10:00"),
     decidedByUserId: null,
   },
 ];
@@ -163,7 +164,7 @@ router.get(["/attendance", "/attendance/records"], async (req: Request, res: Res
         ? items.filter((r) => r.employeeId === membership.employeeId)
         : [];
     }
-    res.json({ date: date || "2026-03-06", items, total: items.length });
+    res.json({ date: date || demoDate(0), items, total: items.length });
     return;
   }
 

@@ -357,11 +357,12 @@ export async function assembleAttendanceAnomalyFeatures(
   }
 
   if (records.length < 3 && isTestOrDemoAllowed) {
+    const todayIso = new Date().toISOString().slice(0, 10);
     records = [
-      { id: "att_01", employeeId: "10000000-0000-4000-8000-000000000001", employeeName: "Achieng O.", departmentName: "Formulation & Filling", date: "2026-03-06", clockIn: "05:52", status: "on_time", overtimeHours: 0.25 },
-      { id: "att_02", employeeId: "10000000-0000-4000-8000-000000000002", employeeName: "Mwangi K.", departmentName: "Formulation & Filling", date: "2026-03-06", clockIn: "05:58", status: "overtime", overtimeHours: 4.5 },
-      { id: "att_03", employeeId: "10000000-0000-4000-8000-000000000003", employeeName: "Juma O.", departmentName: "Logistics & Distribution", date: "2026-03-06", clockIn: "08:48", status: "late", overtimeHours: 0, anomalyFlag: "Late arrival: 18 minutes past shift start" },
-      { id: "att_04", employeeId: "10000000-0000-4000-8000-000000000006", employeeName: "Brian K.", departmentName: "Brand & Commercial Marketing", date: "2026-03-06", clockIn: "08:29", status: "on_time", overtimeHours: 0 },
+      { id: "att_01", employeeId: "10000000-0000-4000-8000-000000000001", employeeName: "Achieng O.", departmentName: "Formulation & Filling", date: todayIso, clockIn: "05:52", status: "on_time", overtimeHours: 0.25 },
+      { id: "att_02", employeeId: "10000000-0000-4000-8000-000000000002", employeeName: "Mwangi K.", departmentName: "Formulation & Filling", date: todayIso, clockIn: "05:58", status: "overtime", overtimeHours: 4.5 },
+      { id: "att_03", employeeId: "10000000-0000-4000-8000-000000000003", employeeName: "Juma O.", departmentName: "Logistics & Distribution", date: todayIso, clockIn: "08:48", status: "late", overtimeHours: 0, anomalyFlag: "Late arrival: 18 minutes past shift start" },
+      { id: "att_04", employeeId: "10000000-0000-4000-8000-000000000006", employeeName: "Brian K.", departmentName: "Brand & Commercial Marketing", date: todayIso, clockIn: "08:29", status: "on_time", overtimeHours: 0 },
     ];
   }
 

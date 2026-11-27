@@ -43,7 +43,10 @@ export function RecruitmentPage() {
   // Schedule interview form
   const [intCandidateId, setIntCandidateId] = useState('cand_01');
   const [intInterviewer, setIntInterviewer] = useState('Achieng Odhiambo');
-  const [intDate, setIntDate] = useState('2026-03-18T10:00');
+  const [intDate, setIntDate] = useState(() => {
+    const d = new Date(Date.now() + 86_400_000);
+    return `${d.toISOString().slice(0, 10)}T10:00`;
+  });
   const [intMode, setIntMode] = useState<'onsite' | 'virtual'>('onsite');
 
   const reqsQuery = useQuery({

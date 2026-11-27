@@ -1,8 +1,2 @@
 User-agent: *
-Disallow: /api/
-Disallow: /overview
-Disallow: /crm
-Disallow: /partner-approvals
-Disallow: /portal
-Disallow: /distributor
-Allow: /careers
+Disallow: /

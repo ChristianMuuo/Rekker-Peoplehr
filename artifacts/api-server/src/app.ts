@@ -120,6 +120,58 @@ app.use(
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
+// Optional Demo Passcode gate when DEMO_PASSCODE is configured on public/staging environments
+app.post("/api/demo-access", (req: Request, res: Response) => {
+  const required = process.env.DEMO_PASSCODE;
+  if (!required) {
+    res.json({ required: false, unlocked: true });
+    return;
+  }
+  const supplied = typeof req.body?.passcode === "string" ? req.body.passcode : "";
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(required);
+  const match = a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!match) {
+    res.status(401).json({ error: "Invalid demo access passcode.", code: "INVALID_DEMO_PASSCODE" });
+    return;
+  }
+  const token = crypto.createHmac("sha256", required).update("rekker-demo-unlocked").digest("hex");
+  res.cookie("demoPk", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 24 * 60 * 60 * 1000,
+    path: "/",
+  });
+  res.json({ required: true, unlocked: true });
+});
+
+app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+  const required = process.env.DEMO_PASSCODE;
+  if (!required || req.path === "/health" || req.path === "/healthz" || req.path === "/demo-access") {
+    next();
+    return;
+  }
+  const expectedToken = crypto.createHmac("sha256", required).update("rekker-demo-unlocked").digest("hex");
+  const headerPass = req.headers["x-demo-passcode"];
+  const cookieHeader = typeof req.headers.cookie === "string" ? req.headers.cookie : "";
+  const cookieMatch = cookieHeader
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith("demoPk="))
+    ?.slice("demoPk=".length);
+  const headerOk = typeof headerPass === "string" && headerPass === required;
+  const cookieOk = cookieMatch === expectedToken;
+  if (!headerOk && !cookieOk) {
+    res.status(401).json({
+      error: "Demo access passcode required.",
+      code: "DEMO_PASSCODE_REQUIRED",
+    });
+    return;
+  }
+  next();
+});
+
 if (process.env.CLERK_SECRET_KEY) {
   app.use(
     clerkMiddleware((req) => ({

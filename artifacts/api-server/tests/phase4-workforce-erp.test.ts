@@ -3,6 +3,7 @@ import assert from "node:assert";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import app from "../src/app";
+import { DEMO_LEAVE_STORE } from "../src/routes/leave";
 
 async function withServer(
   fn: (baseUrl: string) => Promise<void>,
@@ -133,7 +134,11 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
       assert.ok(overlapData.error?.includes("conflict") || overlapData.error?.includes("already scheduled"));
 
       // C: Assigning employee on approved leave must be rejected
-      // Wanjiku Kimani (emp 4) has approved annual leave March 02 to March 13, 2026
+      const approvedWanjikuLeave = DEMO_LEAVE_STORE.find((l) => l.id === "leave-001")!;
+      const approvedLeaveDate =
+        approvedWanjikuLeave.startDate instanceof Date
+          ? approvedWanjikuLeave.startDate.toISOString().slice(0, 10)
+          : String(approvedWanjikuLeave.startDate).slice(0, 10);
       const leaveConflictRes = await fetch(`${baseUrl}/api/workforce-erp/shifts`, {
         method: "POST",
         headers: supervisorHeaders,
@@ -141,7 +146,7 @@ describe("Phase 4: ERP Workforce Operations, Scheduling, Competency & Honest Int
           employeeId: "10000000-0000-4000-8000-000000000004",
           unitType: "warehouse",
           workZone: "Nairobi Dispatch Warehouse",
-          shiftDate: "2026-03-05",
+          shiftDate: approvedLeaveDate,
           shiftName: "Day (08:00-17:00)",
           startTime: "08:00",
           endTime: "17:00",

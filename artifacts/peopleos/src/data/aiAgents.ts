@@ -27,11 +27,11 @@ export interface AgentInfo {
 export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   supervisor: {
     id: 'supervisor',
-    name: 'Rekker AI Supervisor',
-    tagline: 'StateGraph Intent Router & RBAC Guard',
+    name: 'Rekker HR Assistant (Preview)',
+    tagline: 'Rule-Based Topic Router & RBAC Guard',
     avatarColor: 'bg-red-700 text-white',
     description:
-      'Coordinates all 10 specialist HR intelligence agents, enforces role-based data boundaries, and gates high-impact actions for human signoff.',
+      'Routes workforce questions across rule-based HR topic templates, enforces role-based boundaries, and holds consequential actions for human signoff. (Concept preview unless connected to live LLM + backend.)',
     sampleQueries: [
       'Give me an executive workforce intelligence briefing',
       'Calculate Kenya statutory deductions on KES 220,000',
@@ -107,10 +107,10 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   },
   retention: {
     id: 'retention',
-    name: 'Employee Retention Agent',
-    tagline: 'XGBoost Attrition & Burnout Early Warning',
+    name: 'Employee Retention Assistant',
+    tagline: 'Attrition Risk Preview (Concept / Requires ML Service)',
     avatarColor: 'bg-orange-700 text-white',
-    description: 'Predicts attrition risk drivers with XGBoost + NLP sentiment analysis on workforce signals.',
+    description: 'Interfaces with the Python attrition model when the ML microservice is connected; otherwise surfaces static preview guidance.',
     sampleQueries: [
       'Run attrition risk predictions and top retention drivers',
       'Scan employee feedback sentiment for burnout risk signals',
@@ -129,10 +129,10 @@ export const AGENT_REGISTRY: Record<AgentRole, AgentInfo> = {
   },
   compliance: {
     id: 'compliance',
-    name: 'Compliance Monitoring Agent',
-    tagline: 'Kenya Employment Act & ODPC Privacy RAG',
+    name: 'Compliance Reference Assistant',
+    tagline: 'Kenya Employment Act & ODPC Policy Lookup',
     avatarColor: 'bg-purple-700 text-white',
-    description: 'Retrieves verified policy citations on Kenyan labor governance, ODPC privacy, and contract compliance.',
+    description: 'Retrieves static statutory policy excerpts on Kenyan labor governance and ODPC privacy. Always verify with qualified legal counsel.',
     sampleQueries: [
       'What are maternity and paternity leave entitlements under Kenya Employment Act?',
       'How does Kenya Data Protection Act 2019 protect medical and salary records?',
