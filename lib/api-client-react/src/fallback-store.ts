@@ -1563,6 +1563,40 @@ const FALLBACK_PAYROLL_RUNS: Array<any> = [
     return { items: [] };
   }
 
+  if (path === '/api/settings') {
+    return {
+      organizationId: 'rekker-demo',
+      organizationName: 'Rekker Limited',
+      defaultTimezone: 'Africa/Nairobi',
+      workingDaysJson: '[1,2,3,4,5]',
+      holidayCountry: 'KE',
+      auditRetentionDays: 2555,
+    };
+  }
+
+  if (path === '/api/leave/work-schedules') {
+    return {
+      items: [
+        { id: 'ws-default-ke-5day', code: 'KE_STANDARD_5D', name: 'Nairobi Standard (Mon-Fri, 08:00-17:00)', hoursPerDay: 8, isDefault: true },
+      ],
+    };
+  }
+
+  if (path.startsWith('/api/leave/public-holidays/')) {
+    const year = path.split('/').pop() || String(new Date().getUTCFullYear());
+    return {
+      year: Number(year),
+      items: [
+        { id: 'hol-ke-0101', holidayDate: `${year}-01-01`, name: "New Year's Day", holidayType: 'gazetted' },
+        { id: 'hol-ke-0501', holidayDate: `${year}-05-01`, name: 'Labour Day', holidayType: 'gazetted' },
+        { id: 'hol-ke-0601', holidayDate: `${year}-06-01`, name: 'Madaraka Day', holidayType: 'gazetted' },
+        { id: 'hol-ke-1010', holidayDate: `${year}-10-10`, name: 'Mazingira Day', holidayType: 'gazetted' },
+        { id: 'hol-ke-1020', holidayDate: `${year}-10-20`, name: 'Mashujaa Day', holidayType: 'gazetted' },
+        { id: 'hol-ke-1212', holidayDate: `${year}-12-12`, name: 'Jamhuri Day', holidayType: 'gazetted' },
+      ],
+    };
+  }
+
   if (path.startsWith('/api/ml/')) {
     return {
       engine: 'Static Browser Fallback (Connect API Server + Python ML Engine for live XGBoost / Scikit-learn inference)',

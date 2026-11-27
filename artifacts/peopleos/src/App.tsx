@@ -43,7 +43,7 @@ const PredictiveMlPage = lazy(() => import('@/pages/PredictiveMlPage').then(m =>
 const WorkforceErpPage = lazy(() => import('@/pages/WorkforceErpPage').then(m => ({ default: m.WorkforceErpPage })));
 const HrCasesPage = lazy(() => import('@/pages/HrCasesPage').then(m => ({ default: m.HrCasesPage })));
 const TradePage = lazy(() => import('@/pages/TradePage').then(m => ({ default: m.TradePage })));
-import { apiGet, apiPost, triggerCsvDownload } from '@/lib/api';
+import { apiGet, apiPatch, apiPost, triggerCsvDownload } from '@/lib/api';
 import { BulkImportDialog } from '@/components/phase2/BulkImportDialog';
 import { handleFallbackApi } from '@workspace/api-client-react';
 
@@ -1384,16 +1384,60 @@ function DiagnosticsPage() {
 function SettingsPage() {
   const auth = useGetAuthContext();
   const provider = useGetAgentProviderStatus();
+  const qc = useQueryClient();
   const canInspectSettings = Boolean(auth.data?.canManageSettings || auth.data?.canViewAudit);
+  const canManage = Boolean(auth.data?.canManageSettings);
+
+  const [orgNameDraft, setOrgNameDraft] = useState('');
+  const [retentionDraft, setRetentionDraft] = useState('');
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayName, setNewHolidayName] = useState('');
 
   const securityQuery = useQuery({
     queryKey: ['security-status'],
     queryFn: () => apiGet<any>('/api/security/status'),
     enabled: canInspectSettings,
   });
+  const orgSettingsQuery = useQuery({
+    queryKey: ['workspace-settings'],
+    queryFn: () => apiGet<{ organizationName: string; defaultTimezone: string; auditRetentionDays: number; holidayCountry: string }>('/api/settings'),
+    enabled: canManage,
+  });
+  const schedulesQuery = useQuery({
+    queryKey: ['leave-work-schedules'],
+    queryFn: () => apiGet<{ items: Array<{ id: string; code: string; name: string; hoursPerDay: number; isDefault: boolean }> }>('/api/leave/work-schedules'),
+    enabled: canManage,
+  });
+  const currentYear = new Date().getUTCFullYear();
+  const holidaysQuery = useQuery({
+    queryKey: ['leave-public-holidays', currentYear],
+    queryFn: () => apiGet<{ items: Array<{ id: string; holidayDate: string; name: string; holidayType: string }> }>(`/api/leave/public-holidays/${currentYear}`),
+    enabled: canManage,
+  });
 
   if (auth.isLoading || provider.isLoading) return <LoadingScreen label="Loading workspace settings" />;
   const sec = securityQuery.data;
+
+  const saveWorkspaceSettings = async (e: FormEvent) => {
+    e.preventDefault();
+    setSettingsSaved(false);
+    await apiPatch('/api/settings', {
+      ...(orgNameDraft.trim() ? { organizationName: orgNameDraft.trim() } : {}),
+      ...(retentionDraft ? { auditRetentionDays: Number(retentionDraft) } : {}),
+    });
+    setSettingsSaved(true);
+    void qc.invalidateQueries({ queryKey: ['workspace-settings'] });
+  };
+
+  const addHoliday = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newHolidayDate || !newHolidayName.trim()) return;
+    await apiPost('/api/leave/public-holidays', { holidayDate: newHolidayDate, name: newHolidayName.trim() });
+    setNewHolidayDate('');
+    setNewHolidayName('');
+    void qc.invalidateQueries({ queryKey: ['leave-public-holidays', currentYear] });
+  };
 
   return <div>
     <PageHeading
@@ -1432,6 +1476,42 @@ function SettingsPage() {
         <section className="surface mt-4 p-5 md:p-7" data-testid="section-provider-setup">
           <div className="flex items-start justify-between gap-3"><div><h2 className="font-display text-lg font-semibold text-stone-900">AI provider setup</h2><p className="mt-1 text-xs text-stone-500">Provider credentials are not editable in this interface.</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${provider.data?.configured ? 'bg-[#e8f2eb] text-[#34734d]' : 'bg-[#fbf0da] text-[#785716]'}`} data-testid="status-settings-provider">{provider.data?.configured ? 'Configured' : 'Setup required'}</span></div>
           <div className="mt-4 rounded-xl bg-[#f7f4ef] p-4"><p className="text-sm font-semibold text-stone-700">Provider: {provider.data?.provider || 'Not configured'}</p><p className="mt-1 text-xs text-stone-500">{provider.data?.message || 'No provider key has been supplied. No model calls are made.'}</p><p className="mt-2 text-[10px] text-stone-400">Set up through the approved server environment process. Never paste provider secrets into the browser.</p></div>
+        </section>
+
+        <section className="surface mt-4 p-5 md:p-7" data-testid="section-org-settings">
+          <h2 className="font-display text-lg font-semibold text-stone-900">Organization &amp; Retention Settings</h2>
+          <p className="mt-1 text-xs text-stone-500">Timezone: {orgSettingsQuery.data?.defaultTimezone ?? 'Africa/Nairobi'} · Holiday Country: {orgSettingsQuery.data?.holidayCountry ?? 'KE'}</p>
+          <form onSubmit={e => void saveWorkspaceSettings(e)} className="mt-4 grid gap-3 sm:grid-cols-3 items-end">
+            <label><span className="label">Organization name</span><input className="field" placeholder={orgSettingsQuery.data?.organizationName ?? 'Rekker Limited'} value={orgNameDraft} onChange={e => setOrgNameDraft(e.target.value)} data-testid="input-settings-org-name" /></label>
+            <label><span className="label">Audit retention (days)</span><input type="number" min={365} max={3650} className="field" placeholder={String(orgSettingsQuery.data?.auditRetentionDays ?? 2555)} value={retentionDraft} onChange={e => setRetentionDraft(e.target.value)} data-testid="input-settings-retention" /></label>
+            <button type="submit" className="btn btn-primary text-xs" data-testid="button-save-settings">Save settings</button>
+          </form>
+          {settingsSaved && <p className="mt-2 text-xs font-semibold text-[#34734d]" data-testid="text-settings-saved">Workspace settings updated.</p>}
+        </section>
+
+        <section className="surface mt-4 p-5 md:p-7" data-testid="section-holidays-schedules">
+          <h2 className="font-display text-lg font-semibold text-stone-900">Work Schedules &amp; Kenyan Public Holidays ({currentYear})</h2>
+          <div className="mt-3 space-y-2">
+            {(schedulesQuery.data?.items ?? []).map(ws => (
+              <div key={ws.id} className="flex items-center justify-between rounded-xl border border-stone-200 px-3.5 py-2.5 text-xs">
+                <span className="font-semibold text-stone-800">{ws.name}</span>
+                <span className="rounded bg-stone-100 px-2 py-0.5 text-[10px] font-bold text-stone-600">{ws.hoursPerDay}h/day {ws.isDefault ? '· Default' : ''}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(holidaysQuery.data?.items ?? []).map(h => (
+              <div key={h.id} className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50/70 px-3 py-2 text-xs">
+                <span className="font-semibold text-stone-800">{h.name}</span>
+                <span className="font-mono text-[11px] text-stone-500">{h.holidayDate}</span>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={e => void addHoliday(e)} className="mt-4 flex flex-wrap gap-2 items-end">
+            <label><span className="label">Date</span><input type="date" required className="field" value={newHolidayDate} onChange={e => setNewHolidayDate(e.target.value)} /></label>
+            <label className="flex-1 min-w-44"><span className="label">Holiday name</span><input type="text" required className="field" placeholder="e.g. Utamaduni Day" value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} /></label>
+            <button type="submit" className="btn btn-secondary text-xs">Add public holiday</button>
+          </form>
         </section>
       </>}
     </>}
