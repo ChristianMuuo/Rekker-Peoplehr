@@ -59,3 +59,9 @@ Thumbs.db
 __pycache__/
 *.pyc
 services/ml-engine/model_registry/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
