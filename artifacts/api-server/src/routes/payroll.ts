@@ -10,6 +10,12 @@ import {
 } from "@workspace/db";
 import { recordAuditEvent } from "../lib/auditService";
 import {
+  demoDateTime,
+  demoMonthLabel,
+  demoYearNumber,
+  demoYtdMonthNames,
+} from "../lib/demoDateOffset";
+import {
   activateStatutoryConfig,
   calculateKenyaStatutoryWithConfig,
   createDefaultStatutoryConfigs,
@@ -155,15 +161,17 @@ function buildDemoItemsForRun(
 async function ensureDemoRunsSeeded(organizationId: string) {
   if (DEMO_PAYROLL_RUNS.some((r) => r.organizationId === organizationId)) return;
   const cfg = await getActiveStatutoryConfig(organizationId);
-  const marchItems = buildDemoItemsForRun("run_2026_03", "March 2026", cfg);
-  const sum = (fn: (x: (typeof marchItems)[number]) => number) =>
-    marchItems.reduce((acc, i) => acc + fn(i), 0);
+  const currentPeriod = demoMonthLabel(0);
+  const previousPeriod = demoMonthLabel(-1);
+  const currentItems = buildDemoItemsForRun("run_2026_03", currentPeriod, cfg);
+  const sum = (fn: (x: (typeof currentItems)[number]) => number) =>
+    currentItems.reduce((acc, i) => acc + fn(i), 0);
 
   DEMO_PAYROLL_RUNS.push(
     {
       id: "run_2026_03",
       organizationId,
-      period: "March 2026",
+      period: currentPeriod,
       totalGross: sum((x) => x.grossPay),
       totalNet: sum((x) => x.netPay),
       totalPaye: sum((x) => x.netPaye),
@@ -177,9 +185,9 @@ async function ensureDemoRunsSeeded(organizationId: string) {
       isDemo: true,
     },
     {
-      id: "run_2026_02",
+      id: "run_prev_month",
       organizationId,
-      period: "February 2026",
+      period: previousPeriod,
       totalGross: sum((x) => x.grossPay) - 45000,
       totalNet: sum((x) => x.netPay) - 31000,
       totalPaye: sum((x) => x.netPaye) - 11000,
@@ -188,7 +196,7 @@ async function ensureDemoRunsSeeded(organizationId: string) {
       totalHousingLevy: sum((x) => x.housingLevy) - 675,
       status: "disbursed",
       approvedBy: "Dennis Otieno (payroll_officer)",
-      approvedAt: "2026-02-25T14:00:00Z",
+      approvedAt: demoDateTime(-32, "14:00:00"),
       createdByUserId: "user_demo_admin_01",
       isDemo: true,
     },
@@ -327,7 +335,7 @@ router.get("/payroll/runs/:runId/items", async (req: Request, res: Response) => 
   if (!membership) return;
 
   const runId = String(req.params.runId ?? "");
-  const isPayrollViewer = payrollViewRoles.includes(membership.role as any);
+  const isPayrollViewer = (payrollViewRoles as readonly string[]).includes(membership.role);
   const cfg = await getActiveStatutoryConfig(membership.organizationId);
 
   if (!process.env.DATABASE_URL) {
@@ -856,31 +864,65 @@ router.get("/payroll/p9a/:employeeId", async (req: Request, res: Response) => {
   if (!membership) return;
 
   const employeeId = String(req.params.employeeId ?? "");
-  const isViewer = payrollViewRoles.includes(membership.role as any);
+  const isViewer = (payrollViewRoles as readonly string[]).includes(membership.role);
   if (!isViewer && membership.employeeId !== employeeId) {
     res.status(403).json({ error: "Access denied to another employee's KRA P9A card." });
     return;
   }
 
-  const emp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
+  let empName = "Employee";
+  let empNumber = "REK";
+  let empKraPin = "A000000000K";
+  let baseSalary = 150000;
+  let allowances = 15000;
+
+  const demoEmp = DEMO_EMPLOYEES_LIST.find((e) => e.id === employeeId);
   const comp = DEMO_COMPENSATION_BY_EMP[employeeId];
-  if (!emp && !process.env.DATABASE_URL) {
+  if (demoEmp) {
+    empName = `${demoEmp.firstName} ${demoEmp.lastName}`;
+    empNumber = demoEmp.employeeNumber;
+    if (comp) {
+      baseSalary = comp.baseSalary;
+      allowances = comp.allowances;
+      empKraPin = comp.kraPin;
+    }
+  } else if (!process.env.DATABASE_URL) {
     res.status(404).json({ error: "Employee not found." });
     return;
+  } else {
+    const [dbEmp] = await db
+      .select()
+      .from(employeesTable)
+      .where(
+        and(
+          eq(employeesTable.id, employeeId),
+          eq(employeesTable.organizationId, membership.organizationId),
+        ),
+      )
+      .limit(1);
+    if (!dbEmp) {
+      res.status(404).json({ error: "Employee not found." });
+      return;
+    }
+    empName = `${dbEmp.firstName} ${dbEmp.lastName}`;
+    empNumber = dbEmp.employeeNumber;
+    baseSalary = dbEmp.baseSalary;
+    allowances = dbEmp.allowances;
+    empKraPin = dbEmp.kraPin || empKraPin;
   }
 
   const cfg = await getActiveStatutoryConfig(membership.organizationId);
   const monthly = calculateKenyaStatutoryWithConfig(
-    comp?.baseSalary ?? 150000,
-    comp?.allowances ?? 15000,
+    baseSalary,
+    allowances,
     0,
     cfg,
   );
 
-  const months = ["January", "February", "March"].map((m) => ({
+  const months = demoYtdMonthNames().map((m) => ({
     month: m,
-    basicSalary: comp?.baseSalary ?? 150000,
-    allowances: comp?.allowances ?? 15000,
+    basicSalary: baseSalary,
+    allowances,
     grossPay: monthly.grossPay,
     nssfContribution: monthly.totalNssf,
     shifContribution: monthly.sha,
@@ -893,13 +935,13 @@ router.get("/payroll/p9a/:employeeId", async (req: Request, res: Response) => {
 
   res.json({
     formType: "KRA Form P9A (Employee Tax Deduction Card)",
-    taxYear: 2026,
+    taxYear: demoYearNumber(),
     employerName: "Rekker Limited",
     employerPin: "P051482910K",
     employeeId,
-    employeeName: emp ? `${emp.firstName} ${emp.lastName}` : "Employee",
-    employeeNumber: emp?.employeeNumber ?? "REK",
-    employeePinMasked: maskKraPin(comp?.kraPin ?? "A000000000K"),
+    employeeName: empName,
+    employeeNumber: empNumber,
+    employeePinMasked: maskKraPin(empKraPin),
     statutoryConfigName: cfg.name,
     months,
     totals: {
@@ -1203,7 +1245,8 @@ router.get("/payroll/anomalies", async (req: Request, res: Response) => {
   if (!membership) return;
 
   const cfg = await getActiveStatutoryConfig(membership.organizationId);
-  const items = buildDemoItemsForRun("audit_check", "March 2026", cfg);
+  const currentPeriod = demoMonthLabel(0);
+  const items = buildDemoItemsForRun("audit_check", currentPeriod, cfg);
   const nssfMaxPossible =
     Math.round(cfg.nssf.tier1UpperLimitKes * cfg.nssf.rate) +
     Math.round(
@@ -1211,7 +1254,13 @@ router.get("/payroll/anomalies", async (req: Request, res: Response) => {
         cfg.nssf.rate,
     );
 
-  const anomalies: any[] = [];
+  const anomalies: Array<{
+    type: string;
+    severity: "low" | "medium" | "high";
+    employee?: string;
+    description: string;
+    status: "passed" | "flagged";
+  }> = [];
   for (const item of items) {
     if (item.totalNssf > nssfMaxPossible) {
       anomalies.push({
@@ -1225,7 +1274,7 @@ router.get("/payroll/anomalies", async (req: Request, res: Response) => {
   }
 
   res.json({
-    auditedRun: "March 2026",
+    auditedRun: currentPeriod,
     statutorySchedule: cfg.name,
     nssfMaxEmployeeCapKes: nssfMaxPossible,
     anomalies: anomalies.length
@@ -1240,13 +1289,13 @@ router.get("/payroll/anomalies", async (req: Request, res: Response) => {
           {
             type: "HOUSING_LEVY_CHECK",
             severity: "low",
-            description: `Affordable Housing Levy (${(cfg.housingLevy.employeeRate * 100).toFixed(1)}% employee + ${(cfg.housingLevy.employerRate * 100).toFixed(1)}% employer) verified across all active employees.`,
+            description: `Affordable Housing Levy (${(cfg.housingLevy.employeeRate * 100).toFixed(1)}% employee + ${(cfg.housingLevy.employerRate * 100).toFixed(1)}% employer${cfg.housingLevy.deductibleFromTaxablePay ? ", tax-allowable" : ""}) verified across all active employees.`,
             status: "passed",
           },
           {
             type: "SHIF_MINIMUM_CHECK",
             severity: "low",
-            description: `All SHIF deductions (${(cfg.shif.rate * 100).toFixed(2)}%, min KES ${cfg.shif.minimumKes}) verified within compliance thresholds.`,
+            description: `All SHIF deductions (${(cfg.shif.rate * 100).toFixed(2)}%, min KES ${cfg.shif.minimumKes}${cfg.shif.deductibleFromTaxablePay ? ", pre-PAYE deductible" : ""}) verified within compliance thresholds.`,
             status: "passed",
           },
         ],
@@ -1260,6 +1309,7 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
 
   const runId = String(req.params.runId ?? "run_2026_03");
   const cfg = await getActiveStatutoryConfig(membership.organizationId);
+  let resolvedPeriod = demoMonthLabel(0);
 
   const costCentreMap: Record<string, string> = {
     "Formulation & Filling": "CC-MFG-01",
@@ -1283,7 +1333,14 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
   }> = [];
 
   if (!process.env.DATABASE_URL) {
-    const demoItems = buildDemoItemsForRun(runId, "March 2026", cfg);
+    await ensureDemoRunsSeeded(membership.organizationId);
+    const matchingRun = DEMO_PAYROLL_RUNS.find(
+      (r) =>
+        r.organizationId === membership.organizationId &&
+        (r.id === runId || r.period === runId),
+    );
+    if (matchingRun) resolvedPeriod = matchingRun.period;
+    const demoItems = buildDemoItemsForRun(runId, resolvedPeriod, cfg);
     itemsToUse = demoItems.map((r) => ({
       grossPay: r.grossPay,
       employerNssf: r.employerNssf,
@@ -1312,7 +1369,7 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
         res.status(404).json({ error: "Payroll run not found." });
         return;
       }
-      const demoItems = buildDemoItemsForRun(runId, "March 2026", cfg);
+      const demoItems = buildDemoItemsForRun(runId, resolvedPeriod, cfg);
       itemsToUse = demoItems.map((r) => ({
         grossPay: r.grossPay,
         employerNssf: r.employerNssf,
@@ -1325,6 +1382,7 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
         departmentName: (r as { departmentName?: string }).departmentName ?? "Formulation & Filling",
       }));
     } else {
+      resolvedPeriod = dbRun.period;
       const dbItems = await db
         .select({
           item: payrollItemsTable,
@@ -1425,6 +1483,7 @@ router.get("/payroll/runs/:runId/journal", async (req: Request, res: Response) =
 
   res.json({
     runId,
+    period: resolvedPeriod,
     configName: cfg.name,
     balanced: totalDebits === totalCredits,
     totalDebitsKes: totalDebits,

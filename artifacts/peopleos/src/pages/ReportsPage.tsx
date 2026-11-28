@@ -62,7 +62,7 @@ export function ReportsPage() {
         <div className="surface p-5">
           <p className="text-[11px] font-bold uppercase text-stone-400">Latest Gross Run</p>
           <p className="mt-2 font-display text-2xl font-bold text-stone-900">KES {((latestRun?.totalGross ?? 2158000) / 1_000_000).toFixed(2)}M</p>
-          <p className="mt-1 text-xs text-stone-500">{latestRun?.period || 'March 2026'}</p>
+          <p className="mt-1 text-xs text-stone-500">{latestRun?.period || new Intl.DateTimeFormat('en-KE', { month: 'long', year: 'numeric', timeZone: 'Africa/Nairobi' }).format(new Date())}</p>
         </div>
         <div className="surface p-5">
           <p className="text-[11px] font-bold uppercase text-stone-400">Active Employees</p>

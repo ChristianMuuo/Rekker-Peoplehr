@@ -20,6 +20,24 @@ function fbYearMonth(deltaMonths: number): string {
   d.setMonth(d.getMonth() + deltaMonths);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+const FB_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+] as const;
+function fbMonthLabel(deltaMonths: number): string {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60_000;
+  const d = new Date(utc + FB_NAIROBI_OFFSET_MS);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + deltaMonths);
+  return `${FB_MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
+function fbYtdMonthNames(): string[] {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60_000;
+  const d = new Date(utc + FB_NAIROBI_OFFSET_MS);
+  return FB_MONTH_NAMES.slice(0, d.getMonth() + 1);
+}
 function fbBusinessDays(start: string, end: string): number {
   const cur = new Date(`${start}T00:00:00Z`);
   const fin = new Date(`${end}T00:00:00Z`);
@@ -193,10 +211,29 @@ const DEFAULT_ONBOARDING_TASKS: Array<{
 
 const DEFAULT_STATUTORY_CONFIGS = [
   {
+    id: 'stat-ke-2026-phase4-rekker-demo',
+    name: 'Kenya Statutory Schedule 2026 (NSSF Year 4 + Tax-Allowable SHIF/AHL · NEEDS_LEGAL_REVIEW)',
+    effectiveFrom: '2026-02-01',
+    isActive: true,
+    nssf: { rate: 0.06, tier1UpperLimitKes: 9000, tier2UpperLimitKes: 108000, employerMatch: true },
+    shif: { rate: 0.0275, minimumKes: 300, deductibleFromTaxablePay: true, insuranceReliefRate: 0, insuranceReliefMaxKes: 0 },
+    housingLevy: { employeeRate: 0.015, employerRate: 0.015, deductibleFromTaxablePay: true },
+    paye: {
+      personalReliefKes: 2400,
+      bands: [
+        { label: 'First KES 24,000', limitKes: 24000, rate: 0.1 },
+        { label: 'Next KES 8,333', limitKes: 8333, rate: 0.25 },
+        { label: 'Next KES 467,667', limitKes: 467667, rate: 0.3 },
+        { label: 'Next KES 300,000', limitKes: 300000, rate: 0.325 },
+        { label: 'Above KES 800,000', limitKes: null, rate: 0.35 },
+      ],
+    },
+  },
+  {
     id: 'stat-ke-2025-02-rekker-demo',
     name: 'Kenya Statutory Schedule 2025/2026 (NSSF Phase 3 + SHIF + AHL)',
     effectiveFrom: '2025-02-01',
-    isActive: true,
+    isActive: false,
     nssf: { rate: 0.06, tier1UpperLimitKes: 8000, tier2UpperLimitKes: 72000, employerMatch: true },
     shif: { rate: 0.0275, minimumKes: 300, deductibleFromTaxablePay: false, insuranceReliefRate: 0.15, insuranceReliefMaxKes: 5000 },
     housingLevy: { employeeRate: 0.015, employerRate: 0.015, deductibleFromTaxablePay: false },
@@ -564,9 +601,6 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
         directReportsCount: DEFAULT_EMPS.filter(c => c.managerId === e.id).length,
       })),
     };
-  }
-  if (path.endsWith('/journal')) {
-    return { runId: 'run_2026_03', balanced: true, totalDebitsKes: 1200000, totalCreditsKes: 1200000, lines: [{ accountCode: '6100', accountName: 'Salaries & Wages Expense', costCentre: 'CC-MFG-01', debitKes: 1200000, creditKes: 0 }, { accountCode: '2100', accountName: 'Net Salaries Payable', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: 1200000 }] };
   }
 
   if (path === '/api/auth/context') {
@@ -1075,65 +1109,137 @@ export function handleFallbackApi(url: string, method: string = 'GET', body?: an
 
   const calcKenyaFallback = (grossSalary: number) => {
     const cfg = DEFAULT_STATUTORY_CONFIGS.find(c => c.isActive) ?? DEFAULT_STATUTORY_CONFIGS[0]!;
-    const t1 = Math.min(grossSalary, cfg.nssf.tier1UpperLimitKes) * cfg.nssf.rate;
-    const t2 = Math.max(0, Math.min(grossSalary, cfg.nssf.tier2UpperLimitKes) - cfg.nssf.tier1UpperLimitKes) * cfg.nssf.rate;
-    const totalNssf = Math.round(t1 + t2);
-    const sha = Math.max(cfg.shif.minimumKes, Math.round(grossSalary * cfg.shif.rate));
-    const housingLevy = Math.round(grossSalary * cfg.housingLevy.employeeRate);
-    const taxablePay = Math.max(0, grossSalary - totalNssf);
+    const safeGross = Math.max(0, Number(grossSalary) || 0);
+    const t1 = Math.min(safeGross, cfg.nssf.tier1UpperLimitKes) * cfg.nssf.rate;
+    const t2 = Math.max(0, Math.min(safeGross, cfg.nssf.tier2UpperLimitKes) - cfg.nssf.tier1UpperLimitKes) * cfg.nssf.rate;
+    const nssfTier1 = Math.round(t1);
+    const nssfTier2 = Math.round(t2);
+    const totalNssf = nssfTier1 + nssfTier2;
+    const employerNssf = cfg.nssf.employerMatch ? totalNssf : 0;
+    const sha = safeGross > 0 ? Math.max(cfg.shif.minimumKes, Math.round(safeGross * cfg.shif.rate)) : 0;
+    const housingLevy = Math.round(safeGross * cfg.housingLevy.employeeRate);
+    const employerHousingLevy = Math.round(safeGross * cfg.housingLevy.employerRate);
+
+    let allowableTotal = totalNssf;
+    if (cfg.shif.deductibleFromTaxablePay) allowableTotal += sha;
+    if (cfg.housingLevy.deductibleFromTaxablePay) allowableTotal += housingLevy;
+    const taxablePay = Math.max(0, safeGross - allowableTotal);
+
     let rem = taxablePay;
     let tax = 0;
+    const bandBreakdown: Array<{ label: string; taxableSlice: number; rate: number; tax: number }> = [];
     for (const band of cfg.paye.bands) {
       if (rem <= 0) break;
       const slice = band.limitKes === null ? rem : Math.min(rem, band.limitKes);
-      tax += slice * band.rate;
+      const bandTax = slice * band.rate;
+      tax += bandTax;
       rem -= slice;
+      bandBreakdown.push({
+        label: band.label,
+        taxableSlice: Math.round(slice),
+        rate: band.rate,
+        tax: Math.round(bandTax),
+      });
     }
     const payeBeforeRelief = Math.round(tax);
-    const personalRelief = grossSalary > 0 ? cfg.paye.personalReliefKes : 0;
-    const insuranceRelief = Math.min(Math.round(sha * cfg.shif.insuranceReliefRate), cfg.shif.insuranceReliefMaxKes);
+    const personalRelief = safeGross > 0 ? cfg.paye.personalReliefKes : 0;
+    const insuranceRelief =
+      cfg.shif.insuranceReliefRate > 0 && !cfg.shif.deductibleFromTaxablePay
+        ? Math.min(Math.round(sha * cfg.shif.insuranceReliefRate), cfg.shif.insuranceReliefMaxKes)
+        : 0;
     const netPaye = Math.max(0, payeBeforeRelief - personalRelief - insuranceRelief);
     const totalDeductions = totalNssf + sha + housingLevy + netPaye;
     return {
-      grossPay: grossSalary,
-      nssfTier1: Math.round(t1),
-      nssfTier2: Math.round(t2),
+      configId: cfg.id,
+      configName: cfg.name,
+      effectiveFrom: cfg.effectiveFrom,
+      grossPay: Math.round(safeGross),
+      nssfTier1,
+      nssfTier2,
       totalNssf,
+      employerNssf,
       sha,
       housingLevy,
-      taxablePay,
+      employerHousingLevy,
+      taxablePay: Math.round(taxablePay),
       payeBeforeRelief,
       personalRelief,
       insuranceRelief,
       netPaye,
       totalDeductions,
-      netPay: Math.max(0, Math.round(grossSalary - totalDeductions)),
+      netPay: Math.max(0, Math.round(safeGross - totalDeductions)),
+      bandBreakdown,
     };
   };
 
+const buildFallbackPayrollItems = (period: string) => {
+  const grossByIdx = [360000, 210000, 275000, 145000, 290000, 125000, 345000, 113000, 245000, 95000];
+  return DEFAULT_EMPS.map((emp, idx) => {
+    const gross = grossByIdx[idx] ?? 150000;
+    return {
+      id: `item-${emp.employeeNumber}`,
+      period,
+      employeeId: emp.id,
+      employeeName: `${emp.firstName} ${emp.lastName}`,
+      departmentName: emp.departmentName,
+      kraPinMasked: 'DEM*****01',
+      ...calcKenyaFallback(gross),
+    };
+  });
+};
+
+const seededItems = buildFallbackPayrollItems(fbMonthLabel(0));
+const sumSeeded = (fn: (i: (typeof seededItems)[number]) => number) => seededItems.reduce((s, i) => s + fn(i), 0);
+
 const FALLBACK_PAYROLL_RUNS: Array<any> = [
-  { id: 'run_2026_03', period: 'March 2026', totalGross: 2158000, totalNet: 1545200, totalPaye: 412450, totalNssf: 43200, totalSha: 59345, totalHousingLevy: 32370, status: 'reviewed', approvedBy: null, approvedAt: null },
-  { id: 'run_2026_02', period: 'February 2026', totalGross: 2113000, totalNet: 1514200, totalPaye: 401450, totalNssf: 43200, totalSha: 58107, totalHousingLevy: 31695, status: 'disbursed', approvedBy: 'Dennis Otieno', approvedAt: '2026-02-25T14:00:00Z' },
+  {
+    id: 'run_2026_03',
+    period: fbMonthLabel(0),
+    totalGross: sumSeeded(i => i.grossPay),
+    totalNet: sumSeeded(i => i.netPay),
+    totalPaye: sumSeeded(i => i.netPaye),
+    totalNssf: sumSeeded(i => i.totalNssf),
+    totalSha: sumSeeded(i => i.sha),
+    totalHousingLevy: sumSeeded(i => i.housingLevy),
+    status: 'reviewed',
+    approvedBy: null,
+    approvedAt: null,
+  },
+  {
+    id: 'run_prev_month',
+    period: fbMonthLabel(-1),
+    totalGross: sumSeeded(i => i.grossPay) - 45000,
+    totalNet: sumSeeded(i => i.netPay) - 31000,
+    totalPaye: sumSeeded(i => i.netPaye) - 11000,
+    totalNssf: sumSeeded(i => i.totalNssf),
+    totalSha: sumSeeded(i => i.sha) - 1230,
+    totalHousingLevy: sumSeeded(i => i.housingLevy) - 675,
+    status: 'disbursed',
+    approvedBy: 'Dennis Otieno (payroll_officer)',
+    approvedAt: fbDateTime(-32, '14:00:00'),
+  },
 ];
 
   if (path === '/api/payroll/runs') {
     if (method === 'POST') {
-      const period = String(parsedBody.period || 'April 2026').trim();
+      const period = String(parsedBody.period || fbMonthLabel(1)).trim();
+      const items = buildFallbackPayrollItems(period);
+      const sum = (fn: (i: (typeof items)[number]) => number) => items.reduce((s, i) => s + fn(i), 0);
       const newRun = {
         id: `run_${Date.now()}`,
         period,
-        totalGross: 2158000,
-        totalNet: 1545200,
-        totalPaye: 412450,
-        totalNssf: 43200,
-        totalSha: 59345,
-        totalHousingLevy: 32370,
+        totalGross: sum(i => i.grossPay),
+        totalNet: sum(i => i.netPay),
+        totalPaye: sum(i => i.netPaye),
+        totalNssf: sum(i => i.totalNssf),
+        totalSha: sum(i => i.sha),
+        totalHousingLevy: sum(i => i.housingLevy),
         status: 'reviewed',
         approvedBy: null,
         approvedAt: null,
       };
       FALLBACK_PAYROLL_RUNS.unshift(newRun);
-      return { run: newRun, items: [] };
+      return { run: newRun, items };
     }
     return {
       runs: FALLBACK_PAYROLL_RUNS,
@@ -1144,77 +1250,148 @@ const FALLBACK_PAYROLL_RUNS: Array<any> = [
   if (path.startsWith('/api/payroll/runs/') && path.endsWith('/items')) {
     const runId = path.split('/')[4];
     const active = FALLBACK_PAYROLL_RUNS.find(r => r.id === runId) ?? FALLBACK_PAYROLL_RUNS[0]!;
-    const items = DEFAULT_EMPS.map((emp, idx) => {
-      const gross = [360000, 210000, 275000, 145000, 290000, 125000, 345000, 113000, 245000, 95000][idx] ?? 150000;
-      return {
-        id: `item-${emp.employeeNumber}`,
-        period: active.period,
-        employeeId: emp.id,
-        employeeName: `${emp.firstName} ${emp.lastName}`,
-        departmentName: emp.departmentName,
-        kraPinMasked: 'DEM*****01',
-        ...calcKenyaFallback(gross),
-      };
-    });
+    const items = buildFallbackPayrollItems(active.period);
     return { run: active, items };
   }
 
+  if (path.startsWith('/api/payroll/runs/') && path.endsWith('/journal')) {
+    const runId = path.split('/')[4] || FALLBACK_PAYROLL_RUNS[0]?.id || 'run_2026_03';
+    const activeRun = FALLBACK_PAYROLL_RUNS.find(r => r.id === runId) ?? FALLBACK_PAYROLL_RUNS[0];
+    const activeCfg = DEFAULT_STATUTORY_CONFIGS.find(c => c.isActive) ?? DEFAULT_STATUTORY_CONFIGS[0]!;
+    const period = activeRun?.period ?? fbMonthLabel(0);
+    const items = buildFallbackPayrollItems(period);
+    const ccMap: Record<string, string> = {
+      'Formulation & Filling': 'CC-MFG-01',
+      'Logistics & Distribution': 'CC-LOG-01',
+      'Brand & Commercial Marketing': 'CC-SLS-01',
+      'People Operations & Culture': 'CC-HR-01',
+      'Finance & Supply Chain': 'CC-FIN-01',
+    };
+    const deptTotals = new Map<string, { costCentre: string; dept: string; gross: number; empNssf: number; empAhl: number }>();
+    let totalNetPay = 0;
+    let totalPaye = 0;
+    let totalEmployeeNssf = 0;
+    let totalEmployerNssf = 0;
+    let totalShif = 0;
+    let totalEmployeeAhl = 0;
+    let totalEmployerAhl = 0;
+
+    for (const item of items) {
+      const cc = ccMap[item.departmentName] ?? 'CC-GEN-01';
+      const entry = deptTotals.get(cc) ?? { costCentre: cc, dept: item.departmentName, gross: 0, empNssf: 0, empAhl: 0 };
+      entry.gross += item.grossPay;
+      entry.empNssf += item.employerNssf;
+      entry.empAhl += item.employerHousingLevy;
+      deptTotals.set(cc, entry);
+
+      totalNetPay += item.netPay;
+      totalPaye += item.netPaye;
+      totalEmployeeNssf += item.totalNssf;
+      totalEmployerNssf += item.employerNssf;
+      totalShif += item.sha;
+      totalEmployeeAhl += item.housingLevy;
+      totalEmployerAhl += item.employerHousingLevy;
+    }
+
+    const lines: Array<{ accountCode: string; accountName: string; costCentre: string; debitKes: number; creditKes: number }> = [];
+    for (const d of deptTotals.values()) {
+      lines.push(
+        { accountCode: '6100', accountName: `Salaries & Allowances Expense (${d.dept})`, costCentre: d.costCentre, debitKes: d.gross, creditKes: 0 },
+        { accountCode: '6110', accountName: `Employer NSSF Expense (${d.dept})`, costCentre: d.costCentre, debitKes: d.empNssf, creditKes: 0 },
+        { accountCode: '6120', accountName: `Employer Housing Levy Expense (${d.dept})`, costCentre: d.costCentre, debitKes: d.empAhl, creditKes: 0 },
+      );
+    }
+    lines.push(
+      { accountCode: '2100', accountName: 'Net Salaries Payable (M-Pesa / Bank Clearing)', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: totalNetPay },
+      { accountCode: '2210', accountName: 'KRA PAYE Tax Payable', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: totalPaye },
+      { accountCode: '2220', accountName: 'NSSF Statutory Payable (Employee + Employer)', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: totalEmployeeNssf + totalEmployerNssf },
+      { accountCode: '2230', accountName: 'SHA / SHIF Contribution Payable', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: totalShif },
+      { accountCode: '2240', accountName: 'Affordable Housing Levy Payable (Employee + Employer)', costCentre: 'BALANCE_SHEET', debitKes: 0, creditKes: totalEmployeeAhl + totalEmployerAhl },
+    );
+    const totalDebits = lines.reduce((s, l) => s + l.debitKes, 0);
+    const totalCredits = lines.reduce((s, l) => s + l.creditKes, 0);
+    return { runId, period, configName: activeCfg.name, balanced: totalDebits === totalCredits, totalDebitsKes: totalDebits, totalCreditsKes: totalCredits, lines };
+  }
+
   if (path === '/api/payroll/calculate') {
-    return calcKenyaFallback(Number(parsedBody.grossSalary) || 180000);
+    return calcKenyaFallback(Number(parsedBody.grossSalary ?? 180000));
   }
 
   if (path.startsWith('/api/payroll/p9a/')) {
     const empId = path.replace('/api/payroll/p9a/', '');
     const emp = DEFAULT_EMPS.find(e => e.id === empId) ?? DEFAULT_EMPS[0]!;
-    const monthly = calcKenyaFallback(180000);
-    const months = ['January', 'February', 'March'].map(m => ({
+    const empIdx = DEFAULT_EMPS.findIndex(e => e.id === emp.id);
+    const grossByIdx = [360000, 210000, 275000, 145000, 290000, 125000, 345000, 113000, 245000, 95000];
+    const monthly = calcKenyaFallback(grossByIdx[empIdx] ?? 180000);
+    const activeCfg = DEFAULT_STATUTORY_CONFIGS.find(c => c.isActive) ?? DEFAULT_STATUTORY_CONFIGS[0]!;
+    const months = fbYtdMonthNames().map(m => ({
       month: m,
       grossPay: monthly.grossPay,
       nssfContribution: monthly.totalNssf,
+      shifContribution: monthly.sha,
+      housingLevy: monthly.housingLevy,
       chargeablePay: monthly.taxablePay,
+      taxCharged: monthly.payeBeforeRelief,
+      personalRelief: monthly.personalRelief,
       payeDeducted: monthly.netPaye,
     }));
     return {
       formType: 'KRA Form P9A (Employee Tax Deduction Card)',
+      taxYear: new Date().getFullYear(),
+      employerName: 'Rekker Limited',
+      employerPin: 'P051482910K',
       employeeName: `${emp.firstName} ${emp.lastName}`,
       employeePinMasked: 'DEM*****07',
-      statutoryConfigName: DEFAULT_STATUTORY_CONFIGS[0]!.name,
+      statutoryConfigName: activeCfg.name,
       months,
       totals: {
-        grossPay: monthly.grossPay * 3,
-        nssf: monthly.totalNssf * 3,
-        shif: monthly.sha * 3,
-        housingLevy: monthly.housingLevy * 3,
-        taxablePay: monthly.taxablePay * 3,
-        payeDeducted: monthly.netPaye * 3,
+        grossPay: monthly.grossPay * months.length,
+        nssf: monthly.totalNssf * months.length,
+        shif: monthly.sha * months.length,
+        housingLevy: monthly.housingLevy * months.length,
+        taxablePay: monthly.taxablePay * months.length,
+        payeDeducted: monthly.netPaye * months.length,
       },
     };
   }
 
   if (path === '/api/payroll/approve') {
+    const target = FALLBACK_PAYROLL_RUNS.find(r => r.id === parsedBody.period || r.period === parsedBody.period) ?? FALLBACK_PAYROLL_RUNS[0]!;
+    target.status = 'approved';
+    target.approvedBy = 'David Kibet (hr_admin)';
+    target.approvedAt = new Date().toISOString();
     return {
-      message: 'Payroll run approved and signed off for M-Pesa / bank disbursement.',
-      run: { id: 'run_2026_03', period: parsedBody.period || 'March 2026', status: 'approved', approvedBy: 'David Kibet (hr_admin)', approvedAt: new Date().toISOString() },
+      message: `Payroll run ${target.period} approved and signed off for M-Pesa / bank disbursement.`,
+      run: target,
     };
   }
 
   if (path.startsWith('/api/payroll/runs/') && path.endsWith('/disburse-mpesa')) {
+    const runId = path.split('/')[4];
+    const target = FALLBACK_PAYROLL_RUNS.find(r => r.id === runId) ?? FALLBACK_PAYROLL_RUNS[0]!;
+    target.status = 'disbursed';
     return {
-      runId: path.split('/')[4],
-      period: 'March 2026',
+      runId: target.id,
+      period: target.period,
       providerMode: 'SANDBOX_SIMULATION',
       totalEmployeesPaid: DEFAULT_EMPS.length,
-      totalDisbursedKes: 1545200,
+      totalDisbursedKes: target.totalNet,
       results: [],
     };
   }
 
   if (path === '/api/payroll/anomalies') {
+    const activeCfg = DEFAULT_STATUTORY_CONFIGS.find(c => c.isActive) ?? DEFAULT_STATUTORY_CONFIGS[0]!;
+    const nssfCap =
+      Math.round(activeCfg.nssf.tier1UpperLimitKes * activeCfg.nssf.rate) +
+      Math.round(Math.max(0, activeCfg.nssf.tier2UpperLimitKes - activeCfg.nssf.tier1UpperLimitKes) * activeCfg.nssf.rate);
     return {
-      auditedRun: 'March 2026',
+      auditedRun: FALLBACK_PAYROLL_RUNS[0]?.period ?? fbMonthLabel(0),
+      statutorySchedule: activeCfg.name,
       anomalies: [
-        { type: 'STATUTORY_CAP_CHECK', severity: 'low', description: 'Verified employee NSSF caps against active statutory schedule.', status: 'passed' },
-        { type: 'HOUSING_LEVY_CHECK', severity: 'low', description: 'Affordable Housing Levy (1.5% + 1.5%) reconciled.', status: 'passed' },
+        { type: 'STATUTORY_CAP_CHECK', severity: 'low', description: `Verified employee NSSF deductions honor statutory cap of KES ${nssfCap.toLocaleString()}.`, status: 'passed' },
+        { type: 'HOUSING_LEVY_CHECK', severity: 'low', description: `Affordable Housing Levy (${(activeCfg.housingLevy.employeeRate * 100).toFixed(1)}% + ${(activeCfg.housingLevy.employerRate * 100).toFixed(1)}%${activeCfg.housingLevy.deductibleFromTaxablePay ? ', tax-allowable' : ''}) verified.`, status: 'passed' },
+        { type: 'SHIF_MINIMUM_CHECK', severity: 'low', description: `SHIF (${(activeCfg.shif.rate * 100).toFixed(2)}%, min KES ${activeCfg.shif.minimumKes}${activeCfg.shif.deductibleFromTaxablePay ? ', pre-PAYE deductible' : ''}) verified.`, status: 'passed' },
       ],
     };
   }

@@ -70,8 +70,8 @@ export function createDefaultStatutoryConfigs(
       organizationId,
       name: "Kenya Statutory Schedule 2025/2026 (NSSF Phase 3 + SHIF + AHL)",
       effectiveFrom: "2025-02-01",
-      effectiveTo: null,
-      isActive: true,
+      effectiveTo: "2026-01-31",
+      isActive: false,
       nssf: {
         rate: 0.06,
         tier1UpperLimitKes: 8000,
@@ -104,10 +104,10 @@ export function createDefaultStatutoryConfigs(
     {
       id: `stat-ke-2026-phase4-${organizationId}`,
       organizationId,
-      name: "Kenya Statutory Schedule (NSSF Phase 4 Draft + Tax-Allowable SHIF/AHL)",
+      name: "Kenya Statutory Schedule 2026 (NSSF Year 4 + Tax-Allowable SHIF/AHL · NEEDS_LEGAL_REVIEW)",
       effectiveFrom: "2026-02-01",
       effectiveTo: null,
-      isActive: false,
+      isActive: true,
       nssf: {
         rate: 0.06,
         tier1UpperLimitKes: 9000,

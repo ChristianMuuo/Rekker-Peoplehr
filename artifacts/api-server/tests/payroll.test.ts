@@ -1,5 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+import app from "../src/app";
+import {
+  activateStatutoryConfig,
+  getActiveStatutoryConfig,
+  listStatutoryConfigs,
+} from "../src/lib/kenyaPayrollEngine";
 import { calculateStatutoryKenya } from "../src/routes/payroll";
 
 describe("Kenya Statutory Payroll & Tax Engine", () => {
@@ -57,6 +65,52 @@ describe("Kenya Statutory Payroll & Tax Engine", () => {
     assert.strictEqual(result.grossPay, gross + allowances);
     assert.strictEqual(result.totalDeductions, totalCalculatedDeductions);
     assert.strictEqual(result.netPay, result.grossPay - result.totalDeductions);
+  });
+
+  test("defaults active schedule to 2026 Year 4 NSSF (9,000/108,000) with pre-PAYE deductible SHIF & AHL", async () => {
+    const orgId = `test-org-year4-${Date.now()}`;
+    const active = await getActiveStatutoryConfig(orgId);
+    assert.strictEqual(active.effectiveFrom, "2026-02-01");
+    assert.strictEqual(active.nssf.tier1UpperLimitKes, 9000);
+    assert.strictEqual(active.nssf.tier2UpperLimitKes, 108000);
+    assert.strictEqual(active.shif.deductibleFromTaxablePay, true);
+    assert.strictEqual(active.housingLevy.deductibleFromTaxablePay, true);
+
+    const calc = calculateStatutoryKenya(180000, 0, 0, active);
+    assert.strictEqual(calc.totalNssf, 6480, "Year 4 NSSF caps at 6% of 108,000 = 6,480");
+    assert.strictEqual(calc.sha, 4950, "SHIF = 2.75% of 180,000 = 4,950");
+    assert.strictEqual(calc.housingLevy, 2700, "AHL = 1.5% of 180,000 = 2,700");
+    assert.strictEqual(calc.insuranceRelief, 0, "No insurance relief when SHIF is tax-deductible");
+    assert.strictEqual(calc.taxablePay, 180000 - 6480 - 4950 - 2700);
+  });
+
+  test("activateStatutoryConfig switches active schedule and updates P9A/calculate API behavior", async () => {
+    const orgId = `test-org-switch-${Date.now()}`;
+    const configs = await listStatutoryConfigs(orgId);
+    const phase3 = configs.find((c) => c.effectiveFrom === "2025-02-01");
+    assert.ok(phase3);
+
+    const switched = await activateStatutoryConfig(orgId, phase3.id);
+    assert.ok(switched?.isActive);
+    const afterSwitch = await getActiveStatutoryConfig(orgId);
+    assert.strictEqual(afterSwitch.id, phase3.id);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const baseUrl = `http://127.0.0.1:${port}`;
+      const p9aRes = await fetch(`${baseUrl}/api/payroll/p9a/10000000-0000-4000-8000-000000000001`, {
+        headers: { "x-peopleos-role": "payroll_officer" },
+      });
+      assert.strictEqual(p9aRes.status, 200);
+      const p9a = (await p9aRes.json()) as { months: unknown[]; totals: { grossPay: number }; taxYear: number };
+      assert.ok(p9a.months.length >= 1);
+      assert.ok(p9a.totals.grossPay > 0);
+      assert.ok(p9a.taxYear >= 2026);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
 

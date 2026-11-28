@@ -173,33 +173,26 @@ export interface TrainingCourse {
   status: 'mandatory' | 'elective';
 }
 
-// Kenya Statutory Calculation Engine
+// Kenya Statutory Calculation Engine (2026 Year 4 NSSF + Tax-Allowable SHIF/AHL baseline; NEEDS_LEGAL_REVIEW)
 export function calculateKenyaPayroll(grossSalary: number, allowances: number = 0, overtime: number = 0) {
-  const totalGross = grossSalary + allowances + overtime;
+  const totalGross = Math.max(0, grossSalary + allowances + overtime);
 
-  // NSSF (Versioned 2024/2026 rates)
-  // Tier 1: 6% of lower limit up to KES 8,000 = KES 480
-  const nssfTier1 = Math.min(totalGross, 8000) * 0.06;
-  // Tier 2: 6% of salary between KES 8,001 and KES 72,000 (cap KES 64,000 band = KES 3,840)
-  const tier2Salary = Math.max(0, Math.min(totalGross, 72000) - 8000);
+  // NSSF Year 4 (effective Feb 2026): 6% Tier I up to KES 9,000, Tier II up to KES 108,000
+  const nssfTier1 = Math.min(totalGross, 9000) * 0.06;
+  const tier2Salary = Math.max(0, Math.min(totalGross, 108000) - 9000);
   const nssfTier2 = tier2Salary * 0.06;
   const totalNssf = Math.round(nssfTier1 + nssfTier2);
 
-  // SHA (Social Health Authority - replaces NHIF): 2.75% of Gross, min KES 300
-  const sha = Math.max(300, Math.round(totalGross * 0.0275));
+  // SHIF (Social Health Authority): 2.75% of Gross, min KES 300 (pre-PAYE allowable under Tax Laws Amendment Act 2024)
+  const sha = totalGross > 0 ? Math.max(300, Math.round(totalGross * 0.0275)) : 0;
 
-  // Affordable Housing Levy (AHL): 1.5% of Gross
+  // Affordable Housing Levy (AHL): 1.5% of Gross (pre-PAYE allowable under Tax Laws Amendment Act 2024)
   const housingLevy = Math.round(totalGross * 0.015);
 
-  // Taxable Pay
-  const taxablePay = Math.max(0, totalGross - totalNssf);
+  // Taxable Pay (after NSSF, SHIF & AHL)
+  const taxablePay = Math.max(0, totalGross - totalNssf - sha - housingLevy);
 
-  // PAYE Tax Bands (Kenya Finance Act 2023/2024/2026)
-  // 1. First KES 24,000 @ 10% = 2,400
-  // 2. Next KES 8,333 @ 25% = 2,083.25
-  // 3. Next KES 467,667 @ 30% = up to 140,300.10
-  // 4. Next KES 300,000 @ 32.5% = up to 97,500
-  // 5. Above KES 800,000 @ 35%
+  // PAYE Tax Bands (Income Tax Act Cap. 470)
   let tax = 0;
   let remaining = taxablePay;
 
@@ -228,12 +221,12 @@ export function calculateKenyaPayroll(grossSalary: number, allowances: number = 
   }
 
   const payeBeforeRelief = Math.round(tax);
-  const personalRelief = 2400; // Monthly personal relief KES 2,400
-  const insuranceRelief = Math.min(Math.round(sha * 0.15), 5000); // 15% of health contribution relief
+  const personalRelief = totalGross > 0 ? 2400 : 0;
+  const insuranceRelief = 0; // Pre-tax SHIF deduction replaces insurance relief under Tax Laws Amendment Act 2024
   const netPaye = Math.max(0, payeBeforeRelief - personalRelief - insuranceRelief);
 
   const totalDeductions = totalNssf + sha + housingLevy + netPaye;
-  const netPay = Math.round(totalGross - totalDeductions);
+  const netPay = Math.max(0, Math.round(totalGross - totalDeductions));
 
   return {
     grossPay: totalGross,
@@ -1216,7 +1209,7 @@ class PeopleOsStore {
         id: 'prio_01',
         category: 'STATUTORY_COMPLIANCE',
         title: 'KRA Monthly PAYE & Housing Levy Filing Due',
-        description: 'Statutory returns for March 2026 must be validated and filed before the 9th on KRA iTax portal.',
+        description: `Statutory returns for ${mockCurrentPeriod()} must be validated and filed before the 9th on KRA iTax portal.`,
         source: 'Payroll Engine',
       },
       {
